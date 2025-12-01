@@ -89,7 +89,8 @@ class CLAPAudioEmbeddingClassifierFreev2(nn.Module):
         # waveform: [bs, t_steps]
         with torch.no_grad():
             self.embed_mode = "audio"
-            audio_emb = self(waveform.cuda())
+            # Automatically use the device (CPU or GPU) the model is currently on. (Changed from 'cuda' to be more general).
+            audio_emb = self(waveform.to(next(self.parameters()).device))
             self.embed_mode = "text"
             text_emb = self(text)
             similarity = F.cosine_similarity(audio_emb, text_emb, dim=2)

@@ -5,10 +5,10 @@
 ## Command Usage
 Prepare running environment
 ```shell
-# Optional
-conda create -n audioldm python=3.8; conda activate audioldm
 # Install AudioLDM
-pip3 install git+https://github.com/haoheliu/AudioLDM.git
+pip3 install -e .
+# Running a text-to-audio generation test
+audioldm --text "A hammer is hitting a wooden surface"
 ```
 
 
