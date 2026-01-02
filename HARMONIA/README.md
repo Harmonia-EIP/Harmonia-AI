@@ -1,8 +1,8 @@
-# Text2JUCE AI
+# Harmonia-AI
 
 ## Turn text descriptions into synthesizer presets.
 
-This project uses a lightweight Artificial Intelligence model (BERT + Neural Network) to understand sound descriptions (e.g., *"A dark, distorted sci-fi bass"*) and translate them into configuration files (`.json`) that can be loaded directly into your C++ JUCE audio plugin.
+This project uses a lightweight Artificial Intelligence model (BERT + Neural Network) to understand sound descriptions (e.g., *"A dark, distorted sci-fi bass"*) and translate them into configuration files (`.json`) that can be loaded directly into C++ JUCE audio plugin.
 
 ---
 
