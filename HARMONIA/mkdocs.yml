@@ -1,0 +1,22 @@
+site_name: Harmonia-AI
+site_url: https://malo-coet.github.io/Harmonia-AI/
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: cyan
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Architecture: architecture.md
+  - Tutorials:
+      - 'Training the Model': training.md
+      - 'Generating Sounds': generating.md
+  - Integration:
+      - 'Python API': server_api.md
+      - 'C++ (JUCE)': juce_integration.md
+  - Legacy: legacy.md
