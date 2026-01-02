@@ -138,7 +138,7 @@ void AudioPluginAudioProcessor::requestPresetFromAI(juce::String userText)
         if (result.hasProperty("parameters"))
         {
             var params = result["parameters"];
-            // Iterate and set your parameters here
+            // Iterate and set parameters here
             // myParam[0]->setValueNotifyingHost(params[0]);
         }
     }
