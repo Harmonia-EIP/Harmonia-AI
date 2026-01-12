@@ -70,10 +70,10 @@ dataset/presets.json
 
 ### 2. Training the Model (Manual)
 
-To train the AI on your current dataset:
-
+Run the training script from the `scripts` folder:
 ```bash
-python3 model/train.py
+cd scripts
+python3 train.py
 ```
 
 - Saves the model to:
@@ -93,13 +93,14 @@ For a continuous workflow, run the auto trainer.
 It watches the `drop_zone/` folder for new data.
 
 ```bash
+cd scripts
 python3 auto_trainer.py
 ```
 
 **Action**  
 Drag & drop a `.txt` file with new presets into:
 ```
-drop_zone/
+data/raw/drop_zone
 ```
 
 **Result**
@@ -127,7 +128,8 @@ python3 benchmark_viewer.py
 Run the dedicated API server:
 
 ```bash
-python3 model/server.py
+cd scripts
+python3 server.py
 ```
 
 The server listens on:
