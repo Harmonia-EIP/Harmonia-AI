@@ -2,19 +2,22 @@ import torch
 import json
 import time
 import os
+import sys
 from datetime import datetime
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
 from model import TextToParams
+from dataset import PresetDataset
 
 # --- CONFIG ---
-PLUGIN_PARAM_COUNT = 9 # MUST match generate.py
+PLUGIN_PARAM_COUNT = 9
 EPOCHS = 100
 LR = 1e-4
 BATCH_SIZE = 8
 DATASET_PATH = "../data/processed/presets.json"
 BENCHMARK_FILE = "../benchmarks/history.json"
-
+MODEL_SAVE_PATH = "../saved_models/my_plugin_ai.pth"
 # --- LOGGING FUNCTION ---
 def save_benchmark(duration, final_loss, epoch_history):
     if not os.path.exists("../model/benchmarks"):
@@ -92,8 +95,10 @@ def train():
     duration = end_time - start_time
 
     # Save Model
-    torch.save(model.state_dict(), "../saved_models/my_plugin_ai.pth")
-    print("Model saved!")
+    if not os.path.exists("../saved_models"):
+        os.makedirs("../saved_models")
+    torch.save(model.state_dict(), MODEL_SAVE_PATH)
+    print(f"Model saved to {MODEL_SAVE_PATH}!")
 
     # Save Benchmark Stats
     save_benchmark(duration, loss_history[-1], loss_history)
