@@ -19,7 +19,6 @@ def view_stats():
     for i, entry in enumerate(history):
         loss = entry['final_loss']
 
-        # Calculate improvement
         if loss < previous_loss:
             status = "✅ IMPROVED"
         elif loss > previous_loss:
@@ -27,7 +26,6 @@ def view_stats():
         else:
             status = "="
 
-        # Don't show status for the very first run
         if i == 0: status = "START"
 
         print(f"{i+1:<5} | {entry['timestamp']:<20} | {entry['duration_seconds']:<10} | {entry['epochs']:<8} | {loss:<12} | {status}")

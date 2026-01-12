@@ -1,5 +1,4 @@
 import torch
-import json
 from flask import Flask, request, jsonify
 from transformers import AutoTokenizer
 from model import TextToParams
@@ -32,10 +31,6 @@ tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
 
 @app.route('/generate', methods=['POST'])
 def generate():
-    """
-    Endpoint that accepts JSON: {"prompt": "Soft Piano"}
-    Returns JSON: {"parameters": { ... }}
-    """
     data = request.json
     prompt = data.get('prompt', '')
 
@@ -51,7 +46,7 @@ def generate():
     with torch.no_grad():
         prediction = model(inputs['input_ids'], inputs['attention_mask'])
 
-    # 3. Format output
+    # 3. Formatd output
     param_list = prediction[0].tolist()
 
     named_parameters = {}
@@ -71,6 +66,5 @@ def generate():
     return jsonify(response)
 
 if __name__ == '__main__':
-    # Run the server on localhost port 5000
     print("Server is running on http://127.0.0.1:5000")
     app.run(port=5000)

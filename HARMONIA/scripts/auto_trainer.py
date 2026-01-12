@@ -1,12 +1,10 @@
 import time
 import os
 import subprocess
-import sys
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 # --- CONFIG ---
-# Assuming you run this from 'scripts/' folder
 WATCH_FOLDER = "../data/raw/drop_zone"
 RAW_DATA_FILE = "../data/raw/my_raw_dump.txt"
 
@@ -28,7 +26,7 @@ class AutoTrainHandler(FileSystemEventHandler):
             print(f"[AUTO] ❌ Error reading : {e}")
             return
 
-        # 2. Run Scripts (They are in the current folder, so no cwd change needed)
+        # 2. Run Scripts
         print("[AUTO] ⚙️  Converting dataset...")
         subprocess.run(["python3", "prepare_dataset.py"])
 
