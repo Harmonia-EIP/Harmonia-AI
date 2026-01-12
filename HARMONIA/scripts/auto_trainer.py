@@ -6,7 +6,7 @@ from watchdog.events import FileSystemEventHandler
 
 # --- CONFIG ---
 WATCH_FOLDER = "drop_zone"
-RAW_DATA_FILE = "dataset/my_raw_dump.txt"
+RAW_DATA_FILE = "../data/raw/my_raw_dump.txt"
 
 class AutoTrainHandler(FileSystemEventHandler):
     def on_created(self, event):

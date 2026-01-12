@@ -7,7 +7,7 @@ from model import TextToParams
 
 # --- CONFIG ---
 PLUGIN_PARAM_COUNT = 9 # MUST match train.py
-MODEL_PATH = "my_plugin_ai.pth"
+MODEL_PATH = "../saved_models/my_plugin_ai.pth"
 
 # Keys to map the output numbers back to names for the JUCE plugin
 PARAM_KEYS = [

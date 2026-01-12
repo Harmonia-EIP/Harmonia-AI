@@ -12,34 +12,13 @@ PLUGIN_PARAM_COUNT = 9 # MUST match generate.py
 EPOCHS = 100
 LR = 1e-4
 BATCH_SIZE = 8
-DATASET_PATH = "../dataset/presets.json"
+DATASET_PATH = "../data/processed/presets.json"
 BENCHMARK_FILE = "../benchmarks/history.json"
-
-# --- DATASET ---
-class PresetDataset(Dataset):
-    def __init__(self, json_file, tokenizer):
-        with open(json_file, 'r') as f:
-            self.data = json.load(f)
-        self.tokenizer = tokenizer
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        item = self.data[idx]
-        text = item['description']
-        tokens = self.tokenizer(text, padding="max_length", max_length=32, truncation=True, return_tensors="pt")
-        params = torch.tensor(item['parameters'], dtype=torch.float32)
-        return {
-            'input_ids': tokens['input_ids'].squeeze(0),
-            'attention_mask': tokens['attention_mask'].squeeze(0),
-            'labels': params
-        }
 
 # --- LOGGING FUNCTION ---
 def save_benchmark(duration, final_loss, epoch_history):
-    if not os.path.exists("benchmarks"):
-        os.makedirs("benchmarks")
+    if not os.path.exists("../model/benchmarks"):
+        os.makedirs("../model/benchmarks")
 
     # 2. Prepere new entry
     entry = {
@@ -113,7 +92,7 @@ def train():
     duration = end_time - start_time
 
     # Save Model
-    torch.save(model.state_dict(), "my_plugin_ai.pth")
+    torch.save(model.state_dict(), "../saved_models/my_plugin_ai.pth")
     print("Model saved!")
 
     # Save Benchmark Stats

@@ -103,4 +103,4 @@ def convert_fxp_dump_to_json(input_file, output_file):
 
 if __name__ == "__main__":
     # Make sure this filename matches your text file
-    convert_fxp_dump_to_json("my_raw_dump.txt", "presets.json")
+    convert_fxp_dump_to_json("../data/raw/my_raw_dump.txt", "presets.json")
