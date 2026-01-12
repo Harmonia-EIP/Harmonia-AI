@@ -154,5 +154,5 @@ If the plugin changes (adding / removing knobs), update the config at the top of
 
 ```python
 # Change this number to match JUCE plugin parameter count!
-PLUGIN_PARAM_COUNT = 50 
+PLUGIN_PARAM_COUNT = 8
 ```
