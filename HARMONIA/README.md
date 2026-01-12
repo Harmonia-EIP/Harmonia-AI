@@ -121,9 +121,17 @@ python3 benchmark_viewer.py
 
 ---
 
-## 🔌 Integration (JUCE / C++)
+# 🤖 Generation of a sound :
 
-### Method A: HTTP API (Recommended)
+### CLI Generation : 
+
+Generate presets directly from the command line:
+
+```bash
+python3 scripts/generate.py "Soft Piano" --output ../data/processed/test_preset.json
+```
+
+## 🔌 Integration (JUCE / C++)
 
 Run the dedicated API server:
 
@@ -156,14 +164,4 @@ POST /generate
     "attack": 0.1
   }
 }
-```
-
----
-
-### Method B: CLI Generation
-
-Generate presets directly from the command line:
-
-```bash
-python3 model/generate.py "Soft Piano" --output my_preset.json
 ```
