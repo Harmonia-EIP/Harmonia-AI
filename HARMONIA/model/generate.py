@@ -7,7 +7,7 @@ from model import TextToParams
 
 # --- CONFIG ---
 # Must match "train.py"
-PLUGIN_PARAM_COUNT = 50
+PLUGIN_PARAM_COUNT = 8
 MODEL_PATH = "my_plugin_ai.pth"
 
 def generate_preset(prompt, output_filename):
