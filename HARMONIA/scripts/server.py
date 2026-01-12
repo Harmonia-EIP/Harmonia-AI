@@ -8,7 +8,7 @@ app = Flask(__name__)
 
 # --- CONFIG ---
 PLUGIN_PARAM_COUNT = 9
-MODEL_PATH = "my_plugin_ai.pth"
+MODEL_PATH = "../saved_models/my_plugin_ai.pth"
 PARAM_KEYS = [
     "frequency", "attack", "cutoff", "decay",
     "volume", "sustain", "resonance", "release",

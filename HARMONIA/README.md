@@ -1,158 +1,167 @@
-# Harmonia-AI
+# HARMONIA 🎹
 
-## Turn text descriptions into synthesizer presets.
+> **AI-Powered VST Parameter Generator**
 
-This project uses a lightweight Artificial Intelligence model (BERT + Neural Network) to understand sound descriptions (e.g., *"A dark, distorted sci-fi bass"*) and translate them into configuration files (`.json`) that can be loaded directly into C++ JUCE audio plugin.
+Harmonia is a deep learning system designed to control JUCE audio plugins.  
+It translates natural language descriptions (e.g. *"Soft Piano"*, *"Aggressive Bass"*) into precise floating-point parameters (`0.0 – 1.0`) for synthesizers and effects.
 
 ---
 
 ## 🚀 Features
 
-* **Text-to-Param:** Type a description, get a preset.
-* **Lightweight:** Runs on CPU. No heavy GPU required for generation.
-* **Fast:** Generates parameters in milliseconds.
-* **JUCE Ready:** Includes a Python server to communicate with your VST/AU plugin in real-time.
+- **Text-to-Param Inference**  
+  Uses a BERT-based architecture to map semantic meaning to plugin knobs.
+
+- **Real-time API**  
+  A Flask server to communicate directly with C++ / JUCE plugins.
+
+- **Auto-Training Watchdog**  
+  Automatically processes new data and retrains the model when files are dropped into a folder.
+
+- **Performance Benchmarking**  
+  Tracks loss, training time, and improvements over time.
+
+- **9-Parameter Support**  
+  Currently tuned for:
+  - Frequency
+  - Attack
+  - Cutoff
+  - Decay
+  - Volume
+  - Sustain
+  - Resonance
+  - Release
+  - Waveform
 
 ---
 
-## 🛠️ Installation
+## 📦 Installation
 
-1.  **Clone this repository** (or create your folder structure).
-2.  **Install Python Dependencies:**
-    You need PyTorch, Hugging Face Transformers, and Flask.
+1. **Clone the repository**
+2. **Install dependencies**
 
-    ```bash
-    pip install torch transformers flask
-    ```
-
----
-
-## 📂 Project Structure
-
-```text
-/Text2JUCE-AI
-  ├── dataset/
-  │   └── presets.json       # Your training data
-  ├── model.py               # The AI Brain architecture
-  ├── train.py               # Script to teach the AI
-  ├── generate.py            # Command-line tool to make presets
-  ├── server.py              # Server for JUCE connection
-  └── README.md              # This file
-
+```bash
+pip install torch transformers flask watchdog
 ```
 
 ---
 
-## 🧠 1: Dataset
+## 🛠 Usage
 
-The AI learns from examples. It need a file named `dataset/presets.json`.
+### 1. Data Preparation
 
-**Format:**
+You can train the model using raw `.fxp` text dumps from plugins (e.g. Sylenth1).
 
-* `description`: The text prompt.
-* `parameters`: A list of numbers (0.0 to 1.0) representing your plugin knobs.
+1. Place your raw dump text into:
+   ```
+   dataset/my_raw_dump.txt
+   ```
+2. Run the converter:
+   ```bash
+   python3 dataset/prepare_dataset.py
+   ```
 
-**Example `presets.json`:**
+This creates:
+```
+dataset/presets.json
+```
+
+---
+
+### 2. Training the Model (Manual)
+
+To train the AI on your current dataset:
+
+```bash
+python3 model/train.py
+```
+
+- Saves the model to:
+  ```
+  model/my_plugin_ai.pth
+  ```
+- Logs performance metrics to:
+  ```
+  benchmarks/
+  ```
+
+---
+
+### 3. Auto-Training (Automatic) 🤖
+
+For a continuous workflow, run the auto trainer.  
+It watches the `drop_zone/` folder for new data.
+
+```bash
+python3 auto_trainer.py
+```
+
+**Action**  
+Drag & drop a `.txt` file with new presets into:
+```
+drop_zone/
+```
+
+**Result**  
+- Dataset is updated automatically  
+- Model is retrained  
+- New benchmark results are displayed
+
+---
+
+### 4. Benchmarking 📊
+
+To visualize the evolution of your model’s performance  
+(training time, final loss, etc.):
+
+```bash
+python3 benchmark_viewer.py
+```
+
+---
+
+## 🔌 Integration (JUCE / C++)
+
+### Method A: HTTP API (Recommended)
+
+Run the dedicated API server:
+
+```bash
+python3 model/server.py
+```
+
+The server listens on:
+```
+http://127.0.0.1:5000/generate
+```
+
+#### Request (JSON)
 
 ```json
-[
-    {
-        "description": "Warm analog pad with slow attack",
-        "parameters": [0.5, 0.8, 0.1, 0.0, 0.9, 0.4] 
-    },
-    {
-        "description": "Aggressive dubstep wobble bass",
-        "parameters": [0.1, 0.9, 0.8, 1.0, 0.2, 0.0]
-    }
-]
-
-```
-
-* **Note:** The number of values in the `parameters` list MUST match the `PLUGIN_PARAM_COUNT` variable in the Python scripts.*
-
----
-
-## 🎓 2: Training the Model
-
-Once we have dataset, teaching the model:
-
-```bash
-python train.py
-```
-
-* This will run for the specified number of epochs.
-* It saves the trained brain to `my_plugin_ai.pth`.
-
----
-
-## 🎹 3: Generate Presets
-
-### Option A: Command Line (CLI)
-
-Great for batch generating files to drag-and-drop later.
-
-```bash
-python generate.py "A floating space drone sound" --output space_drone.json
-
-```
-
-### Option B: Real-time Server (For JUCE Integration)
-
-Run the server to let the plugin "talk" to the AI.
-
-```bash
-python server.py
-
-```
-
-* The server listens at `http://127.0.0.1:5000/generate`.
-
----
-
-## 🔌 JUCE Integration (C++)
-
-To make this plugin request presets from the server, it can use `juce::URL` to send a POST request.
-
-**C++ Example:**
-
-```cpp
-void AudioPluginAudioProcessor::requestPresetFromAI(juce::String userText)
+POST /generate
 {
-    // 1. Prepare the JSON payload
-    juce::DynamicObject* jsonBody = new juce::DynamicObject();
-    jsonBody->setProperty("text", userText);
-    juce::var jsonVar(jsonBody);
-    
-    // 2. Send Request to Python Server
-    juce::URL url("[http://127.0.0.1:5000/generate](http://127.0.0.1:5000/generate)");
-    juce::URL::InputStreamOptions options(juce::URL::ParameterHandling::inPostData);
-    options.withExtraHeaders("Content-Type: application/json")
-           .withPostData(juce::JSON::toString(jsonVar));
-           
-    std::unique_ptr<juce::InputStream> stream = url.createInputStream(options);
-    
-    // 3. Apply Parameters
-    if (stream != nullptr)
-    {
-        var result = juce::JSON::parse(stream->readEntireStreamAsString());
-        if (result.hasProperty("parameters"))
-        {
-            var params = result["parameters"];
-            // Iterate and set your parameters here
-            // myParam[0]->setValueNotifyingHost(params[0]);
-        }
-    }
+  "prompt": "Dark Reese Bass"
 }
+```
 
+#### Response (JSON)
+
+```json
+{
+  "parameters": {
+    "cutoff": 0.45,
+    "resonance": 0.8,
+    "attack": 0.1
+  }
+}
 ```
 
 ---
 
-## 📝 Configuration
+### Method B: CLI Generation
 
-If the plugin changes (adding / removing knobs), update the config at the top of `train.py` and `server.py`:
+Generate presets directly from the command line:
 
-```python
-# Change this number to match JUCE plugin parameter count!
-PLUGIN_PARAM_COUNT = 8
+```bash
+python3 model/generate.py "Soft Piano" --output my_preset.json
 ```

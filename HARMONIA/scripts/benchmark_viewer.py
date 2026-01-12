@@ -1,7 +1,7 @@
 import json
 import os
 
-BENCHMARK_FILE = "benchmarks/history.json"
+BENCHMARK_FILE = "../benchmarks/history.json"
 
 def view_stats():
     if not os.path.exists(BENCHMARK_FILE):
