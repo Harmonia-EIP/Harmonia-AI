@@ -5,7 +5,7 @@ from transformers import AutoTokenizer
 from model import TextToParams
 
 # --- CONFIG ---
-PLUGIN_PARAM_COUNT = 50  # Parameter count, should match plugin
+PLUGIN_PARAM_COUNT = 8  # Parameter count, should match plugin
 EPOCHS = 100
 LR = 1e-4
 
@@ -25,7 +25,7 @@ class PresetDataset(Dataset):
         text = item['description']
         tokens = self.tokenizer(text, padding="max_length", max_length=32, truncation=True, return_tensors="pt")
 
-        # Parameter Processing
+        # Paramter Process
         # Ensure JSON parameters are a list of floats 0.0-1.0
         params = torch.tensor(item['parameters'], dtype=torch.float32)
 
@@ -43,7 +43,7 @@ def train():
 
     model = TextToParams(num_plugin_parameters=PLUGIN_PARAM_COUNT)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
-    loss_fn = torch.nn.MSELoss() # Minimizing difference between prediction and real knobs
+    loss_fn = torch.nn.MSELoss() # Minimizing differrance between prediction and real knobs
 
     print("Starting training...")
     for epoch in range(EPOCHS):
