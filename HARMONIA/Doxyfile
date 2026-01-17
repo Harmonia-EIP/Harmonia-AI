@@ -1,0 +1,6 @@
+INPUT                  = ./src ./scripts DOC.md
+USE_MDFILE_AS_MAINPAGE = DOC.md
+MARKDOWN_SUPPORT       = YES
+OPTIMIZE_OUTPUT_JAVA   = YES  # (Often used for Python to hide C++ specific details)
+EXTRACT_ALL            = YES
+HTML_OUTPUT = docs
