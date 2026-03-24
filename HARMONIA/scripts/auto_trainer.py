@@ -1,16 +1,37 @@
 import time
 import os
-import subprocess
+import subprocess  # nosec B404
+import sys
+from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 # --- CONFIG ---
-WATCH_FOLDER = "../data/raw/drop_zone"
-RAW_DATA_FILE = "../data/raw/my_raw_dump.txt"
+BASE_DIR = Path(__file__).resolve().parent.parent
+SCRIPTS_DIR = Path(__file__).resolve().parent
+WATCH_FOLDER = BASE_DIR / "data" / "raw" / "drop_zone"
+RAW_DATA_FILE = BASE_DIR / "data" / "raw" / "my_raw_dump.txt"
+ALLOWED_PIPELINE_SCRIPTS = {"prepare_dataset.py", "train.py", "benchmark_viewer.py"}
+
+
+def run_pipeline_script(script_name):
+    if script_name not in ALLOWED_PIPELINE_SCRIPTS:
+        raise ValueError(f"Unexpected script name: {script_name}")
+
+    script_path = (SCRIPTS_DIR / script_name).resolve()
+    if script_path.parent != SCRIPTS_DIR.resolve() or not script_path.exists():
+        raise FileNotFoundError(f"Script not found or outside scripts directory: {script_path}")
+
+    subprocess.run([sys.executable, str(script_path)], check=True)  # nosec
 
 class AutoTrainHandler(FileSystemEventHandler):
     def on_created(self, event):
-        if event.is_directory or event.src_path.split("/")[-1].startswith("."):
+        filename = os.path.basename(event.src_path)
+        if event.is_directory or filename.startswith("."):
+            return
+
+        if not filename.lower().endswith(".txt"):
+            print(f"[AUTO] Ignored non-text file: {event.src_path}")
             return
 
         print(f"\n[AUTO] 📂 New file detected : {event.src_path}")
@@ -27,24 +48,29 @@ class AutoTrainHandler(FileSystemEventHandler):
             return
 
         # 2. Run Scripts
-        print("[AUTO] ⚙️  Converting dataset...")
-        subprocess.run(["python3", "prepare_dataset.py"])
+        try:
+            print("[AUTO] ⚙️  Converting dataset...")
+            run_pipeline_script("prepare_dataset.py")
 
-        print("[AUTO] 🧠  Training...")
-        subprocess.run(["python3", "train.py"])
+            print("[AUTO] 🧠  Training...")
+            run_pipeline_script("train.py")
 
-        print("[AUTO] 📊  Results:")
-        subprocess.run(["python3", "benchmark_viewer.py"])
+            print("[AUTO] 📊  Results:")
+            run_pipeline_script("benchmark_viewer.py")
+        except subprocess.CalledProcessError as e:
+            print(f"[AUTO] ❌ Pipeline failed with exit code {e.returncode}")
+            return
 
         print("\n[AUTO] ✅ DONE! Waiting for next file...")
 
 if __name__ == "__main__":
-    if not os.path.exists(WATCH_FOLDER):
-        os.makedirs(WATCH_FOLDER)
+    WATCH_FOLDER.mkdir(parents=True, exist_ok=True)
+    RAW_DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
+    RAW_DATA_FILE.touch(exist_ok=True)
 
     event_handler = AutoTrainHandler()
     observer = Observer()
-    observer.schedule(event_handler, WATCH_FOLDER, recursive=False)
+    observer.schedule(event_handler, str(WATCH_FOLDER), recursive=False)
     observer.start()
 
     print(f"Auto-Trainer ON! Drop .txt files into: '{WATCH_FOLDER}'")
