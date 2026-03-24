@@ -2,6 +2,27 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.7] - Security Hardening and Dependency Cleanup
+### Added
+- **Dynamic Inference Configuration**:
+  - Training metadata now includes `plugin_param_count`, `param_keys`, and `tokenizer_max_length`.
+  - Inference (`scripts/server.py`, `scripts/generate.py`) now reads these metadata fields to avoid hardcoded parameter mapping.
+- **Token Context Guard**:
+  - `POST /generate` now rejects prompts that exceed model token context instead of silently truncating.
+
+### Changed
+- **Dependency Hygiene**:
+  - Replaced the non-portable environment dump in `requirement.txt` with a minimal, portable runtime manifest.
+- **Safer Model Loading**:
+  - Removed unsafe fallback model loading path and enforce `weights_only=True` for PyTorch deserialization.
+- **CLI Consistency**:
+  - `scripts/generate.py` now mirrors server-side behavior for model/token context validation and metadata-driven output keys.
+
+### Verified
+- `python3 -m pytest -q` -> `21 passed`
+- `python3 -m bandit -q -r scripts src` -> clean run
+- `python3 -m compileall scripts src tests` -> success
+
 ## [0.0.6] - Metrics Endpoint, Model Versioning, and CI
 ### Added
 - **API Metrics Endpoint**:

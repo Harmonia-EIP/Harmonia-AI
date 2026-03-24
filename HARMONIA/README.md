@@ -91,6 +91,7 @@ Validation rules:
 - `prompt` is required and must be a string
 - empty/whitespace prompt returns `400`
 - prompt length is capped to `512` chars
+- prompts exceeding model token context (default `32` tokens) are rejected with `400`
 - if model weights are unavailable, API returns `503`
 
 `/health` and `/generate` expose `model_version` and `model_hash`.
@@ -120,13 +121,15 @@ Benchmark entries include dataset split and evaluation metadata. Per-parameter M
 
 You can force a model version name with `HARMONIA_MODEL_VERSION`; otherwise training auto-generates one.
 
+Trained metadata now carries `param_keys`, `plugin_param_count`, and `tokenizer_max_length`, and the API/CLI read these dynamically at inference time.
+
 ## Dev checks (tests + security + compile)
 
 Install dev dependencies:
 
 ```bash
 cd HARMONIA
-python3 -m pip install -r requirements.txt
+python3 -m pip install -r requirement.txt
 python3 -m pip install -r requirements-dev.txt
 ```
 
@@ -151,10 +154,17 @@ python3 HARMONIA/scripts/auto_trainer.py
 
 Drop `.txt` files into `HARMONIA/data/raw/drop_zone/`.
 
+## Production serving (recommended)
+
+```bash
+cd HARMONIA
+gunicorn --bind 127.0.0.1:5000 --workers 2 --threads 4 scripts.server:app
+```
+
 ## Current limitations
 
 - Training quality is currently constrained by small dataset size.
-- The model predicts only 9 fixed parameters.
+- Training dataset and default profile still target 9 synth parameters.
 - No model registry service yet (metadata is local JSON files only).
 - API currently runs on local Flask dev server (not production hardened).
 

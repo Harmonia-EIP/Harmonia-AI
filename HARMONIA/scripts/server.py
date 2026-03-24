@@ -26,6 +26,7 @@ LEGACY_MODEL_PATH = SAVED_MODELS_DIR / "my_plugin_ai.pth"
 LEGACY_METADATA_PATH = SAVED_MODELS_DIR / "my_plugin_ai.meta.json"
 BENCHMARK_FILE = BASE_DIR / "benchmarks" / "history.json"
 MAX_PROMPT_LENGTH = 512
+TOKENIZER_MAX_LENGTH = 32
 TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 PARAM_KEYS = [
@@ -44,6 +45,8 @@ class InferenceRuntime:
     model_hash: str = "unknown"
     model_path: str = ""
     model_metadata_path: str = ""
+    param_keys: Tuple[str, ...] = tuple(PARAM_KEYS)
+    tokenizer_max_length: int = TOKENIZER_MAX_LENGTH
 
 
 def _load_json_file(path):
@@ -81,17 +84,25 @@ def _build_runtime() -> InferenceRuntime:
 
     print(f"Loading AI model from {model_path}...")
     device = torch.device("cpu")
-    model = TextToParams(num_plugin_parameters=PLUGIN_PARAM_COUNT)
     metadata = _load_json_file(metadata_path)
     model_version = str(metadata.get("model_version", artifact.get("model_version", "unknown")))
     model_hash = str(metadata.get("model_hash", artifact.get("model_hash", "unknown")))
+    metadata_param_keys = metadata.get("param_keys")
+    runtime_param_keys = PARAM_KEYS
+    if isinstance(metadata_param_keys, list) and metadata_param_keys:
+        runtime_param_keys = [str(k) for k in metadata_param_keys]
+    plugin_param_count = int(metadata.get("plugin_param_count", len(runtime_param_keys)))
+    tokenizer_max_length = int(metadata.get("tokenizer_max_length", TOKENIZER_MAX_LENGTH))
+    model = TextToParams(num_plugin_parameters=plugin_param_count)
 
     try:
         try:
             state_dict = torch.load(model_path, map_location=device, weights_only=True)
-        except TypeError:
-            # Compatibility fallback for older torch versions lacking weights_only.
-            state_dict = torch.load(model_path, map_location=device)  # nosec B614
+        except TypeError as exc:
+            raise RuntimeError(
+                "Unsafe model loading blocked: this PyTorch version does not support weights_only=True. "
+                "Please upgrade PyTorch."
+            ) from exc
         model.load_state_dict(state_dict)
         model.eval()
     except FileNotFoundError:
@@ -104,6 +115,8 @@ def _build_runtime() -> InferenceRuntime:
             model_hash=model_hash,
             model_path=str(model_path),
             model_metadata_path=str(metadata_path) if metadata_path else "",
+            param_keys=tuple(runtime_param_keys),
+            tokenizer_max_length=tokenizer_max_length,
         )
     except RuntimeError as exc:
         return InferenceRuntime(
@@ -115,6 +128,8 @@ def _build_runtime() -> InferenceRuntime:
             model_hash=model_hash,
             model_path=str(model_path),
             model_metadata_path=str(metadata_path) if metadata_path else "",
+            param_keys=tuple(runtime_param_keys),
+            tokenizer_max_length=tokenizer_max_length,
         )
 
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, revision=TOKENIZER_MODEL_REVISION)  # nosec B615
@@ -126,6 +141,8 @@ def _build_runtime() -> InferenceRuntime:
         model_hash=model_hash,
         model_path=str(model_path),
         model_metadata_path=str(metadata_path) if metadata_path else "",
+        param_keys=tuple(runtime_param_keys),
+        tokenizer_max_length=tokenizer_max_length,
     )
 
 
@@ -162,6 +179,8 @@ def health():
             "model_metadata_path": runtime.model_metadata_path,
             "model_version": runtime.model_version,
             "model_hash": runtime.model_hash,
+            "plugin_param_count": len(runtime.param_keys),
+            "tokenizer_max_length": runtime.tokenizer_max_length,
             "error": runtime.error,
         }
     )
@@ -214,7 +233,25 @@ def generate():
     print(f"Received request for: '{prompt}'")
 
     # 1. Prepare text
-    inputs = runtime.tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=32)
+    tokenized = runtime.tokenizer(prompt, return_tensors="pt", padding=False, truncation=False)
+    token_count = int(tokenized["input_ids"].shape[1])
+    if token_count > runtime.tokenizer_max_length:
+        return jsonify(
+            {
+                "error": (
+                    "Prompt exceeds model token context. "
+                    f"Got {token_count} tokens, max {runtime.tokenizer_max_length}."
+                )
+            }
+        ), 400
+
+    inputs = runtime.tokenizer(
+        prompt,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=runtime.tokenizer_max_length,
+    )
 
     # 2. Predict
     with torch.no_grad():
@@ -224,7 +261,7 @@ def generate():
     param_list = prediction[0].tolist()
 
     named_parameters = {}
-    for i, key in enumerate(PARAM_KEYS):
+    for i, key in enumerate(runtime.param_keys):
         if i < len(param_list):
             value = float(param_list[i])
             named_parameters[key] = round(min(1.0, max(0.0, value)), 6)

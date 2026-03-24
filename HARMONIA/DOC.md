@@ -117,12 +117,17 @@ Validation on `POST /generate`:
 - body must be valid JSON
 - `prompt` must be a non-empty string
 - max prompt length: `512`
+- prompts exceeding model token context (default `32` tokens) are rejected
 - if model weights are unavailable/invalid, API returns `503`
 
 API traceability:
 - `GET /health` returns `model_version` and `model_hash`
 - `POST /generate` includes `model_version` and `model_hash` in `metadata`
 - `GET /metrics/latest` returns the latest benchmark and the latest evaluation report payload
+
+Model compatibility:
+- Inference reads `param_keys`, `plugin_param_count`, and `tokenizer_max_length` from model metadata when available.
+- Model loading enforces `torch.load(..., weights_only=True)` for safer deserialization.
 
 Response:
 
@@ -163,10 +168,10 @@ python3 HARMONIA/scripts/benchmark_viewer.py
 ## 5. Known limitations
 
 - Data scarcity: model quality is currently dataset-limited.
-- Fixed output space: only 9 parameters are supported.
+- Default training profile is still focused on the 9-parameter synth mapping.
 - No external model registry service yet (current metadata storage is local-file based).
 - Flask development server is suitable for local integration, not production.
-- Dependency manifest (`requirement.txt`) is broad and includes non-portable entries.
+- Production serving still requires external process management (e.g. gunicorn/systemd).
 
 ## 6. Next technical challenges
 
@@ -188,7 +193,7 @@ Install dev tooling:
 
 ```bash
 cd HARMONIA
-python3 -m pip install -r requirements.txt -r requirements-dev.txt
+python3 -m pip install -r requirement.txt -r requirements-dev.txt
 ```
 
 Run checks:

@@ -5,7 +5,7 @@ from scripts import server as server_module
 
 
 class FakeTokenizer:
-    def __call__(self, prompt, return_tensors, padding, truncation, max_length):
+    def __call__(self, prompt, return_tensors, padding=False, truncation=False, max_length=None):
         _ = (prompt, return_tensors, padding, truncation, max_length)
         return {
             "input_ids": torch.tensor([[101, 102, 0, 0]], dtype=torch.long),
@@ -29,6 +29,17 @@ class FakeRuntime:
         self.model_hash = "abc123"
         self.model_path = "/tmp/models/test-v1/my_plugin_ai.pth"
         self.model_metadata_path = "/tmp/models/test-v1/my_plugin_ai.meta.json"
+        self.param_keys = tuple(server_module.PARAM_KEYS)
+        self.tokenizer_max_length = 32
+
+
+class LongTokenizer:
+    def __call__(self, prompt, return_tensors, padding=False, truncation=False, max_length=None):
+        _ = (prompt, return_tensors, padding, truncation, max_length)
+        return {
+            "input_ids": torch.ones((1, 40), dtype=torch.long),
+            "attention_mask": torch.ones((1, 40), dtype=torch.long),
+        }
 
 
 def test_health_ok(monkeypatch):
@@ -114,6 +125,32 @@ def test_generate_returns_503_when_model_unavailable(monkeypatch):
     response = client.post("/generate", json={"prompt": "Deep bass"})
 
     assert response.status_code == 503
+
+
+def test_generate_rejects_prompt_that_exceeds_token_context(monkeypatch):
+    runtime = FakeRuntime(ready=True)
+    runtime.tokenizer = LongTokenizer()
+    runtime.tokenizer_max_length = 32
+    monkeypatch.setattr(server_module, "_get_runtime", lambda: runtime)
+    client = server_module.app.test_client()
+
+    response = client.post("/generate", json={"prompt": "A" * 100})
+
+    assert response.status_code == 400
+    assert "token context" in response.get_json()["error"]
+
+
+def test_generate_uses_runtime_parameter_keys(monkeypatch):
+    runtime = FakeRuntime(ready=True)
+    runtime.param_keys = ("cutoff", "attack")
+    runtime.model = lambda input_ids, attention_mask: torch.tensor([[0.2, 0.9]])
+    monkeypatch.setattr(server_module, "_get_runtime", lambda: runtime)
+    client = server_module.app.test_client()
+
+    response = client.post("/generate", json={"prompt": "short"})
+
+    assert response.status_code == 200
+    assert response.get_json()["parameters"] == {"cutoff": 0.2, "attack": 0.9}
 
 
 def test_metrics_latest_returns_latest_benchmark(tmp_path, monkeypatch):

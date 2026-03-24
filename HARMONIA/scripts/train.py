@@ -45,6 +45,7 @@ except ValueError:
     VAL_SPLIT = 0.2
 TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
+TOKENIZER_MAX_LENGTH = 32
 MODEL_VERSION_OVERRIDE = os.environ.get("HARMONIA_MODEL_VERSION", "").strip()
 DATASET_PATH = BASE_DIR / "data" / "processed" / "presets.json"
 BENCHMARK_FILE = BASE_DIR / "benchmarks" / "history.json"
@@ -290,6 +291,8 @@ def train():
         "model_dir": str(versioned_paths["model_dir"]),
         "model_version": model_version,
         "model_hash": model_hash,
+        "plugin_param_count": PLUGIN_PARAM_COUNT,
+        "param_keys": PARAM_KEYS,
         "trained_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "seed": SEED,
         "epochs": EPOCHS,
@@ -301,6 +304,7 @@ def train():
         "val_size": val_size,
         "tokenizer_model_id": TOKENIZER_MODEL_ID,
         "tokenizer_model_revision": TOKENIZER_MODEL_REVISION,
+        "tokenizer_max_length": TOKENIZER_MAX_LENGTH,
         "evaluation_report_path": str(eval_report_path),
     }
     metadata_path = write_model_metadata(versioned_paths["metadata_path"], metadata_payload)

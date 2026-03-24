@@ -7,7 +7,7 @@ from scripts.prepare_dataset import TARGET_PARAMS, convert_fxp_dump_to_json
 
 
 class FakeTokenizer:
-    def __call__(self, prompt, return_tensors, padding, truncation, max_length):
+    def __call__(self, prompt, return_tensors, padding=False, truncation=False, max_length=None):
         _ = (prompt, return_tensors, padding, truncation, max_length)
         return {
             "input_ids": torch.tensor([[101, 102]], dtype=torch.long),
@@ -29,6 +29,8 @@ class FakeRuntime:
         self.error = ""
         self.model_version = "smoke-v1"
         self.model_hash = "smoke-hash"
+        self.param_keys = tuple(server_module.PARAM_KEYS)
+        self.tokenizer_max_length = 32
 
 
 def test_prepare_and_generate_smoke(tmp_path, monkeypatch):
