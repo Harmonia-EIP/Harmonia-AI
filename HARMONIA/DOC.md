@@ -188,7 +188,7 @@ Install dev tooling:
 
 ```bash
 cd HARMONIA
-python3 -m pip install -r requirements-dev.txt
+python3 -m pip install -r requirements.txt -r requirements-dev.txt
 ```
 
 Run checks:
