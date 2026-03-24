@@ -56,3 +56,18 @@ def test_write_evaluation_report_creates_json(tmp_path, monkeypatch):
     assert payload["model_version"] == "test-v2"
 
 
+def test_ensure_unique_model_version_adds_suffix_when_exists(tmp_path, monkeypatch):
+    (tmp_path / "v1").mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(train_module, "SAVED_MODELS_DIR", tmp_path)
+
+    assert train_module.ensure_unique_model_version("v1") == "v1-r2"
+
+
+def test_compute_file_sha256_has_expected_length(tmp_path):
+    file_path = tmp_path / "weights.bin"
+    file_path.write_bytes(b"abc")
+
+    digest = train_module.compute_file_sha256(file_path)
+    assert len(digest) == 64
+
+

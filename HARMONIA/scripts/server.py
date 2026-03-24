@@ -15,13 +15,16 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 from src.model import TextToParams
+from src.artifact_registry import resolve_latest_model
 
 app = Flask(__name__)
 
 # --- CONFIG ---
 PLUGIN_PARAM_COUNT = 9
-MODEL_PATH = BASE_DIR / "saved_models" / "my_plugin_ai.pth"
-MODEL_METADATA_PATH = BASE_DIR / "saved_models" / "my_plugin_ai.meta.json"
+SAVED_MODELS_DIR = BASE_DIR / "saved_models"
+LEGACY_MODEL_PATH = SAVED_MODELS_DIR / "my_plugin_ai.pth"
+LEGACY_METADATA_PATH = SAVED_MODELS_DIR / "my_plugin_ai.meta.json"
+BENCHMARK_FILE = BASE_DIR / "benchmarks" / "history.json"
 MAX_PROMPT_LENGTH = 512
 TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
@@ -39,14 +42,16 @@ class InferenceRuntime:
     error: str = ""
     model_version: str = "unknown"
     model_hash: str = "unknown"
+    model_path: str = ""
+    model_metadata_path: str = ""
 
 
-def _load_model_metadata():
-    if not MODEL_METADATA_PATH.exists():
+def _load_json_file(path):
+    if path is None or not Path(path).exists():
         return {}
 
     try:
-        with open(MODEL_METADATA_PATH, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             payload = json.load(f)
             if isinstance(payload, dict):
                 return payload
@@ -56,19 +61,37 @@ def _load_model_metadata():
 
 
 def _build_runtime() -> InferenceRuntime:
-    print(f"Loading AI model from {MODEL_PATH}...")
+    artifact = resolve_latest_model(
+        SAVED_MODELS_DIR,
+        legacy_model_path=LEGACY_MODEL_PATH,
+        legacy_metadata_path=LEGACY_METADATA_PATH,
+    )
+
+    model_path = artifact.get("model_path")
+    metadata_path = artifact.get("metadata_path")
+    if not model_path:
+        return InferenceRuntime(
+            model=None,
+            tokenizer=None,
+            ready=False,
+            error="Model file not found.",
+            model_version="unknown",
+            model_hash="unknown",
+        )
+
+    print(f"Loading AI model from {model_path}...")
     device = torch.device("cpu")
     model = TextToParams(num_plugin_parameters=PLUGIN_PARAM_COUNT)
-    metadata = _load_model_metadata()
-    model_version = str(metadata.get("model_version", "unknown"))
-    model_hash = str(metadata.get("model_hash", "unknown"))
+    metadata = _load_json_file(metadata_path)
+    model_version = str(metadata.get("model_version", artifact.get("model_version", "unknown")))
+    model_hash = str(metadata.get("model_hash", artifact.get("model_hash", "unknown")))
 
     try:
         try:
-            state_dict = torch.load(MODEL_PATH, map_location=device, weights_only=True)
+            state_dict = torch.load(model_path, map_location=device, weights_only=True)
         except TypeError:
             # Compatibility fallback for older torch versions lacking weights_only.
-            state_dict = torch.load(MODEL_PATH, map_location=device)  # nosec B614
+            state_dict = torch.load(model_path, map_location=device)  # nosec B614
         model.load_state_dict(state_dict)
         model.eval()
     except FileNotFoundError:
@@ -79,6 +102,8 @@ def _build_runtime() -> InferenceRuntime:
             error="Model file not found.",
             model_version=model_version,
             model_hash=model_hash,
+            model_path=str(model_path),
+            model_metadata_path=str(metadata_path) if metadata_path else "",
         )
     except RuntimeError as exc:
         return InferenceRuntime(
@@ -88,6 +113,8 @@ def _build_runtime() -> InferenceRuntime:
             error=f"Invalid model weights: {exc}",
             model_version=model_version,
             model_hash=model_hash,
+            model_path=str(model_path),
+            model_metadata_path=str(metadata_path) if metadata_path else "",
         )
 
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, revision=TOKENIZER_MODEL_REVISION)  # nosec B615
@@ -97,6 +124,8 @@ def _build_runtime() -> InferenceRuntime:
         ready=True,
         model_version=model_version,
         model_hash=model_hash,
+        model_path=str(model_path),
+        model_metadata_path=str(metadata_path) if metadata_path else "",
     )
 
 
@@ -129,11 +158,40 @@ def health():
         {
             "status": status,
             "model_ready": runtime.ready,
-            "model_path": str(MODEL_PATH),
-            "model_metadata_path": str(MODEL_METADATA_PATH),
+            "model_path": runtime.model_path,
+            "model_metadata_path": runtime.model_metadata_path,
             "model_version": runtime.model_version,
             "model_hash": runtime.model_hash,
             "error": runtime.error,
+        }
+    )
+
+
+@app.route("/metrics/latest", methods=["GET"])
+def latest_metrics():
+    if not BENCHMARK_FILE.exists():
+        return jsonify({"error": "No benchmark history found."}), 404
+
+    try:
+        with open(BENCHMARK_FILE, "r", encoding="utf-8") as f:
+            history = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return jsonify({"error": "Benchmark history is unreadable."}), 500
+
+    if not isinstance(history, list) or not history:
+        return jsonify({"error": "No benchmark runs available."}), 404
+
+    latest = history[-1]
+    report_payload = {}
+    report_path = latest.get("evaluation_report_path")
+    if report_path:
+        report_payload = _load_json_file(report_path)
+
+    return jsonify(
+        {
+            "status": "ok",
+            "latest_benchmark": latest,
+            "latest_evaluation_report": report_payload,
         }
     )
 

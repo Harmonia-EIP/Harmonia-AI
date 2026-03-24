@@ -1,4 +1,5 @@
 import torch
+import json
 
 from scripts import server as server_module
 
@@ -26,6 +27,8 @@ class FakeRuntime:
         self.error = error
         self.model_version = "test-v1"
         self.model_hash = "abc123"
+        self.model_path = "/tmp/models/test-v1/my_plugin_ai.pth"
+        self.model_metadata_path = "/tmp/models/test-v1/my_plugin_ai.meta.json"
 
 
 def test_health_ok(monkeypatch):
@@ -38,6 +41,7 @@ def test_health_ok(monkeypatch):
     body = response.get_json()
     assert body["status"] == "ok"
     assert body["model_ready"] is True
+    assert body["model_path"].endswith("my_plugin_ai.pth")
     assert body["model_version"] == "test-v1"
     assert body["model_hash"] == "abc123"
 
@@ -110,4 +114,43 @@ def test_generate_returns_503_when_model_unavailable(monkeypatch):
     response = client.post("/generate", json={"prompt": "Deep bass"})
 
     assert response.status_code == 503
+
+
+def test_metrics_latest_returns_latest_benchmark(tmp_path, monkeypatch):
+    benchmark_file = tmp_path / "history.json"
+    report_file = tmp_path / "eval.json"
+    report_file.write_text(json.dumps({"metrics": {"mse": 0.12}}), encoding="utf-8")
+    benchmark_file.write_text(
+        json.dumps(
+            [
+                {"timestamp": "2026-03-01 10:00:00", "model_version": "old-v"},
+                {
+                    "timestamp": "2026-03-02 11:00:00",
+                    "model_version": "new-v",
+                    "evaluation_report_path": str(report_file),
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(server_module, "BENCHMARK_FILE", benchmark_file)
+
+    client = server_module.app.test_client()
+    response = client.get("/metrics/latest")
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["latest_benchmark"]["model_version"] == "new-v"
+    assert body["latest_evaluation_report"]["metrics"]["mse"] == 0.12
+
+
+def test_metrics_latest_returns_404_when_missing(monkeypatch, tmp_path):
+    missing_history = tmp_path / "missing-history.json"
+    monkeypatch.setattr(server_module, "BENCHMARK_FILE", missing_history)
+
+    client = server_module.app.test_client()
+    response = client.get("/metrics/latest")
+
+    assert response.status_code == 404
+
 
