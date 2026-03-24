@@ -119,6 +119,7 @@ Install dev dependencies:
 
 ```bash
 cd HARMONIA
+python3 -m pip install -r requirements.txt
 python3 -m pip install -r requirements-dev.txt
 ```
 

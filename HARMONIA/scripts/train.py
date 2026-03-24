@@ -32,8 +32,16 @@ PARAM_KEYS = [
 EPOCHS = 100
 LR = 1e-4
 BATCH_SIZE = 8
-SEED = int(os.environ.get("HARMONIA_SEED", "42"))
-VAL_SPLIT = float(os.environ.get("HARMONIA_VAL_SPLIT", "0.2"))
+try:
+    SEED = int(os.environ.get("HARMONIA_SEED", "42"))
+except ValueError:
+    print("Warning: HARMONIA_SEED must be an integer; using default 42.", file=sys.stderr)
+    SEED = 42
+try:
+    VAL_SPLIT = float(os.environ.get("HARMONIA_VAL_SPLIT", "0.2"))
+except ValueError:
+    print("Warning: HARMONIA_VAL_SPLIT must be a float; using default 0.2.", file=sys.stderr)
+    VAL_SPLIT = 0.2
 TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 MODEL_VERSION_OVERRIDE = os.environ.get("HARMONIA_MODEL_VERSION", "").strip()
