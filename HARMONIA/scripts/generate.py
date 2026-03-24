@@ -20,6 +20,7 @@ LEGACY_MODEL_PATH = SAVED_MODELS_DIR / "my_plugin_ai.pth"
 LEGACY_METADATA_PATH = SAVED_MODELS_DIR / "my_plugin_ai.meta.json"
 TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
+TOKENIZER_MAX_LENGTH = 32
 
 PARAM_KEYS = [
     "frequency",
@@ -58,14 +59,23 @@ def generate_preset(prompt, output_filename):
         except (json.JSONDecodeError, OSError):
             metadata_payload = {}
 
-    model = TextToParams(num_plugin_parameters=PLUGIN_PARAM_COUNT)
+    runtime_param_keys = metadata_payload.get("param_keys", PARAM_KEYS)
+    if not isinstance(runtime_param_keys, list) or not runtime_param_keys:
+        runtime_param_keys = PARAM_KEYS
+    runtime_param_keys = [str(k) for k in runtime_param_keys]
+    plugin_param_count = int(metadata_payload.get("plugin_param_count", len(runtime_param_keys)))
+    tokenizer_max_length = int(metadata_payload.get("tokenizer_max_length", TOKENIZER_MAX_LENGTH))
+
+    model = TextToParams(num_plugin_parameters=plugin_param_count)
 
     try:
         try:
             state_dict = torch.load(model_path, map_location=torch.device('cpu'), weights_only=True)
-        except TypeError:
-            # Compatibility fallback for older torch versions lacking weights_only.
-            state_dict = torch.load(model_path, map_location=torch.device('cpu'))  # nosec
+        except TypeError as exc:
+            raise RuntimeError(
+                "Unsafe model loading blocked: this PyTorch version does not support weights_only=True. "
+                "Please upgrade PyTorch."
+            ) from exc
         model.load_state_dict(state_dict)
     except FileNotFoundError:
         print(f"Error: Could not find model at {model_path}")
@@ -78,7 +88,22 @@ def generate_preset(prompt, output_filename):
     model.eval()
 
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, revision=TOKENIZER_MODEL_REVISION)  # nosec B615
-    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=32)
+    tokens = tokenizer(prompt, return_tensors="pt", padding=False, truncation=False)
+    token_count = int(tokens["input_ids"].shape[1])
+    if token_count > tokenizer_max_length:
+        print(
+            "Error: Prompt exceeds model token context "
+            f"({token_count} > {tokenizer_max_length})."
+        )
+        sys.exit(1)
+
+    inputs = tokenizer(
+        prompt,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=tokenizer_max_length,
+    )
 
     print(f"Dreaming up parameters for: '{prompt}'...")
     with torch.no_grad():
@@ -87,10 +112,10 @@ def generate_preset(prompt, output_filename):
     param_list = prediction[0].tolist()
 
     named_parameters = {}
-    if len(param_list) != len(PARAM_KEYS):
-        print(f"Warning: Model generated {len(param_list)} params, expected {len(PARAM_KEYS)}.")
+    if len(param_list) != len(runtime_param_keys):
+        print(f"Warning: Model generated {len(param_list)} params, expected {len(runtime_param_keys)}.")
 
-    for i, key in enumerate(PARAM_KEYS):
+    for i, key in enumerate(runtime_param_keys):
         if i < len(param_list):
             named_parameters[key] = param_list[i]
 
