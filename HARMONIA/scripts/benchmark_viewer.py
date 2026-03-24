@@ -1,15 +1,20 @@
 import json
-import os
+from pathlib import Path
 
-BENCHMARK_FILE = "../benchmarks/history.json"
+BASE_DIR = Path(__file__).resolve().parent.parent
+BENCHMARK_FILE = BASE_DIR / "benchmarks" / "history.json"
 
 def view_stats():
-    if not os.path.exists(BENCHMARK_FILE):
+    if not BENCHMARK_FILE.exists():
         print("No benchmarks found yet. Run train.py first!")
         return
 
-    with open(BENCHMARK_FILE, 'r') as f:
-        history = json.load(f)
+    try:
+        with open(BENCHMARK_FILE, 'r', encoding='utf-8') as f:
+            history = json.load(f)
+    except json.JSONDecodeError:
+        print(f"Benchmark file is invalid JSON: {BENCHMARK_FILE}")
+        return
 
     print(f"\n{'ID':<5} | {'TIMESTAMP':<20} | {'TIME (s)':<10} | {'EPOCHS':<8} | {'FINAL LOSS':<12} | {'STATUS'}")
     print("-" * 85)

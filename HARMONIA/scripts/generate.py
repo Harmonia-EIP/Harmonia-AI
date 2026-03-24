@@ -3,13 +3,20 @@ import json
 import argparse
 import sys
 import os
+from pathlib import Path
 from transformers import AutoTokenizer
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
-from model import TextToParams
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.append(str(BASE_DIR))
+
+from src.model import TextToParams
 
 # --- CONFIG ---
 PLUGIN_PARAM_COUNT = 9
-MODEL_PATH = "../saved_models/my_plugin_ai.pth"
+MODEL_PATH = BASE_DIR / "saved_models" / "my_plugin_ai.pth"
+TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
+TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 
 PARAM_KEYS = [
     "frequency",
@@ -29,7 +36,12 @@ def generate_preset(prompt, output_filename):
     model = TextToParams(num_plugin_parameters=PLUGIN_PARAM_COUNT)
 
     try:
-        model.load_state_dict(torch.load(MODEL_PATH, map_location=torch.device('cpu')))
+        try:
+            state_dict = torch.load(MODEL_PATH, map_location=torch.device('cpu'), weights_only=True)
+        except TypeError:
+            # Compatibility fallback for older torch versions lacking weights_only.
+            state_dict = torch.load(MODEL_PATH, map_location=torch.device('cpu'))  # nosec
+        model.load_state_dict(state_dict)
     except FileNotFoundError:
         print(f"Error: Could not find model at {MODEL_PATH}")
         print("Did you run train.py first?")
@@ -40,8 +52,8 @@ def generate_preset(prompt, output_filename):
 
     model.eval()
 
-    tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
-    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
+    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, revision=TOKENIZER_MODEL_REVISION)  # nosec B615
+    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True, max_length=32)
 
     print(f"Dreaming up parameters for: '{prompt}'...")
     with torch.no_grad():
@@ -65,10 +77,13 @@ def generate_preset(prompt, output_filename):
         "parameters": named_parameters
     }
 
-    with open(output_filename, 'w') as f:
+    output_path = Path(output_filename)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(preset_data, f, indent=4)
 
-    print(f"Success! Preset saved to: {output_filename}")
+    print(f"Success! Preset saved to: {output_path}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate JUCE presets from text")
