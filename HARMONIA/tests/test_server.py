@@ -24,6 +24,8 @@ class FakeRuntime:
         self.tokenizer = FakeTokenizer() if ready else None
         self.ready = ready
         self.error = error
+        self.model_version = "test-v1"
+        self.model_hash = "abc123"
 
 
 def test_health_ok(monkeypatch):
@@ -36,6 +38,8 @@ def test_health_ok(monkeypatch):
     body = response.get_json()
     assert body["status"] == "ok"
     assert body["model_ready"] is True
+    assert body["model_version"] == "test-v1"
+    assert body["model_hash"] == "abc123"
 
 
 def test_health_degraded(monkeypatch):
@@ -63,6 +67,8 @@ def test_generate_success(monkeypatch):
     assert response.status_code == 200
     body = response.get_json()
     assert body["metadata"]["name"] == "Warm synth pad"
+    assert body["metadata"]["model_version"] == "test-v1"
+    assert body["metadata"]["model_hash"] == "abc123"
     assert len(body["parameters"]) == len(server_module.PARAM_KEYS)
 
 

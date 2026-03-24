@@ -2,6 +2,32 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.5] - P1 Evaluation Metrics and Model Traceability
+### Added
+- **Validation Metrics Pipeline**:
+  - `scripts/train.py` now creates a deterministic train/validation split (`HARMONIA_VAL_SPLIT`, default `0.2`).
+  - Validation metrics now include global MAE/MSE and per-parameter MAE/MSE.
+  - Added evaluation report artifacts in `benchmarks/reports/eval_*.json`.
+- **Model Metadata Artifact**:
+  - Training now writes `saved_models/my_plugin_ai.meta.json` with model version/hash and training context.
+- **API Traceability**:
+  - `GET /health` now exposes `model_version` and `model_hash`.
+  - `POST /generate` now includes `model_version` and `model_hash` in response `metadata`.
+- **Test Coverage**:
+  - Extended `tests/test_train.py` to cover split sizing and evaluation report creation.
+  - Extended API tests for traceability fields.
+
+### Changed
+- **Benchmark Enrichment**:
+  - `benchmarks/history.json` entries now include train/validation sizes, evaluation summary, report path, and model identifiers.
+- **Documentation**:
+  - Updated `README.md` and `DOC.md` with P1 outputs and run/test commands (commands unchanged).
+
+### Verified
+- `python3 -m pytest -q` -> `15 passed`
+- `python3 -m bandit -q -r scripts src` -> clean run
+- `python3 -m compileall scripts src tests` -> success
+
 ## [0.0.4] - Reliability, Security Baseline, and Tests
 ### Added
 - **API Reliability**:

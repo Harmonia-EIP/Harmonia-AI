@@ -24,7 +24,7 @@ Predicted parameter keys:
 ## 2. Runtime components
 
 - `scripts/prepare_dataset.py`: parse raw dumps and build `data/processed/presets.json`
-- `scripts/train.py`: train and save model + benchmark history
+- `scripts/train.py`: train, save model, produce benchmark history and validation metrics report
 - `scripts/generate.py`: CLI inference
 - `scripts/server.py`: Flask API (`POST /generate`, `GET /health`)
 - `scripts/auto_trainer.py`: filesystem watcher for continuous retraining
@@ -78,7 +78,11 @@ python3 HARMONIA/scripts/train.py
 
 Outputs:
 - `HARMONIA/saved_models/my_plugin_ai.pth`
+- `HARMONIA/saved_models/my_plugin_ai.meta.json`
 - `HARMONIA/benchmarks/history.json`
+- `HARMONIA/benchmarks/reports/eval_*.json`
+
+By default training uses a deterministic `train/validation` split (`HARMONIA_VAL_SPLIT=0.2`) and stores MAE/MSE per parameter in the evaluation report.
 
 ### C. CLI generation
 
@@ -112,6 +116,10 @@ Validation on `POST /generate`:
 - `prompt` must be a non-empty string
 - max prompt length: `512`
 - if model weights are unavailable/invalid, API returns `503`
+
+API traceability:
+- `GET /health` returns `model_version` and `model_hash`
+- `POST /generate` includes `model_version` and `model_hash` in `metadata`
 
 Response:
 
@@ -153,7 +161,7 @@ python3 HARMONIA/scripts/benchmark_viewer.py
 
 - Data scarcity: model quality is currently dataset-limited.
 - Fixed output space: only 9 parameters are supported.
-- No strong evaluation suite yet (no train/val split metrics in current scripts).
+- No external model registry service yet (current metadata storage is local-file based).
 - Flask development server is suitable for local integration, not production.
 - Dependency manifest (`requirement.txt`) is broad and includes non-portable entries.
 
