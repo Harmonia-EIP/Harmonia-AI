@@ -10,7 +10,7 @@ Harmonia maps text prompts (for example, `"Soft Piano"` or `"Aggressive Bass"`) 
 - Flask API for realtime plugin integration
 - API health endpoint (`GET /health`) + payload validation on `POST /generate`
 - Dataset preparation from raw `.fxp` text dumps
-- Manual training + benchmark history logging
+- Manual training + benchmark history + validation metrics reports
 - Optional auto-training watchdog pipeline
 
 ## Project layout
@@ -55,7 +55,9 @@ python3 HARMONIA/scripts/train.py
 
 Outputs:
 - `HARMONIA/saved_models/my_plugin_ai.pth`
+- `HARMONIA/saved_models/my_plugin_ai.meta.json`
 - `HARMONIA/benchmarks/history.json`
+- `HARMONIA/benchmarks/reports/eval_*.json`
 
 ### 3) Generate via CLI
 
@@ -87,6 +89,8 @@ Validation rules:
 - prompt length is capped to `512` chars
 - if model weights are unavailable, API returns `503`
 
+`/health` and `/generate` now expose `model_version` and `model_hash` to improve traceability.
+
 ### 5) View benchmark history
 
 ```bash
@@ -101,7 +105,13 @@ Training now uses a deterministic seed (`HARMONIA_SEED`, default `42`).
 HARMONIA_SEED=123 python3 HARMONIA/scripts/train.py
 ```
 
-Benchmark entries include `seed` and `dataset_size` metadata.
+Validation split can be configured with `HARMONIA_VAL_SPLIT` (default `0.2`):
+
+```bash
+HARMONIA_SEED=123 HARMONIA_VAL_SPLIT=0.25 python3 HARMONIA/scripts/train.py
+```
+
+Benchmark entries include dataset split and evaluation metadata. Per-parameter MAE/MSE are written to `HARMONIA/benchmarks/reports/`.
 
 ## Dev checks (tests + security + compile)
 
@@ -135,7 +145,7 @@ Drop `.txt` files into `HARMONIA/data/raw/drop_zone/`.
 
 - Training quality is currently constrained by small dataset size.
 - The model predicts only 9 fixed parameters.
-- No dedicated validation split, metrics suite, or model version registry yet.
+- No model registry service yet (metadata is local JSON files only).
 - API currently runs on local Flask dev server (not production hardened).
 
 See `HARMONIA/PROJECT_TECH_AUDIT.md` for the detailed engineering analysis and roadmap.

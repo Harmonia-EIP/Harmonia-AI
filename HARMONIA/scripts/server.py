@@ -4,6 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Tuple
 import os
+import json
 
 import torch
 from flask import Flask, jsonify, request
@@ -20,6 +21,7 @@ app = Flask(__name__)
 # --- CONFIG ---
 PLUGIN_PARAM_COUNT = 9
 MODEL_PATH = BASE_DIR / "saved_models" / "my_plugin_ai.pth"
+MODEL_METADATA_PATH = BASE_DIR / "saved_models" / "my_plugin_ai.meta.json"
 MAX_PROMPT_LENGTH = 512
 TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
@@ -35,12 +37,31 @@ class InferenceRuntime:
     tokenizer: Optional[object]
     ready: bool
     error: str = ""
+    model_version: str = "unknown"
+    model_hash: str = "unknown"
+
+
+def _load_model_metadata():
+    if not MODEL_METADATA_PATH.exists():
+        return {}
+
+    try:
+        with open(MODEL_METADATA_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+            if isinstance(payload, dict):
+                return payload
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return {}
 
 
 def _build_runtime() -> InferenceRuntime:
     print(f"Loading AI model from {MODEL_PATH}...")
     device = torch.device("cpu")
     model = TextToParams(num_plugin_parameters=PLUGIN_PARAM_COUNT)
+    metadata = _load_model_metadata()
+    model_version = str(metadata.get("model_version", "unknown"))
+    model_hash = str(metadata.get("model_hash", "unknown"))
 
     try:
         try:
@@ -51,12 +72,32 @@ def _build_runtime() -> InferenceRuntime:
         model.load_state_dict(state_dict)
         model.eval()
     except FileNotFoundError:
-        return InferenceRuntime(model=None, tokenizer=None, ready=False, error="Model file not found.")
+        return InferenceRuntime(
+            model=None,
+            tokenizer=None,
+            ready=False,
+            error="Model file not found.",
+            model_version=model_version,
+            model_hash=model_hash,
+        )
     except RuntimeError as exc:
-        return InferenceRuntime(model=None, tokenizer=None, ready=False, error=f"Invalid model weights: {exc}")
+        return InferenceRuntime(
+            model=None,
+            tokenizer=None,
+            ready=False,
+            error=f"Invalid model weights: {exc}",
+            model_version=model_version,
+            model_hash=model_hash,
+        )
 
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, revision=TOKENIZER_MODEL_REVISION)  # nosec B615
-    return InferenceRuntime(model=model, tokenizer=tokenizer, ready=True)
+    return InferenceRuntime(
+        model=model,
+        tokenizer=tokenizer,
+        ready=True,
+        model_version=model_version,
+        model_hash=model_hash,
+    )
 
 
 @lru_cache(maxsize=1)
@@ -89,6 +130,9 @@ def health():
             "status": status,
             "model_ready": runtime.ready,
             "model_path": str(MODEL_PATH),
+            "model_metadata_path": str(MODEL_METADATA_PATH),
+            "model_version": runtime.model_version,
+            "model_hash": runtime.model_hash,
             "error": runtime.error,
         }
     )
@@ -129,7 +173,9 @@ def generate():
     response = {
         "metadata": {
             "name": prompt,
-            "generated_by": "Harmonia-Server"
+            "generated_by": "Harmonia-Server",
+            "model_version": runtime.model_version,
+            "model_hash": runtime.model_hash,
         },
         "parameters": named_parameters
     }

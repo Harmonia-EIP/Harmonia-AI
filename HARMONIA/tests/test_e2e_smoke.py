@@ -27,6 +27,8 @@ class FakeRuntime:
         self.tokenizer = FakeTokenizer() if ready else None
         self.ready = ready
         self.error = ""
+        self.model_version = "smoke-v1"
+        self.model_hash = "smoke-hash"
 
 
 def test_prepare_and_generate_smoke(tmp_path, monkeypatch):
@@ -47,5 +49,7 @@ def test_prepare_and_generate_smoke(tmp_path, monkeypatch):
     response = client.post("/generate", json={"prompt": "smoke test"})
 
     assert response.status_code == 200
-    assert "parameters" in response.get_json()
+    body = response.get_json()
+    assert "parameters" in body
+    assert body["metadata"]["model_version"] == "smoke-v1"
 
