@@ -9,6 +9,7 @@ Harmonia maps text prompts (for example, `"Soft Piano"` or `"Aggressive Bass"`) 
 - Text-to-parameter inference with a lightweight BERT encoder (`prajjwal1/bert-tiny`)
 - Flask API for realtime plugin integration
 - API health endpoint (`GET /health`) + payload validation on `POST /generate`
+- Latest evaluation endpoint (`GET /metrics/latest`)
 - Dataset preparation from raw `.fxp` text dumps
 - Manual training + benchmark history + validation metrics reports
 - Optional auto-training watchdog pipeline
@@ -54,8 +55,9 @@ python3 HARMONIA/scripts/train.py
 ```
 
 Outputs:
-- `HARMONIA/saved_models/my_plugin_ai.pth`
-- `HARMONIA/saved_models/my_plugin_ai.meta.json`
+- `HARMONIA/saved_models/<model_version>/my_plugin_ai.pth`
+- `HARMONIA/saved_models/<model_version>/my_plugin_ai.meta.json`
+- `HARMONIA/saved_models/latest_model.json`
 - `HARMONIA/benchmarks/history.json`
 - `HARMONIA/benchmarks/reports/eval_*.json`
 
@@ -75,6 +77,8 @@ Endpoint: `POST http://127.0.0.1:5000/generate`
 
 Health check: `GET http://127.0.0.1:5000/health`
 
+Latest metrics: `GET http://127.0.0.1:5000/metrics/latest`
+
 Request body:
 
 ```json
@@ -89,7 +93,8 @@ Validation rules:
 - prompt length is capped to `512` chars
 - if model weights are unavailable, API returns `503`
 
-`/health` and `/generate` now expose `model_version` and `model_hash` to improve traceability.
+`/health` and `/generate` expose `model_version` and `model_hash`.
+`/metrics/latest` exposes the latest benchmark entry and latest evaluation report payload.
 
 ### 5) View benchmark history
 
@@ -113,6 +118,8 @@ HARMONIA_SEED=123 HARMONIA_VAL_SPLIT=0.25 python3 HARMONIA/scripts/train.py
 
 Benchmark entries include dataset split and evaluation metadata. Per-parameter MAE/MSE are written to `HARMONIA/benchmarks/reports/`.
 
+You can force a model version name with `HARMONIA_MODEL_VERSION`; otherwise training auto-generates one.
+
 ## Dev checks (tests + security + compile)
 
 Install dev dependencies:
@@ -130,6 +137,8 @@ python3 -m pytest -q
 python3 -m bandit -q -r scripts src
 python3 -m compileall scripts src tests
 ```
+
+These local commands are the same commands executed by GitHub Actions CI on each push/PR (`.github/workflows/harmonia-ci.yml`).
 
 ## Auto-training (optional)
 

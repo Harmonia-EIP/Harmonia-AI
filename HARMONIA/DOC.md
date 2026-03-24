@@ -26,7 +26,7 @@ Predicted parameter keys:
 - `scripts/prepare_dataset.py`: parse raw dumps and build `data/processed/presets.json`
 - `scripts/train.py`: train, save model, produce benchmark history and validation metrics report
 - `scripts/generate.py`: CLI inference
-- `scripts/server.py`: Flask API (`POST /generate`, `GET /health`)
+- `scripts/server.py`: Flask API (`POST /generate`, `GET /health`, `GET /metrics/latest`)
 - `scripts/auto_trainer.py`: filesystem watcher for continuous retraining
 - `scripts/benchmark_viewer.py`: print training history evolution
 
@@ -77,8 +77,9 @@ python3 HARMONIA/scripts/train.py
 ```
 
 Outputs:
-- `HARMONIA/saved_models/my_plugin_ai.pth`
-- `HARMONIA/saved_models/my_plugin_ai.meta.json`
+- `HARMONIA/saved_models/<model_version>/my_plugin_ai.pth`
+- `HARMONIA/saved_models/<model_version>/my_plugin_ai.meta.json`
+- `HARMONIA/saved_models/latest_model.json`
 - `HARMONIA/benchmarks/history.json`
 - `HARMONIA/benchmarks/reports/eval_*.json`
 
@@ -101,6 +102,7 @@ Endpoint:
 ```text
 POST http://127.0.0.1:5000/generate
 GET  http://127.0.0.1:5000/health
+GET  http://127.0.0.1:5000/metrics/latest
 ```
 
 Request:
@@ -120,6 +122,7 @@ Validation on `POST /generate`:
 API traceability:
 - `GET /health` returns `model_version` and `model_hash`
 - `POST /generate` includes `model_version` and `model_hash` in `metadata`
+- `GET /metrics/latest` returns the latest benchmark and the latest evaluation report payload
 
 Response:
 
@@ -196,4 +199,7 @@ python3 -m pytest -q
 python3 -m bandit -q -r scripts src
 python3 -m compileall scripts src tests
 ```
+
+CI note:
+- The same three commands are executed in GitHub Actions on push/PR via `.github/workflows/harmonia-ci.yml`.
 

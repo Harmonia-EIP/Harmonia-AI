@@ -11,10 +11,13 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 from src.model import TextToParams
+from src.artifact_registry import resolve_latest_model
 
 # --- CONFIG ---
 PLUGIN_PARAM_COUNT = 9
-MODEL_PATH = BASE_DIR / "saved_models" / "my_plugin_ai.pth"
+SAVED_MODELS_DIR = BASE_DIR / "saved_models"
+LEGACY_MODEL_PATH = SAVED_MODELS_DIR / "my_plugin_ai.pth"
+LEGACY_METADATA_PATH = SAVED_MODELS_DIR / "my_plugin_ai.meta.json"
 TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 
@@ -31,19 +34,41 @@ PARAM_KEYS = [
 ]
 
 def generate_preset(prompt, output_filename):
-    print(f"Loading brain from {MODEL_PATH}...")
+    artifact = resolve_latest_model(
+        SAVED_MODELS_DIR,
+        legacy_model_path=LEGACY_MODEL_PATH,
+        legacy_metadata_path=LEGACY_METADATA_PATH,
+    )
+    model_path = artifact.get("model_path")
+    if not model_path:
+        print("Error: Could not find a trained model in saved_models/.")
+        print("Did you run train.py first?")
+        sys.exit(1)
+
+    print(f"Loading brain from {model_path}...")
+
+    metadata_payload = {}
+    metadata_path = artifact.get("metadata_path")
+    if metadata_path and Path(metadata_path).exists():
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                metadata_payload = loaded
+        except (json.JSONDecodeError, OSError):
+            metadata_payload = {}
 
     model = TextToParams(num_plugin_parameters=PLUGIN_PARAM_COUNT)
 
     try:
         try:
-            state_dict = torch.load(MODEL_PATH, map_location=torch.device('cpu'), weights_only=True)
+            state_dict = torch.load(model_path, map_location=torch.device('cpu'), weights_only=True)
         except TypeError:
             # Compatibility fallback for older torch versions lacking weights_only.
-            state_dict = torch.load(MODEL_PATH, map_location=torch.device('cpu'))  # nosec
+            state_dict = torch.load(model_path, map_location=torch.device('cpu'))  # nosec
         model.load_state_dict(state_dict)
     except FileNotFoundError:
-        print(f"Error: Could not find model at {MODEL_PATH}")
+        print(f"Error: Could not find model at {model_path}")
         print("Did you run train.py first?")
         sys.exit(1)
     except RuntimeError as e:
@@ -72,7 +97,9 @@ def generate_preset(prompt, output_filename):
     preset_data = {
         "metadata": {
             "name": prompt,
-            "generated_by": "Harmonia-AI"
+            "generated_by": "Harmonia-AI",
+            "model_version": metadata_payload.get("model_version", artifact.get("model_version", "unknown")),
+            "model_hash": metadata_payload.get("model_hash", "unknown"),
         },
         "parameters": named_parameters
     }

@@ -21,6 +21,7 @@ if str(BASE_DIR) not in sys.path:
 
 from src.model import TextToParams
 from src.dataset import PresetDataset
+from src.artifact_registry import build_versioned_paths, write_latest_pointer
 
 # --- CONFIG ---
 PLUGIN_PARAM_COUNT = 9
@@ -40,8 +41,9 @@ MODEL_VERSION_OVERRIDE = os.environ.get("HARMONIA_MODEL_VERSION", "").strip()
 DATASET_PATH = BASE_DIR / "data" / "processed" / "presets.json"
 BENCHMARK_FILE = BASE_DIR / "benchmarks" / "history.json"
 EVAL_REPORT_DIR = BASE_DIR / "benchmarks" / "reports"
-MODEL_SAVE_PATH = BASE_DIR / "saved_models" / "my_plugin_ai.pth"
-MODEL_METADATA_PATH = BASE_DIR / "saved_models" / "my_plugin_ai.meta.json"
+SAVED_MODELS_DIR = BASE_DIR / "saved_models"
+LEGACY_MODEL_SAVE_PATH = SAVED_MODELS_DIR / "my_plugin_ai.pth"
+LEGACY_METADATA_PATH = SAVED_MODELS_DIR / "my_plugin_ai.meta.json"
 
 
 def set_seed(seed):
@@ -179,11 +181,20 @@ def resolve_model_version():
     return f"train-{datetime.now().strftime('%Y%m%d-%H%M%S')}-seed{SEED}"
 
 
-def write_model_metadata(payload):
-    MODEL_METADATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(MODEL_METADATA_PATH, 'w', encoding='utf-8') as f:
+def ensure_unique_model_version(model_version):
+    candidate = model_version
+    suffix = 1
+    while (SAVED_MODELS_DIR / candidate).exists():
+        suffix += 1
+        candidate = f"{model_version}-r{suffix}"
+    return candidate
+
+
+def write_model_metadata(path, payload):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
         json.dump(payload, f, indent=4)
-    return MODEL_METADATA_PATH
+    return path
 
 # --- TRAINING LOOP ---
 def train():
@@ -243,13 +254,15 @@ def train():
     end_time = time.time()
     duration = end_time - start_time
 
-    # Save Model
-    MODEL_SAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), MODEL_SAVE_PATH)
-    print(f"Model saved to {MODEL_SAVE_PATH}!")
+    model_version = ensure_unique_model_version(resolve_model_version())
+    versioned_paths = build_versioned_paths(SAVED_MODELS_DIR, model_version)
 
-    model_hash = compute_file_sha256(MODEL_SAVE_PATH)
-    model_version = resolve_model_version()
+    # Save model in a versioned directory
+    versioned_paths["model_dir"].mkdir(parents=True, exist_ok=True)
+    torch.save(model.state_dict(), versioned_paths["model_path"])
+    print(f"Model saved to {versioned_paths['model_path']}!")
+
+    model_hash = compute_file_sha256(versioned_paths["model_path"])
 
     eval_metrics = evaluate_model(model, val_loader)
     eval_report_payload = {
@@ -265,7 +278,8 @@ def train():
     eval_report_path = write_evaluation_report(eval_report_payload)
 
     metadata_payload = {
-        "model_path": str(MODEL_SAVE_PATH),
+        "model_path": str(versioned_paths["model_path"]),
+        "model_dir": str(versioned_paths["model_dir"]),
         "model_version": model_version,
         "model_hash": model_hash,
         "trained_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -281,7 +295,20 @@ def train():
         "tokenizer_model_revision": TOKENIZER_MODEL_REVISION,
         "evaluation_report_path": str(eval_report_path),
     }
-    metadata_path = write_model_metadata(metadata_payload)
+    metadata_path = write_model_metadata(versioned_paths["metadata_path"], metadata_payload)
+    write_latest_pointer(
+        SAVED_MODELS_DIR,
+        {
+            "model_version": model_version,
+            "model_path": str(versioned_paths["model_path"]),
+            "metadata_path": str(metadata_path),
+            "model_hash": model_hash,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        },
+    )
+
+    # Backward-compatible metadata mirror for legacy tooling.
+    write_model_metadata(LEGACY_METADATA_PATH, metadata_payload)
     print(f"Model metadata saved to {metadata_path}")
     print(f"Evaluation report saved to {eval_report_path}")
 
