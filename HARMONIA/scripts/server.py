@@ -201,6 +201,8 @@ def generate():
     if data is None:
         return jsonify({"error": "Invalid or missing JSON body."}), 400
 
+    if not isinstance(data, dict):
+        return jsonify({"error": "JSON body must be an object."}), 400
     prompt, validation_error = _validate_prompt(data)
     if validation_error:
         return jsonify({"error": validation_error}), 400
