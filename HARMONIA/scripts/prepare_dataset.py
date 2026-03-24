@@ -1,5 +1,6 @@
 import json
 import ast
+from pathlib import Path
 
 # 9 params of the front JUCE pluging
 TARGET_PARAMS = [
@@ -13,6 +14,10 @@ TARGET_PARAMS = [
     'AmpEnv A Release', # 8. Release
     'Osc A1 Waveform'   # 9. Waveform
 ]
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_INPUT_PATH = BASE_DIR / "data" / "raw" / "my_raw_dump.txt"
+DEFAULT_OUTPUT_PATH = BASE_DIR / "data" / "processed" / "presets.json"
 
 def clean_content(content):
     content = content.strip()
@@ -33,9 +38,15 @@ def clean_content(content):
     return content
 
 def convert_fxp_dump_to_json(input_file, output_file):
+    input_path = Path(input_file)
+    output_path = Path(output_file)
     dataset = []
 
-    with open(input_file, 'r', encoding='utf-8') as f:
+    if not input_path.exists():
+        print(f"Error: input file not found: {input_path}")
+        return
+
+    with open(input_path, 'r', encoding='utf-8') as f:
         raw_content = f.read()
 
     fixed_content = clean_content(raw_content)
@@ -78,10 +89,11 @@ def convert_fxp_dump_to_json(input_file, output_file):
             "parameters": extracted_values
         })
 
-    with open(output_file, 'w') as f:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(dataset, f, indent=4)
 
-    print(f"Success! Converted {len(dataset)} preset(s) to {output_file}")
+    print(f"Success! Converted {len(dataset)} preset(s) to {output_path}")
 
 if __name__ == "__main__":
-    convert_fxp_dump_to_json("../data/raw/my_raw_dump.txt", "presets.json")
+    convert_fxp_dump_to_json(DEFAULT_INPUT_PATH, DEFAULT_OUTPUT_PATH)

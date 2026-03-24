@@ -1,167 +1,152 @@
-# HARMONIA 🎹
+# HARMONIA
 
-> **AI-Powered VST Parameter Generator**
+AI-powered VST parameter generator for JUCE/C++ plugins.
 
-Harmonia is a deep learning system designed to control JUCE audio plugins.  
-It translates natural language descriptions (e.g. *"Soft Piano"*, *"Aggressive Bass"*) into precise floating-point parameters (`0.0 – 1.0`) for synthesizers and effects.
+Harmonia maps text prompts (for example, `"Soft Piano"` or `"Aggressive Bass"`) to normalized plugin parameters (`0.0` to `1.0`).
 
----
+## Features
 
-## 🚀 Features
+- Text-to-parameter inference with a lightweight BERT encoder (`prajjwal1/bert-tiny`)
+- Flask API for realtime plugin integration
+- API health endpoint (`GET /health`) + payload validation on `POST /generate`
+- Dataset preparation from raw `.fxp` text dumps
+- Manual training + benchmark history + validation metrics reports
+- Optional auto-training watchdog pipeline
 
-- **Text-to-Param Inference**  
-  Uses a BERT-based architecture to map semantic meaning to plugin knobs.
+## Project layout
 
-- **Real-time API**  
-  A Flask server to communicate directly with C++ / JUCE plugins.
+```text
+HARMONIA/
+├── benchmarks/
+├── data/
+│   ├── raw/
+│   └── processed/
+├── saved_models/
+├── scripts/
+└── src/
+```
 
-- **Auto-Training Watchdog**  
-  Automatically processes new data and retrains the model when files are dropped into a folder.
+## Installation
 
-- **Performance Benchmarking**  
-  Tracks loss, training time, and improvements over time.
-
-- **9-Parameter Support**  
-  Currently tuned for:
-    - Frequency
-    - Attack
-    - Cutoff
-    - Decay
-    - Volume
-    - Sustain
-    - Resonance
-    - Release
-    - Waveform
-
----
-
-## 📦 Installation
-
-1. **Clone the repository**
-2. **Install dependencies**
+From repository root:
 
 ```bash
-pip install torch transformers flask watchdog
+cd HARMONIA
+python3 -m pip install -r requirement.txt
 ```
 
----
+## Quickstart (from repository root)
 
-## 🛠 Usage
+### 1) Prepare dataset
 
-### 1. Data Preparation
-
-You can train the model using raw `.fxp` text dumps from plugins (e.g. Sylenth1).
-
-1. Place your raw dump text into:
-   ```
-   dataset/my_raw_dump.txt
-   ```
-2. Run the converter:
-   ```bash
-   python3 dataset/prepare_dataset.py
-   ```
-
-This creates:
-```
-dataset/presets.json
-```
-
----
-
-### 2. Training the Model (Manual)
-
-Run the training script from the `scripts` folder:
-```bash
-cd scripts
-python3 train.py
-```
-
-- Saves the model to:
-  ```
-  model/my_plugin_ai.pth
-  ```
-- Logs performance metrics to:
-  ```
-  benchmarks/
-  ```
-
----
-
-### 3. Auto-Training (Automatic) 🤖
-
-For a continuous workflow, run the auto trainer.  
-It watches the `drop_zone/` folder for new data.
+Place raw dump file in `HARMONIA/data/raw/my_raw_dump.txt`, then run:
 
 ```bash
-cd scripts
-python3 auto_trainer.py
+python3 HARMONIA/scripts/prepare_dataset.py
 ```
 
-**Action**  
-Drag & drop a `.txt` file with new presets into:
-```
-data/raw/drop_zone
-```
+Output: `HARMONIA/data/processed/presets.json`
 
-**Result**
-- Dataset is updated automatically
-- Model is retrained
-- New benchmark results are displayed
-
----
-
-### 4. Benchmarking 📊
-
-To visualize the evolution of your model’s performance  
-(training time, final loss, etc.):
+### 2) Train model
 
 ```bash
-python3 benchmark_viewer.py
+python3 HARMONIA/scripts/train.py
 ```
 
----
+Outputs:
+- `HARMONIA/saved_models/my_plugin_ai.pth`
+- `HARMONIA/saved_models/my_plugin_ai.meta.json`
+- `HARMONIA/benchmarks/history.json`
+- `HARMONIA/benchmarks/reports/eval_*.json`
 
-# 🤖 Generation of a sound :
-
-### CLI Generation : 
-
-Generate presets directly from the command line:
+### 3) Generate via CLI
 
 ```bash
-python3 scripts/generate.py "Soft Piano" --output ../data/processed/test_preset.json
+python3 HARMONIA/scripts/generate.py "Soft Piano" --output HARMONIA/data/processed/test_preset.json
 ```
 
-## 🔌 Integration (JUCE / C++)
-
-Run the dedicated API server:
+### 4) Run API server
 
 ```bash
-cd scripts
-python3 server.py
+python3 HARMONIA/scripts/server.py
 ```
 
-The server listens on:
-```
-http://127.0.0.1:5000/generate
-```
+Endpoint: `POST http://127.0.0.1:5000/generate`
 
-#### Request (JSON)
+Health check: `GET http://127.0.0.1:5000/health`
+
+Request body:
 
 ```json
-POST /generate
 {
   "prompt": "Dark Reese Bass"
 }
 ```
 
-#### Response (JSON)
+Validation rules:
+- `prompt` is required and must be a string
+- empty/whitespace prompt returns `400`
+- prompt length is capped to `512` chars
+- if model weights are unavailable, API returns `503`
 
-```json
-{
-  "parameters": {
-    "cutoff": 0.45,
-    "resonance": 0.8,
-    "attack": 0.1
-  }
-}
+`/health` and `/generate` now expose `model_version` and `model_hash` to improve traceability.
+
+### 5) View benchmark history
+
+```bash
+python3 HARMONIA/scripts/benchmark_viewer.py
 ```
+
+## Reproducible training
+
+Training now uses a deterministic seed (`HARMONIA_SEED`, default `42`).
+
+```bash
+HARMONIA_SEED=123 python3 HARMONIA/scripts/train.py
+```
+
+Validation split can be configured with `HARMONIA_VAL_SPLIT` (default `0.2`):
+
+```bash
+HARMONIA_SEED=123 HARMONIA_VAL_SPLIT=0.25 python3 HARMONIA/scripts/train.py
+```
+
+Benchmark entries include dataset split and evaluation metadata. Per-parameter MAE/MSE are written to `HARMONIA/benchmarks/reports/`.
+
+## Dev checks (tests + security + compile)
+
+Install dev dependencies:
+
+```bash
+cd HARMONIA
+python3 -m pip install -r requirements.txt
+python3 -m pip install -r requirements-dev.txt
+```
+
+Run checks:
+
+```bash
+cd HARMONIA
+python3 -m pytest -q
+python3 -m bandit -q -r scripts src
+python3 -m compileall scripts src tests
+```
+
+## Auto-training (optional)
+
+Run watcher:
+
+```bash
+python3 HARMONIA/scripts/auto_trainer.py
+```
+
+Drop `.txt` files into `HARMONIA/data/raw/drop_zone/`.
+
+## Current limitations
+
+- Training quality is currently constrained by small dataset size.
+- The model predicts only 9 fixed parameters.
+- No model registry service yet (metadata is local JSON files only).
+- API currently runs on local Flask dev server (not production hardened).
+
+See `HARMONIA/PROJECT_TECH_AUDIT.md` for the detailed engineering analysis and roadmap.

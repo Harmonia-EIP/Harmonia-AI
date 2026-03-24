@@ -1,27 +1,88 @@
 import torch
 import json
-import time
+import hashlib
 import os
+import random
+import time
 import sys
+from pathlib import Path
 from datetime import datetime
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from transformers import AutoTokenizer
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
-from model import TextToParams
-from dataset import PresetDataset
+
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover
+    np = None
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.append(str(BASE_DIR))
+
+from src.model import TextToParams
+from src.dataset import PresetDataset
 
 # --- CONFIG ---
 PLUGIN_PARAM_COUNT = 9
+PARAM_KEYS = [
+    "frequency", "attack", "cutoff", "decay",
+    "volume", "sustain", "resonance", "release",
+    "waveform"
+]
 EPOCHS = 100
 LR = 1e-4
 BATCH_SIZE = 8
-DATASET_PATH = "../data/processed/presets.json"
-BENCHMARK_FILE = "../benchmarks/history.json"
-MODEL_SAVE_PATH = "../saved_models/my_plugin_ai.pth"
+try:
+    SEED = int(os.environ.get("HARMONIA_SEED", "42"))
+except ValueError:
+    print("Warning: HARMONIA_SEED must be an integer; using default 42.", file=sys.stderr)
+    SEED = 42
+try:
+    VAL_SPLIT = float(os.environ.get("HARMONIA_VAL_SPLIT", "0.2"))
+except ValueError:
+    print("Warning: HARMONIA_VAL_SPLIT must be a float; using default 0.2.", file=sys.stderr)
+    VAL_SPLIT = 0.2
+TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
+TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
+MODEL_VERSION_OVERRIDE = os.environ.get("HARMONIA_MODEL_VERSION", "").strip()
+DATASET_PATH = BASE_DIR / "data" / "processed" / "presets.json"
+BENCHMARK_FILE = BASE_DIR / "benchmarks" / "history.json"
+EVAL_REPORT_DIR = BASE_DIR / "benchmarks" / "reports"
+MODEL_SAVE_PATH = BASE_DIR / "saved_models" / "my_plugin_ai.pth"
+MODEL_METADATA_PATH = BASE_DIR / "saved_models" / "my_plugin_ai.meta.json"
+
+
+def set_seed(seed):
+    random.seed(seed)
+    if np is not None:
+        np.random.seed(seed)
+
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+    if hasattr(torch, "use_deterministic_algorithms"):
+        torch.use_deterministic_algorithms(True, warn_only=True)
+
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+
 # --- LOGGING FUNCTION ---
-def save_benchmark(duration, final_loss, epoch_history):
-    if not os.path.exists("../model/benchmarks"):
-        os.makedirs("../model/benchmarks")
+def save_benchmark(
+    duration,
+    final_loss,
+    epoch_history,
+    dataset_size,
+    train_size=None,
+    val_size=None,
+    eval_metrics=None,
+    evaluation_report_path=None,
+    model_version=None,
+    model_hash=None,
+):
+    BENCHMARK_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     # 2. Prepere new entry
     entry = {
@@ -31,52 +92,148 @@ def save_benchmark(duration, final_loss, epoch_history):
         "epochs": EPOCHS,
         "learning_rate": LR,
         "batch_size": BATCH_SIZE,
+        "seed": SEED,
+        "dataset_size": dataset_size,
+        "train_size": train_size,
+        "val_size": val_size,
+        "eval_metrics": eval_metrics,
+        "evaluation_report_path": str(evaluation_report_path) if evaluation_report_path else None,
+        "model_version": model_version,
+        "model_hash": model_hash,
         "loss_history": epoch_history # Saving curve graph
     }
 
     # 3. Load existing history
     history = []
-    if os.path.exists(BENCHMARK_FILE):
+    if BENCHMARK_FILE.exists():
         try:
-            with open(BENCHMARK_FILE, 'r') as f:
+            with open(BENCHMARK_FILE, 'r', encoding='utf-8') as f:
                 history = json.load(f)
-        except:
+        except json.JSONDecodeError:
             history = []
 
     # 4. Append and Save
     history.append(entry)
-    with open(BENCHMARK_FILE, 'w') as f:
+    with open(BENCHMARK_FILE, 'w', encoding='utf-8') as f:
         json.dump(history, f, indent=4)
 
     print(f"\n[BENCHMARK] Stats saved to {BENCHMARK_FILE}")
     print(f"Time: {entry['duration_seconds']}s | Final Loss: {entry['final_loss']}")
 
+
+def compute_split_sizes(dataset_size, val_ratio):
+    if dataset_size < 2:
+        return dataset_size, 0
+
+    safe_ratio = min(0.9, max(0.0, val_ratio))
+    val_size = max(1, int(dataset_size * safe_ratio))
+    val_size = min(val_size, dataset_size - 1)
+    return dataset_size - val_size, val_size
+
+
+def evaluate_model(model, loader):
+    if loader is None:
+        return None
+
+    model.eval()
+    mse_sum = torch.zeros(len(PARAM_KEYS), dtype=torch.float32)
+    mae_sum = torch.zeros(len(PARAM_KEYS), dtype=torch.float32)
+    sample_count = 0
+
+    with torch.no_grad():
+        for batch in loader:
+            preds = model(batch['input_ids'], batch['attention_mask'])
+            labels = batch['labels']
+
+            error = preds - labels
+            mse_sum += (error * error).sum(dim=0).cpu()
+            mae_sum += error.abs().sum(dim=0).cpu()
+            sample_count += labels.shape[0]
+
+    if sample_count == 0:
+        return None
+
+    per_param_mse = (mse_sum / sample_count).tolist()
+    per_param_mae = (mae_sum / sample_count).tolist()
+    return {
+        "mse": round(float(sum(per_param_mse) / len(per_param_mse)), 6),
+        "mae": round(float(sum(per_param_mae) / len(per_param_mae)), 6),
+        "per_param_mse": {k: round(float(v), 6) for k, v in zip(PARAM_KEYS, per_param_mse)},
+        "per_param_mae": {k: round(float(v), 6) for k, v in zip(PARAM_KEYS, per_param_mae)},
+        "sample_count": sample_count,
+    }
+
+
+def write_evaluation_report(report_payload):
+    EVAL_REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    report_name = f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    report_path = EVAL_REPORT_DIR / report_name
+    with open(report_path, 'w', encoding='utf-8') as f:
+        json.dump(report_payload, f, indent=4)
+    return report_path
+
+
+def compute_file_sha256(path):
+    sha256 = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def resolve_model_version():
+    if MODEL_VERSION_OVERRIDE:
+        return MODEL_VERSION_OVERRIDE
+    return f"train-{datetime.now().strftime('%Y%m%d-%H%M%S')}-seed{SEED}"
+
+
+def write_model_metadata(payload):
+    MODEL_METADATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(MODEL_METADATA_PATH, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, indent=4)
+    return MODEL_METADATA_PATH
+
 # --- TRAINING LOOP ---
 def train():
     # Start Timer
     start_time = time.time()
+    set_seed(SEED)
+    print(f"Using deterministic seed: {SEED}")
 
-    tokenizer = AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
+    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, revision=TOKENIZER_MODEL_REVISION)  # nosec B615
 
     # Check if dataset exists
-    if not os.path.exists(DATASET_PATH):
+    if not DATASET_PATH.exists():
         print(f"Error: {DATASET_PATH} not found. Run prepare_dataset.py first.")
         return
 
     dataset = PresetDataset(DATASET_PATH, tokenizer)
-    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+    if len(dataset) == 0:
+        print(f"Error: {DATASET_PATH} is empty. Add presets before training.")
+        return
+
+    train_size, val_size = compute_split_sizes(len(dataset), VAL_SPLIT)
+    split_generator = torch.Generator().manual_seed(SEED)
+    if val_size > 0:
+        train_dataset, val_dataset = random_split(dataset, [train_size, val_size], generator=split_generator)
+    else:
+        train_dataset, val_dataset = dataset, None
+
+    generator = torch.Generator().manual_seed(SEED)
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, generator=generator)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False) if val_dataset is not None else None
 
     model = TextToParams(num_plugin_parameters=PLUGIN_PARAM_COUNT)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     loss_fn = torch.nn.MSELoss()
 
-    print(f"Starting training on {len(dataset)} presets...")
+    print(f"Starting training on {len(dataset)} presets (train={train_size}, val={val_size})...")
 
     loss_history = []
 
     for epoch in range(EPOCHS):
         total_loss = 0
-        for batch in loader:
+        for batch in train_loader:
             optimizer.zero_grad()
             preds = model(batch['input_ids'], batch['attention_mask'])
             loss = loss_fn(preds, batch['labels'])
@@ -84,7 +241,7 @@ def train():
             optimizer.step()
             total_loss += loss.item()
 
-        avg_loss = total_loss / len(loader)
+        avg_loss = total_loss / len(train_loader)
         loss_history.append(avg_loss)
 
         if (epoch+1) % 10 == 0:
@@ -95,13 +252,61 @@ def train():
     duration = end_time - start_time
 
     # Save Model
-    if not os.path.exists("../saved_models"):
-        os.makedirs("../saved_models")
+    MODEL_SAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), MODEL_SAVE_PATH)
     print(f"Model saved to {MODEL_SAVE_PATH}!")
 
+    model_hash = compute_file_sha256(MODEL_SAVE_PATH)
+    model_version = resolve_model_version()
+
+    eval_metrics = evaluate_model(model, val_loader)
+    eval_report_payload = {
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "model_version": model_version,
+        "model_hash": model_hash,
+        "seed": SEED,
+        "val_split": VAL_SPLIT,
+        "train_size": train_size,
+        "val_size": val_size,
+        "metrics": eval_metrics,
+    }
+    eval_report_path = write_evaluation_report(eval_report_payload)
+
+    metadata_payload = {
+        "model_path": str(MODEL_SAVE_PATH),
+        "model_version": model_version,
+        "model_hash": model_hash,
+        "trained_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "seed": SEED,
+        "epochs": EPOCHS,
+        "learning_rate": LR,
+        "batch_size": BATCH_SIZE,
+        "val_split": VAL_SPLIT,
+        "dataset_size": len(dataset),
+        "train_size": train_size,
+        "val_size": val_size,
+        "tokenizer_model_id": TOKENIZER_MODEL_ID,
+        "tokenizer_model_revision": TOKENIZER_MODEL_REVISION,
+        "evaluation_report_path": str(eval_report_path),
+    }
+    metadata_path = write_model_metadata(metadata_payload)
+    print(f"Model metadata saved to {metadata_path}")
+    print(f"Evaluation report saved to {eval_report_path}")
+
     # Save Benchmark Stats
-    save_benchmark(duration, loss_history[-1], loss_history)
+    final_loss = loss_history[-1] if loss_history else 0.0
+    save_benchmark(
+        duration,
+        final_loss,
+        loss_history,
+        len(dataset),
+        train_size=train_size,
+        val_size=val_size,
+        eval_metrics=eval_metrics,
+        evaluation_report_path=eval_report_path,
+        model_version=model_version,
+        model_hash=model_hash,
+    )
 
 if __name__ == "__main__":
     train()

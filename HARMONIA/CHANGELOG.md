@@ -2,6 +2,90 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.5] - P1 Evaluation Metrics and Model Traceability
+### Added
+- **Validation Metrics Pipeline**:
+  - `scripts/train.py` now creates a deterministic train/validation split (`HARMONIA_VAL_SPLIT`, default `0.2`).
+  - Validation metrics now include global MAE/MSE and per-parameter MAE/MSE.
+  - Added evaluation report artifacts in `benchmarks/reports/eval_*.json`.
+- **Model Metadata Artifact**:
+  - Training now writes `saved_models/my_plugin_ai.meta.json` with model version/hash and training context.
+- **API Traceability**:
+  - `GET /health` now exposes `model_version` and `model_hash`.
+  - `POST /generate` now includes `model_version` and `model_hash` in response `metadata`.
+- **Test Coverage**:
+  - Extended `tests/test_train.py` to cover split sizing and evaluation report creation.
+  - Extended API tests for traceability fields.
+
+### Changed
+- **Benchmark Enrichment**:
+  - `benchmarks/history.json` entries now include train/validation sizes, evaluation summary, report path, and model identifiers.
+- **Documentation**:
+  - Updated `README.md` and `DOC.md` with P1 outputs and run/test commands (commands unchanged).
+
+### Verified
+- `python3 -m pytest -q` -> `15 passed`
+- `python3 -m bandit -q -r scripts src` -> clean run
+- `python3 -m compileall scripts src tests` -> success
+
+## [0.0.4] - Reliability, Security Baseline, and Tests
+### Added
+- **API Reliability**:
+  - Added `GET /health` endpoint in `scripts/server.py` for runtime status checks.
+  - Added strict payload validation for `POST /generate` (`prompt` type, emptiness, max length 512).
+- **Reproducible Training**:
+  - Added deterministic seed support in `scripts/train.py` via `HARMONIA_SEED` (default: `42`).
+  - Benchmark entries now include `seed` and `dataset_size` metadata.
+- **Test Suite**:
+  - Added `tests/test_server.py` for API behavior and error-path validation.
+  - Added `tests/test_prepare_dataset.py` for parser and conversion checks.
+  - Added `tests/test_train.py` for deterministic seed and benchmark metadata tests.
+  - Added `tests/test_e2e_smoke.py` for a lightweight prepare+generate smoke path.
+- **Dev Tooling**:
+  - Added `requirements-dev.txt` with `pytest` and `bandit`.
+
+### Changed
+- **Model Supply Chain Controls**:
+  - Added model source pinning support with `HARMONIA_MODEL_ID` and `HARMONIA_MODEL_REVISION`.
+  - Applied pinned revision loading for tokenizer/model in `scripts/train.py`, `scripts/server.py`, `scripts/generate.py`, and `src/model.py`.
+- **Safer Weight Loading**:
+  - Updated model loading paths to prefer `torch.load(..., weights_only=True)` with compatibility fallback.
+- **Auto-Training Execution Safety**:
+  - Added a strict script allowlist and resolved-path checks before subprocess execution in `scripts/auto_trainer.py`.
+- **Documentation**:
+  - Updated `README.md` and `DOC.md` with health endpoint, payload validation, reproducible training, and dev validation commands.
+
+### Verified
+- `python3 -m pytest -q` -> `13 passed`
+- `python3 -m compileall scripts src tests` -> success
+- `python3 -m bandit -q -r scripts src` -> clean run (no reported findings)
+
+## [0.0.3] - Runtime Stability and Technical Audit
+### Added
+- **Technical Audit**: Added `PROJECT_TECH_AUDIT.md` with current limitations, engineering risks, and a concrete 30-60-90 roadmap.
+- **Runtime Guards**:
+  - `server.py` now returns `503` when model weights are missing/invalid.
+  - `train.py` now stops early on empty datasets.
+  - `auto_trainer.py` now ignores non-`.txt` files.
+
+### Changed
+- **Path Handling**: Switched critical scripts to absolute paths derived from script location:
+  - `prepare_dataset.py`
+  - `train.py`
+  - `generate.py`
+  - `server.py`
+  - `benchmark_viewer.py`
+  - `auto_trainer.py`
+- **Documentation Alignment**:
+  - Updated `README.md` and `DOC.md` to match executable commands from repository root.
+
+### Fixed
+- **Server Import**: Fixed `ModuleNotFoundError` in `server.py` by ensuring `src/` is available in `sys.path`.
+- **Dataset Output Path**: `prepare_dataset.py` default output now correctly targets `data/processed/presets.json`.
+- **Benchmark Directory Logic**: `train.py` now creates the real benchmark directory before writing history.
+- **Benchmark Viewer Path**: `benchmark_viewer.py` now reads benchmark history correctly regardless of current working directory.
+- **Auto-Trainer Subprocesses**: `auto_trainer.py` now executes scripts with deterministic absolute paths and `sys.executable`.
+
 ## [0.0.2] - Refactored Architecture
 ### Changed
 - **Project Structure**: Reorganized repository into professional standard structure.

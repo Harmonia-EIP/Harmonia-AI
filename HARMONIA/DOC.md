@@ -1,139 +1,128 @@
-# 🎹 HARMONIA-AI Documentation
+# HARMONIA Technical Documentation
 
-> **AI-Powered VST Parameter Generator** > *Turn natural language descriptions into precise synthesizer presets.*
+Harmonia is a text-to-parameter AI system for VST/JUCE integration.
 
-## 📖 1. Overview
+It converts natural-language prompts into normalized synthesizer parameters in the range `[0.0, 1.0]`.
 
-**Harmonia-AI** is a lightweight deep learning system designed to bridge the gap between human language and audio synthesis. It utilizes a BERT-based architecture to translate semantic descriptions (e.g., *"Dark Cinematic Drone"*, *"Aggressive Reese Bass"*) into floating-point parameters compatible with JUCE/C++ audio plugins.
+## 1. Architecture
 
-### Key Capabilities
-* **Text-to-Param Inference:** Maps semantic meaning to plugin knobs (`0.0` – `1.0`).
-* **Real-time API:** A Flask server providing millisecond-latency generation for integration with VSTs.
-* **Auto-Training Watchdog:** Automatically detects new dataset files and retrains the model in the background.
-* **Lightweight Architecture:** Optimized to run on standard CPUs without requiring heavy GPU resources.
+- Encoder: `prajjwal1/bert-tiny` from Hugging Face (`transformers`)
+- Regressor head: small MLP (`Linear -> ReLU -> Dropout -> Linear -> Sigmoid`)
+- Output: 9 parameters
 
----
+Predicted parameter keys:
+1. `frequency`
+2. `attack`
+3. `cutoff`
+4. `decay`
+5. `volume`
+6. `sustain`
+7. `resonance`
+8. `release`
+9. `waveform`
 
-## ⚙️ 2. System Architecture
+## 2. Runtime components
 
-Harmonia uses a transfer learning approach leveraging a pre-trained language model.
+- `scripts/prepare_dataset.py`: parse raw dumps and build `data/processed/presets.json`
+- `scripts/train.py`: train, save model, produce benchmark history and validation metrics report
+- `scripts/generate.py`: CLI inference
+- `scripts/server.py`: Flask API (`POST /generate`, `GET /health`)
+- `scripts/auto_trainer.py`: filesystem watcher for continuous retraining
+- `scripts/benchmark_viewer.py`: print training history evolution
 
-* **Encoder:** `prajjwal1/bert-tiny` (A compressed BERT model for efficiency).
-* **Parameter Head:** A custom Neural Network mapping the 128-dimension text embedding to specific synthesizer controls. ***(SUBJECT TO CHANGES)***
-* **Output:** 9 distinct floating-point values (Range: `0.0` to `1.0`).
+## 3. Installation
 
-### Supported Parameters
-The model is currently tuned to predict the following 9 parameters:
-1.  **Frequency**
-2.  **Attack**
-3.  **Cutoff**
-4.  **Decay**
-5.  **Volume**
-6.  **Sustain**
-7.  **Resonance**
-8.  **Release**
-9.  **Waveform**
+Requirements:
+- Python 3.9+
+- pip
 
-(THE NUMBER OF PARAMETERS IS MOST LIKELY SUBJECT TO CHANGES IN THE FUTURE)
+From repository root:
 
----
+```bash
+cd HARMONIA
+python3 -m pip install -r requirement.txt
+```
 
-## 📦 3. Installation
+## 4. End-to-end workflow
 
-### Prerequisites
-* Python 3.8+
-* pip
+Run from repository root (`/path/to/Harmonia-AI`):
 
-### Setup
-1.  **Clone the repository:**
-    ```bash
-    git clone [https://github.com/your-username/harmonia-ai.git](https://github.com/your-username/harmonia-ai.git)
-    cd harmonia-ai
-    ```
+### A. Dataset preparation
 
-2.  **Install dependencies:**
-    ```bash
-    pip install -r HARMONIA/requirement.txt
-    ```
-    *(Note: Key libraries include `torch`, `transformers`, `flask`, and `watchdog`.)*
+```bash
+python3 HARMONIA/scripts/prepare_dataset.py
+```
 
----
+Input: `HARMONIA/data/raw/my_raw_dump.txt`  
+Output: `HARMONIA/data/processed/presets.json`
 
-## 🚀 4. Usage Workflow
+### B. Model training
 
-### Step A: Data Preparation
-Harmonia learns from `.fxp` text dumps or raw text data representing plugin states.
-
-1.  Place your raw text dump into:
-    `HARMONIA/data/raw/my_raw_dump.txt`
-2.  Run the processor to format the data for training:
-    ```bash
-    python3 HARMONIA/scripts/prepare_dataset.py
-    ```
-    *Output: `HARMONIA/data/processed/presets.json`*
-
-### Step B: Training the Model
-
-#### Option 1: Manual Training
-Run the training script once to process the current dataset.
 ```bash
 python3 HARMONIA/scripts/train.py
-
 ```
 
-* **Artifacts:** Saves the model to `HARMONIA/saved_models/my_plugin_ai.pth`.
-* **Logs:** Updates training history in `HARMONIA/benchmarks/history.json`.
-
-#### Option 2: Automatic Training (Watchdog) 🤖
-
-For continuous learning, run the auto-trainer. It monitors the `drop_zone` folder.
+Deterministic seed (optional):
 
 ```bash
-python3 HARMONIA/scripts/auto_trainer.py
+HARMONIA_SEED=123 python3 HARMONIA/scripts/train.py
 ```
 
-* **Action:** Drag & drop a new text file into `HARMONIA/data/raw/drop_zone/`.
-* **Result:** The system detects the file, updates the dataset, retrains the model, and logs performance automatically.
-
-### Step C: Performance Benchmarking
-
-To visualize training duration, loss reduction, and model evolution:
+Pinned model/tokenizer source (optional):
 
 ```bash
-python3 HARMONIA/scripts/benchmark_viewer.py
+HARMONIA_MODEL_ID=prajjwal1/bert-tiny
+HARMONIA_MODEL_REVISION=main
+python3 HARMONIA/scripts/train.py
 ```
 
----
+Outputs:
+- `HARMONIA/saved_models/my_plugin_ai.pth`
+- `HARMONIA/saved_models/my_plugin_ai.meta.json`
+- `HARMONIA/benchmarks/history.json`
+- `HARMONIA/benchmarks/reports/eval_*.json`
 
-## 🔌 5. Integration & Generation
+By default training uses a deterministic `train/validation` split (`HARMONIA_VAL_SPLIT=0.2`) and stores MAE/MSE per parameter in the evaluation report.
 
-Harmonia offers two methods for generating presets: CLI for testing and an HTTP API for production/plugin integration.
+### C. CLI generation
 
-### Method 1: HTTP API (Recommended for VSTs)
+```bash
+python3 HARMONIA/scripts/generate.py "Aggressive distorted bass" --output HARMONIA/data/processed/my_preset.json
+```
 
-Start the background server:
+### D. HTTP API
 
 ```bash
 python3 HARMONIA/scripts/server.py
-
 ```
 
-*The server will listen on `http://127.0.0.1:5000/generate`.*
+Endpoint:
 
-**API Specification:**
+```text
+POST http://127.0.0.1:5000/generate
+GET  http://127.0.0.1:5000/health
+```
 
-* **Endpoint:** `POST /generate`
-* **Content-Type:** `application/json`
-* **Body:**
+Request:
+
 ```json
 {
   "prompt": "Soft ethereal pad with long release"
 }
-
 ```
 
+Validation on `POST /generate`:
+- body must be valid JSON
+- `prompt` must be a non-empty string
+- max prompt length: `512`
+- if model weights are unavailable/invalid, API returns `503`
 
-* **Response:**
+API traceability:
+- `GET /health` returns `model_version` and `model_hash`
+- `POST /generate` includes `model_version` and `model_hash` in `metadata`
+
+Response:
+
 ```json
 {
   "metadata": {
@@ -141,44 +130,70 @@ python3 HARMONIA/scripts/server.py
     "generated_by": "Harmonia-Server"
   },
   "parameters": {
+    "frequency": 0.44,
+    "attack": 0.81,
     "cutoff": 0.65,
-    "attack": 0.8,
-    "release": 0.9,
-    "resonance": 0.2,
-    ...
+    "decay": 0.33,
+    "volume": 0.72,
+    "sustain": 0.56,
+    "resonance": 0.20,
+    "release": 0.90,
+    "waveform": 0.18
   }
 }
 ```
 
-
-
-### Method 2: Command Line Interface (CLI)
-
-Generate a single preset file directly from the terminal.
+### E. Auto-training
 
 ```bash
-python3 HARMONIA/scripts/generate.py "Aggressive distorted bass" --output my_preset.json
+python3 HARMONIA/scripts/auto_trainer.py
 ```
 
----
+Drop new `.txt` files into `HARMONIA/data/raw/drop_zone/`.
 
-## 📂 6. Project Structure
+### F. Benchmark visualization
 
-```text
-HARMONIA/
-├── benchmarks/          # Stores training history and stats
-├── data/
-│   ├── processed/       # JSON datasets ready for training
-│   └── raw/             # Raw text dumps and drop_zone
-├── docs/                # Documentation files
-├── model/               # Location of saved .pth models
-├── scripts/             # Operational scripts (train, server, generate)
-└── src/
-    ├── dataset.py       # Data loading logic
-    └── model.py         # PyTorch model definition (BERT + Head)
-
+```bash
+python3 HARMONIA/scripts/benchmark_viewer.py
 ```
 
----
+## 5. Known limitations
 
-**© 2026 Harmonia Project** *Built for the future of audio synthesis.*
+- Data scarcity: model quality is currently dataset-limited.
+- Fixed output space: only 9 parameters are supported.
+- No external model registry service yet (current metadata storage is local-file based).
+- Flask development server is suitable for local integration, not production.
+- Dependency manifest (`requirement.txt`) is broad and includes non-portable entries.
+
+## 6. Next technical challenges
+
+- Build a validated dataset pipeline with schema checks and outlier filtering.
+- Add proper evaluation (MAE/MSE by parameter, holdout set, reproducibility seed).
+- Introduce model versioning and rollback strategy for plugin integration safety.
+- Harden API service (timeouts, structured logs, health checks, rate limiting).
+- Add a compatibility layer for multiple plugins with per-plugin parameter schemas.
+
+## 7. Engineering roadmap
+
+- Short term: stabilize dependencies, add tests, lock E2E commands.
+- Mid term: improve data quality + metrics + model registry.
+- Long term: multi-plugin support, latency optimization, deployment-ready API.
+
+## 8. Dev validation checks
+
+Install dev tooling:
+
+```bash
+cd HARMONIA
+python3 -m pip install -r requirements.txt -r requirements-dev.txt
+```
+
+Run checks:
+
+```bash
+cd HARMONIA
+python3 -m pytest -q
+python3 -m bandit -q -r scripts src
+python3 -m compileall scripts src tests
+```
+

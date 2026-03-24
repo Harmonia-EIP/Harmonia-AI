@@ -1,12 +1,16 @@
 import torch
 import torch.nn as nn
+import os
 from transformers import AutoModel
+
+MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
+MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 
 class TextToParams(nn.Module):
     def __init__(self, num_plugin_parameters=9):
         super().__init__()
         # 1. text encodeor with BERT model
-        self.bert = AutoModel.from_pretrained("prajjwal1/bert-tiny")
+        self.bert = AutoModel.from_pretrained(MODEL_ID, revision=MODEL_REVISION)  # nosec B615
 
         # 2. maping
         self.head = nn.Sequential(
