@@ -1,0 +1,29 @@
+# Doxygen artifacts
+latex/
+*.log
+doxygen_sqlite3.db
+
+# --- Bencharks ---
+benchmarks/history.json
+
+# --- IDE & System ---
+.idea/
+.vscode/
+.DS_Store
+__pycache__/
+*.pyc
+
+# --- Models ---
+*.pth
+saved_models/*.pth
+
+# --- (Dataset) ---
+data/raw/*.txt
+
+# --- venve Python ---
+venv/
+env/
+.env
+
+# --- Doxygen ---
+docs/latex/

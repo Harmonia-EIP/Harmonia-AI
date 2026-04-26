@@ -1,0 +1,31 @@
+{
+    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260330-151301-seed42/my_plugin_ai.pth",
+    "model_dir": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260330-151301-seed42",
+    "model_version": "train-20260330-151301-seed42",
+    "model_hash": "5fe6232e00c7be85bc6f5595ee94c218b493cf6fc0cd5ad109360e7bddc69317",
+    "plugin_param_count": 9,
+    "param_keys": [
+        "frequency",
+        "attack",
+        "cutoff",
+        "decay",
+        "volume",
+        "sustain",
+        "resonance",
+        "release",
+        "waveform"
+    ],
+    "trained_at": "2026-03-30 15:13:01",
+    "seed": 42,
+    "epochs": 100,
+    "learning_rate": 0.0001,
+    "batch_size": 8,
+    "val_split": 0.2,
+    "dataset_size": 1,
+    "train_size": 1,
+    "val_size": 0,
+    "tokenizer_model_id": "prajjwal1/bert-tiny",
+    "tokenizer_model_revision": "main",
+    "tokenizer_max_length": 32,
+    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260330_151301.json"
+}

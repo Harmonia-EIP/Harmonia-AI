@@ -2,6 +2,71 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.8] - CI Workflow Restoration and Test Commands Clarity
+### Added
+- **Missing CI Workflow**:
+  - Added `.github/workflows/harmonia-ci.yml` at repository root.
+  - Workflow runs on push/pull_request and executes the 3 project checks from `HARMONIA/`:
+    - `python -m pytest -q`
+    - `python -m bandit -q -r scripts src`
+    - `python -m compileall scripts src tests`
+
+### Changed
+- **Documentation Clarity**:
+  - Added an explicit `Commandes de test (local + CI)` section in `HARMONIA/README.md`.
+  - Added the same `Commandes de test (local + CI)` section in `HARMONIA/DOC.md`.
+  - Documented a quick targeted run command (`tests/test_server.py`) for fast local validation.
+
+## [0.0.7] - Security Hardening and Dependency Cleanup
+### Added
+- **Dynamic Inference Configuration**:
+  - Training metadata now includes `plugin_param_count`, `param_keys`, and `tokenizer_max_length`.
+  - Inference (`scripts/server.py`, `scripts/generate.py`) now reads these metadata fields to avoid hardcoded parameter mapping.
+- **Token Context Guard**:
+  - `POST /generate` now rejects prompts that exceed model token context instead of silently truncating.
+
+### Changed
+- **Dependency Hygiene**:
+  - Replaced the non-portable environment dump in `requirement.txt` with a minimal, portable runtime manifest.
+- **Safer Model Loading**:
+  - Removed unsafe fallback model loading path and enforce `weights_only=True` for PyTorch deserialization.
+- **CLI Consistency**:
+  - `scripts/generate.py` now mirrors server-side behavior for model/token context validation and metadata-driven output keys.
+
+### Verified
+- `python3 -m pytest -q` -> `21 passed`
+- `python3 -m bandit -q -r scripts src` -> clean run
+- `python3 -m compileall scripts src tests` -> success
+
+## [0.0.6] - Metrics Endpoint, Model Versioning, and CI
+### Added
+- **API Metrics Endpoint**:
+  - Added `GET /metrics/latest` in `scripts/server.py` to expose the latest benchmark entry and latest evaluation report payload.
+- **Automatic Model Versioning**:
+  - `scripts/train.py` now stores artifacts in `saved_models/<model_version>/`.
+  - Added `saved_models/latest_model.json` pointer to resolve the most recent model automatically.
+  - Added `src/artifact_registry.py` to centralize model artifact path resolution.
+- **CI Automation**:
+  - Added GitHub Actions workflow `.github/workflows/harmonia-ci.yml` running:
+    - `python -m pytest -q`
+    - `python -m bandit -q -r scripts src`
+    - `python -m compileall scripts src tests`
+  - Added `requirements-ci.txt` for portable CI dependency installation.
+
+### Changed
+- **Runtime Model Resolution**:
+  - `scripts/server.py` and `scripts/generate.py` now auto-resolve the latest versioned model from `saved_models/`.
+- **Training Metadata**:
+  - `scripts/train.py` now writes versioned metadata and updates the latest-pointer file each run.
+- **Tests and Docs**:
+  - Extended `tests/test_server.py` and `tests/test_train.py` for new API and versioning behavior.
+  - Updated `README.md` and `DOC.md` with new endpoint, model layout, and CI commands.
+
+### Verified
+- `python3 -m pytest -q` -> `19 passed`
+- `python3 -m bandit -q -r scripts src` -> clean run
+- `python3 -m compileall scripts src tests` -> success
+
 ## [0.0.5] - P1 Evaluation Metrics and Model Traceability
 ### Added
 - **Validation Metrics Pipeline**:

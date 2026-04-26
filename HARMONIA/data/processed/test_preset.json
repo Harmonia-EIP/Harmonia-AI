@@ -1,0 +1,19 @@
+{
+    "metadata": {
+        "name": "Soft Piano",
+        "generated_by": "Harmonia-AI",
+        "model_version": "legacy",
+        "model_hash": "unknown"
+    },
+    "parameters": {
+        "frequency": 0.5162491798400879,
+        "attack": 0.13870051503181458,
+        "cutoff": 0.41965851187705994,
+        "decay": 0.4187307059764862,
+        "volume": 0.5544484257698059,
+        "sustain": 0.5961293578147888,
+        "resonance": 0.11871189624071121,
+        "release": 0.6649267673492432,
+        "waveform": 0.23983749747276306
+    }
+}

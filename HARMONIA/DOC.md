@@ -26,7 +26,7 @@ Predicted parameter keys:
 - `scripts/prepare_dataset.py`: parse raw dumps and build `data/processed/presets.json`
 - `scripts/train.py`: train, save model, produce benchmark history and validation metrics report
 - `scripts/generate.py`: CLI inference
-- `scripts/server.py`: Flask API (`POST /generate`, `GET /health`)
+- `scripts/server.py`: Flask API (`POST /generate`, `GET /health`, `GET /metrics/latest`)
 - `scripts/auto_trainer.py`: filesystem watcher for continuous retraining
 - `scripts/benchmark_viewer.py`: print training history evolution
 
@@ -77,8 +77,9 @@ python3 HARMONIA/scripts/train.py
 ```
 
 Outputs:
-- `HARMONIA/saved_models/my_plugin_ai.pth`
-- `HARMONIA/saved_models/my_plugin_ai.meta.json`
+- `HARMONIA/saved_models/<model_version>/my_plugin_ai.pth`
+- `HARMONIA/saved_models/<model_version>/my_plugin_ai.meta.json`
+- `HARMONIA/saved_models/latest_model.json`
 - `HARMONIA/benchmarks/history.json`
 - `HARMONIA/benchmarks/reports/eval_*.json`
 
@@ -101,6 +102,7 @@ Endpoint:
 ```text
 POST http://127.0.0.1:5000/generate
 GET  http://127.0.0.1:5000/health
+GET  http://127.0.0.1:5000/metrics/latest
 ```
 
 Request:
@@ -115,11 +117,17 @@ Validation on `POST /generate`:
 - body must be valid JSON
 - `prompt` must be a non-empty string
 - max prompt length: `512`
+- prompts exceeding model token context (default `32` tokens) are rejected
 - if model weights are unavailable/invalid, API returns `503`
 
 API traceability:
 - `GET /health` returns `model_version` and `model_hash`
 - `POST /generate` includes `model_version` and `model_hash` in `metadata`
+- `GET /metrics/latest` returns the latest benchmark and the latest evaluation report payload
+
+Model compatibility:
+- Inference reads `param_keys`, `plugin_param_count`, and `tokenizer_max_length` from model metadata when available.
+- Model loading enforces `torch.load(..., weights_only=True)` for safer deserialization.
 
 Response:
 
@@ -160,10 +168,10 @@ python3 HARMONIA/scripts/benchmark_viewer.py
 ## 5. Known limitations
 
 - Data scarcity: model quality is currently dataset-limited.
-- Fixed output space: only 9 parameters are supported.
+- Default training profile is still focused on the 9-parameter synth mapping.
 - No external model registry service yet (current metadata storage is local-file based).
 - Flask development server is suitable for local integration, not production.
-- Dependency manifest (`requirement.txt`) is broad and includes non-portable entries.
+- Production serving still requires external process management (e.g. gunicorn/systemd).
 
 ## 6. Next technical challenges
 
@@ -179,13 +187,13 @@ python3 HARMONIA/scripts/benchmark_viewer.py
 - Mid term: improve data quality + metrics + model registry.
 - Long term: multi-plugin support, latency optimization, deployment-ready API.
 
-## 8. Dev validation checks
+## 8. Commandes de test (local + CI)
 
 Install dev tooling:
 
 ```bash
 cd HARMONIA
-python3 -m pip install -r requirements.txt -r requirements-dev.txt
+python3 -m pip install -r requirement.txt -r requirements-dev.txt
 ```
 
 Run checks:
@@ -196,4 +204,14 @@ python3 -m pytest -q
 python3 -m bandit -q -r scripts src
 python3 -m compileall scripts src tests
 ```
+
+Run only API tests (fast path):
+
+```bash
+cd HARMONIA
+python3 -m pytest -q tests/test_server.py
+```
+
+CI note:
+- The same three commands are executed in GitHub Actions on push/PR via `.github/workflows/harmonia-ci.yml`.
 
