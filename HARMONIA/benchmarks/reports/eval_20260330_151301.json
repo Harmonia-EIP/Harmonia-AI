@@ -1,0 +1,10 @@
+{
+    "timestamp": "2026-03-30 15:13:01",
+    "model_version": "train-20260330-151301-seed42",
+    "model_hash": "5fe6232e00c7be85bc6f5595ee94c218b493cf6fc0cd5ad109360e7bddc69317",
+    "seed": 42,
+    "val_split": 0.2,
+    "train_size": 1,
+    "val_size": 0,
+    "metrics": null
+}

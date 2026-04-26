@@ -187,7 +187,7 @@ python3 HARMONIA/scripts/benchmark_viewer.py
 - Mid term: improve data quality + metrics + model registry.
 - Long term: multi-plugin support, latency optimization, deployment-ready API.
 
-## 8. Dev validation checks
+## 8. Commandes de test (local + CI)
 
 Install dev tooling:
 
@@ -203,6 +203,13 @@ cd HARMONIA
 python3 -m pytest -q
 python3 -m bandit -q -r scripts src
 python3 -m compileall scripts src tests
+```
+
+Run only API tests (fast path):
+
+```bash
+cd HARMONIA
+python3 -m pytest -q tests/test_server.py
 ```
 
 CI note:

@@ -123,9 +123,9 @@ You can force a model version name with `HARMONIA_MODEL_VERSION`; otherwise trai
 
 Trained metadata now carries `param_keys`, `plugin_param_count`, and `tokenizer_max_length`, and the API/CLI read these dynamically at inference time.
 
-## Dev checks (tests + security + compile)
+## Commandes de test (local + CI)
 
-Install dev dependencies:
+Install dependencies (runtime + dev):
 
 ```bash
 cd HARMONIA
@@ -142,7 +142,14 @@ python3 -m bandit -q -r scripts src
 python3 -m compileall scripts src tests
 ```
 
-These local commands are the same commands executed by GitHub Actions CI on each push/PR (`.github/workflows/harmonia-ci.yml`).
+Quick run one test file:
+
+```bash
+cd HARMONIA
+python3 -m pytest -q tests/test_server.py
+```
+
+These commands are exactly the same as the GitHub Actions CI checks on each push/PR (`.github/workflows/harmonia-ci.yml`).
 
 ## Auto-training (optional)
 
