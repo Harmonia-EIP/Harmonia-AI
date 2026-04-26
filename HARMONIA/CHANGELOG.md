@@ -2,6 +2,16 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.12] - CI Python Compatibility Fix
+### Changed
+- **GitHub Actions runtime**:
+  - Updated `.github/workflows/harmonia-ci.yml` from Python `3.10` to `3.12`.
+  - This fixes CI installation failure with `numpy==2.3.4` (which requires Python `>=3.11`).
+
+### Verified
+- CI dependency set remains unchanged (`HARMONIA/requirements-ci.txt`, `HARMONIA/requirements-dev.txt`).
+- Local quality checks still pass (`pytest`, `bandit`, `compileall`).
+
 ## [0.0.11] - Training Profiles and Practical AI Test Commands
 ### Added
 - **Makefile execution profiles**:
