@@ -24,15 +24,37 @@ from src.dataset import PresetDataset
 from src.artifact_registry import build_versioned_paths, write_latest_pointer
 
 # --- CONFIG ---
-PLUGIN_PARAM_COUNT = 9
-PARAM_KEYS = [
-    "frequency", "attack", "cutoff", "decay",
-    "volume", "sustain", "resonance", "release",
-    "waveform"
-]
-EPOCHS = 100
-LR = 1e-4
-BATCH_SIZE = 8
+def _env_int(name, default):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+        if value <= 0:
+            raise ValueError
+        return value
+    except ValueError:
+        print(f"Warning: {name} must be a positive integer; using default {default}.", file=sys.stderr)
+        return default
+
+
+def _env_float(name, default):
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+        if value <= 0:
+            raise ValueError
+        return value
+    except ValueError:
+        print(f"Warning: {name} must be a positive float; using default {default}.", file=sys.stderr)
+        return default
+
+
+EPOCHS = _env_int("HARMONIA_EPOCHS", 100)
+LR = _env_float("HARMONIA_LR", 1e-4)
+BATCH_SIZE = _env_int("HARMONIA_BATCH_SIZE", 8)
 try:
     SEED = int(os.environ.get("HARMONIA_SEED", "42"))
 except ValueError:
@@ -47,7 +69,7 @@ TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 TOKENIZER_MAX_LENGTH = 32
 MODEL_VERSION_OVERRIDE = os.environ.get("HARMONIA_MODEL_VERSION", "").strip()
-DATASET_PATH = BASE_DIR / "data" / "processed" / "presets.json"
+DATASET_PATH_OVERRIDE = os.environ.get("HARMONIA_DATASET_PATH", "").strip()
 BENCHMARK_FILE = BASE_DIR / "benchmarks" / "history.json"
 EVAL_REPORT_DIR = BASE_DIR / "benchmarks" / "reports"
 SAVED_MODELS_DIR = BASE_DIR / "saved_models"
@@ -134,13 +156,16 @@ def compute_split_sizes(dataset_size, val_ratio):
     return dataset_size - val_size, val_size
 
 
-def evaluate_model(model, loader):
+def evaluate_model(model, loader, param_keys):
     if loader is None:
         return None
 
+    if not param_keys:
+        return None
+
     model.eval()
-    mse_sum = torch.zeros(len(PARAM_KEYS), dtype=torch.float32)
-    mae_sum = torch.zeros(len(PARAM_KEYS), dtype=torch.float32)
+    mse_sum = torch.zeros(len(param_keys), dtype=torch.float32)
+    mae_sum = torch.zeros(len(param_keys), dtype=torch.float32)
     sample_count = 0
 
     with torch.no_grad():
@@ -161,8 +186,8 @@ def evaluate_model(model, loader):
     return {
         "mse": round(float(sum(per_param_mse) / len(per_param_mse)), 6),
         "mae": round(float(sum(per_param_mae) / len(per_param_mae)), 6),
-        "per_param_mse": {k: round(float(v), 6) for k, v in zip(PARAM_KEYS, per_param_mse)},
-        "per_param_mae": {k: round(float(v), 6) for k, v in zip(PARAM_KEYS, per_param_mae)},
+        "per_param_mse": {k: round(float(v), 6) for k, v in zip(param_keys, per_param_mse)},
+        "per_param_mae": {k: round(float(v), 6) for k, v in zip(param_keys, per_param_mae)},
         "sample_count": sample_count,
     }
 
@@ -205,6 +230,17 @@ def write_model_metadata(path, payload):
         json.dump(payload, f, indent=4)
     return path
 
+
+def resolve_dataset_path():
+    if DATASET_PATH_OVERRIDE:
+        return Path(DATASET_PATH_OVERRIDE)
+
+    npy_candidate = BASE_DIR / "data" / "processed" / "presets.npy"
+    if npy_candidate.exists():
+        return npy_candidate
+
+    return BASE_DIR / "data" / "processed" / "presets.json"
+
 # --- TRAINING LOOP ---
 def train():
     # Start Timer
@@ -213,16 +249,28 @@ def train():
     print(f"Using deterministic seed: {SEED}")
 
     tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, revision=TOKENIZER_MODEL_REVISION)  # nosec B615
+    dataset_path = resolve_dataset_path()
 
     # Check if dataset exists
-    if not DATASET_PATH.exists():
-        print(f"Error: {DATASET_PATH} not found. Run prepare_dataset.py first.")
+    if not dataset_path.exists():
+        print(f"Error: {dataset_path} not found. Run prepare_dataset.py first.")
         return
 
-    dataset = PresetDataset(DATASET_PATH, tokenizer)
+    dataset = PresetDataset(
+        dataset_path,
+        tokenizer,
+        tokenizer_max_length=TOKENIZER_MAX_LENGTH,
+        normalize_categorical=True,
+    )
     if len(dataset) == 0:
-        print(f"Error: {DATASET_PATH} is empty. Add presets before training.")
+        print(f"Error: {dataset_path} is empty. Add presets before training.")
         return
+
+    param_keys = list(dataset.param_keys)
+    if not param_keys:
+        print(f"Error: no parameter keys detected in {dataset_path}.")
+        return
+    plugin_param_count = len(param_keys)
 
     train_size, val_size = compute_split_sizes(len(dataset), VAL_SPLIT)
     split_generator = torch.Generator().manual_seed(SEED)
@@ -235,11 +283,14 @@ def train():
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, generator=generator)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False) if val_dataset is not None else None
 
-    model = TextToParams(num_plugin_parameters=PLUGIN_PARAM_COUNT)
+    model = TextToParams(num_plugin_parameters=plugin_param_count)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     loss_fn = torch.nn.MSELoss()
 
-    print(f"Starting training on {len(dataset)} presets (train={train_size}, val={val_size})...")
+    print(
+        f"Starting training on {len(dataset)} presets "
+        f"(train={train_size}, val={val_size}, params={plugin_param_count})..."
+    )
 
     loss_history = []
 
@@ -273,7 +324,7 @@ def train():
 
     model_hash = compute_file_sha256(versioned_paths["model_path"])
 
-    eval_metrics = evaluate_model(model, val_loader)
+    eval_metrics = evaluate_model(model, val_loader, param_keys)
     eval_report_payload = {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "model_version": model_version,
@@ -291,8 +342,8 @@ def train():
         "model_dir": str(versioned_paths["model_dir"]),
         "model_version": model_version,
         "model_hash": model_hash,
-        "plugin_param_count": PLUGIN_PARAM_COUNT,
-        "param_keys": PARAM_KEYS,
+        "plugin_param_count": plugin_param_count,
+        "param_keys": param_keys,
         "trained_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "seed": SEED,
         "epochs": EPOCHS,
@@ -305,6 +356,8 @@ def train():
         "tokenizer_model_id": TOKENIZER_MODEL_ID,
         "tokenizer_model_revision": TOKENIZER_MODEL_REVISION,
         "tokenizer_max_length": TOKENIZER_MAX_LENGTH,
+        "dataset_path": str(dataset_path),
+        "normalize_categorical": True,
         "evaluation_report_path": str(eval_report_path),
     }
     metadata_path = write_model_metadata(versioned_paths["metadata_path"], metadata_payload)

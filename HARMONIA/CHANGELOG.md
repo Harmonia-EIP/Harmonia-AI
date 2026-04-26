@@ -2,6 +2,85 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.11] - Training Profiles and Practical AI Test Commands
+### Added
+- **Makefile execution profiles**:
+  - Added `train-fast` (1 epoch smoke), `train-good` (20 epochs baseline), `generate-cli`, and `pipeline-local`.
+  - Added `PROMPT` and `OUTPUT` variables for quick CLI inference tests.
+- **Metrics utility script**:
+  - Added `scripts/metrics_summary.py` to print latest local metrics and training-time estimates from benchmark history.
+- **Operational testing flow**:
+  - `pipeline-local` now provides a single local sequence: checks -> fast train -> local metrics -> generation test.
+
+### Changed
+- **Documentation UX**:
+  - Updated `HARMONIA/README.md` with explicit commands to:
+    - train using `cleaned_dataset.npy`,
+    - test AI inference in CLI and API mode,
+    - read metrics at each step.
+  - Added practical training duration estimates based on latest observed benchmark run.
+- **Makefile reliability**:
+  - `metrics-local` and `estimate-train-time` now call `scripts/metrics_summary.py` (stable shell behavior).
+
+### Verified
+- `make check` -> success (`25 passed`, bandit warnings only on existing `# nosec B615`, compileall ok)
+- `HARMONIA_EPOCHS=1 HARMONIA_BATCH_SIZE=32 make train-cleaned` -> success on `data/cleaned_dataset.npy`
+- `make metrics-local` and `make estimate-train-time` -> success
+
+## [0.0.10] - Makefile Workflow and End-to-End Metrics
+### Added
+- **Operational Makefile**:
+  - Added `HARMONIA/Makefile` with practical targets:
+    - `setup`, `check`, `test`, `security`, `compile`
+    - `train`, `train-cleaned`, `train-and-report`
+    - `serve`, `metrics-local`, `metrics-api`, `estimate-train-time`
+- **Metrics Everywhere Workflow**:
+  - Added local metrics helpers that print latest benchmark and evaluation report after training.
+  - Added training time estimation from benchmark history (`estimate-train-time`).
+
+### Changed
+- **Training Configurability** (`scripts/train.py`):
+  - `HARMONIA_EPOCHS`, `HARMONIA_BATCH_SIZE`, and `HARMONIA_LR` now override defaults safely.
+  - This allows fast debug runs and longer production-quality runs without code edits.
+- **Documentation**:
+  - Updated `HARMONIA/README.md` and `HARMONIA/DOC.md` with Makefile usage, cleaned dataset training commands, and metrics commands.
+
+### Verified
+- `python -m pytest -q` -> `25 passed`
+- `python -m bandit -q -r scripts src` -> success (warnings only on existing `# nosec B615` markers)
+- `python -m compileall scripts src tests` -> success
+
+## [0.0.9] - Dynamic NPY Training Dataset and Parameter Scaling
+### Added
+- **Dynamic Dataset Loader**:
+  - `src/dataset.py` now supports `.npy` datasets via `numpy.load(..., allow_pickle=True)`.
+  - Added flattening for `parameters.continuous`, `parameters.binary`, and `parameters.categorical` into one 1D tensor.
+  - Added deterministic key extraction (`param_keys`) to keep output order stable across training and inference.
+- **Categorical Normalization**:
+  - Added optional per-key categorical normalization (divide by dataset max) to keep targets in `[0, 1]`.
+- **Test Coverage**:
+  - Added `tests/test_dataset.py` to validate `.npy` loading, key ordering, flattening, and categorical normalization.
+  - Extended `tests/test_train.py` for dynamic dataset path resolution and dynamic metric key mapping.
+
+### Changed
+- **Dynamic Output Dimension**:
+  - `scripts/train.py` now derives `plugin_param_count` from `len(dataset.param_keys)` instead of fixed constants.
+  - `src/model.py` now validates output dimension and derives encoder hidden size from the loaded transformer config.
+- **Training Dataset Selection**:
+  - Added `HARMONIA_DATASET_PATH` environment override.
+  - Training now auto-prefers `data/processed/presets.npy` when available, then falls back to `presets.json`.
+- **Dependency Compatibility Fixes**:
+  - Upgraded `torch` pin from `2.8.0` to `2.11.0` in `requirement.txt` and `requirements-ci.txt`.
+  - Upgraded `bandit` pin from `1.8.6` to `1.9.4` in `requirements-dev.txt` to avoid Python 3.14 AST failures.
+  - Upgraded `numpy` pin from `2.0.2` to `2.3.4` in `requirements-ci.txt` and added `numpy==2.3.4` to `requirement.txt`.
+- **Documentation**:
+  - Updated `HARMONIA/README.md` and `HARMONIA/DOC.md` with `.npy` dataset workflow and dynamic parameter behavior.
+
+### Verified
+- `python -m pytest -q` -> `25 passed`
+- `python -m compileall scripts src tests` -> success
+- `python -m bandit -q -r scripts src` -> success (warnings only on existing `# nosec B615` markers)
+
 ## [0.0.8] - CI Workflow Restoration and Test Commands Clarity
 ### Added
 - **Missing CI Workflow**:

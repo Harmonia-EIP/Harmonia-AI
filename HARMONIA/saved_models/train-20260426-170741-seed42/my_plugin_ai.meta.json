@@ -1,7 +1,7 @@
 {
-    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260426-171134-seed42/my_plugin_ai.pth",
-    "model_dir": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260426-171134-seed42",
-    "model_version": "train-20260426-171134-seed42",
+    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260426-170741-seed42/my_plugin_ai.pth",
+    "model_dir": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260426-170741-seed42",
+    "model_version": "train-20260426-170741-seed42",
     "model_hash": "9fdcf2a989199d558c33911b8e240d6216ea13f1add64544c02bb0c56ad7bced",
     "plugin_param_count": 243,
     "param_keys": [
@@ -249,7 +249,7 @@
         "yModMisc2B Dest1",
         "yModMisc2B Dest2"
     ],
-    "trained_at": "2026-04-26 17:11:36",
+    "trained_at": "2026-04-26 17:07:43",
     "seed": 42,
     "epochs": 1,
     "learning_rate": 0.0001,
@@ -263,5 +263,5 @@
     "tokenizer_max_length": 32,
     "dataset_path": "data/cleaned_dataset.npy",
     "normalize_categorical": true,
-    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260426_171136.json"
+    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260426_170743.json"
 }

@@ -9,15 +9,19 @@ MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 class TextToParams(nn.Module):
     def __init__(self, num_plugin_parameters=9):
         super().__init__()
+        if int(num_plugin_parameters) <= 0:
+            raise ValueError("num_plugin_parameters must be > 0")
+
         # 1. text encodeor with BERT model
         self.bert = AutoModel.from_pretrained(MODEL_ID, revision=MODEL_REVISION)  # nosec B615
+        hidden_size = int(getattr(self.bert.config, "hidden_size", 128))
 
         # 2. maping
         self.head = nn.Sequential(
-            nn.Linear(128, 256),
+            nn.Linear(hidden_size, 256),
             nn.ReLU(),
             nn.Dropout(0.1),
-            nn.Linear(256, num_plugin_parameters),
+            nn.Linear(256, int(num_plugin_parameters)),
             nn.Sigmoid() # Output 0.0 - 1.0
         )
 

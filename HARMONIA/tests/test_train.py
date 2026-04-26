@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import torch
 
@@ -69,5 +70,36 @@ def test_compute_file_sha256_has_expected_length(tmp_path):
 
     digest = train_module.compute_file_sha256(file_path)
     assert len(digest) == 64
+
+
+def test_resolve_dataset_path_prefers_env_override(monkeypatch):
+    custom = "/tmp/custom_presets.npy"
+    monkeypatch.setattr(train_module, "DATASET_PATH_OVERRIDE", custom)
+
+    assert train_module.resolve_dataset_path() == Path(custom)
+
+
+def test_evaluate_model_uses_dynamic_param_keys():
+    class DummyModel:
+        def eval(self):
+            return self
+
+        def __call__(self, input_ids, attention_mask):
+            _ = (input_ids, attention_mask)
+            return torch.tensor([[0.2, 0.8]], dtype=torch.float32)
+
+    loader = [
+        {
+            "input_ids": torch.tensor([[1, 2]], dtype=torch.long),
+            "attention_mask": torch.tensor([[1, 1]], dtype=torch.long),
+            "labels": torch.tensor([[0.0, 1.0]], dtype=torch.float32),
+        }
+    ]
+
+    metrics = train_module.evaluate_model(DummyModel(), loader, ["cutoff", "attack"])
+
+    assert metrics is not None
+    assert metrics["sample_count"] == 1
+    assert set(metrics["per_param_mae"].keys()) == {"cutoff", "attack"}
 
 
