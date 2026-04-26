@@ -2,6 +2,21 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.8] - CI Workflow Restoration and Test Commands Clarity
+### Added
+- **Missing CI Workflow**:
+  - Added `.github/workflows/harmonia-ci.yml` at repository root.
+  - Workflow runs on push/pull_request and executes the 3 project checks from `HARMONIA/`:
+    - `python -m pytest -q`
+    - `python -m bandit -q -r scripts src`
+    - `python -m compileall scripts src tests`
+
+### Changed
+- **Documentation Clarity**:
+  - Added an explicit `Commandes de test (local + CI)` section in `HARMONIA/README.md`.
+  - Added the same `Commandes de test (local + CI)` section in `HARMONIA/DOC.md`.
+  - Documented a quick targeted run command (`tests/test_server.py`) for fast local validation.
+
 ## [0.0.7] - Security Hardening and Dependency Cleanup
 ### Added
 - **Dynamic Inference Configuration**:
