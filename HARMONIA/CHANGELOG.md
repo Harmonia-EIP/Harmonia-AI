@@ -7,6 +7,11 @@ All notable changes to the **Harmonia** project will be documented in this file.
 - **GitHub Actions runtime**:
   - Updated `.github/workflows/harmonia-ci.yml` from Python `3.10` to `3.12`.
   - This fixes CI installation failure with `numpy==2.3.4` (which requires Python `>=3.11`).
+- **Dependency compatibility guard**:
+  - Added environment markers in `HARMONIA/requirements-ci.txt` and `HARMONIA/requirement.txt`:
+    - `numpy==2.3.4` for Python `>=3.11`
+    - `numpy==2.2.6` for Python `<3.11`
+  - This keeps installs resilient if a runner/local environment uses Python `3.10`.
 
 ### Verified
 - CI dependency set remains unchanged (`HARMONIA/requirements-ci.txt`, `HARMONIA/requirements-dev.txt`).
