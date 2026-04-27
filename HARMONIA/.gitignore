@@ -5,6 +5,7 @@ doxygen_sqlite3.db
 
 # --- Bencharks ---
 benchmarks/history.json
+benchmarks/reports/
 
 # --- IDE & System ---
 .idea/
@@ -24,6 +25,12 @@ data/raw/*.txt
 venv/
 env/
 .env
+
+# --- Metrics dashboard local state / secrets ---
+metrics_dashboard/latest_metrics.json
+metrics_dashboard/.env.local
+metrics_dashboard/*.token
+metrics_dashboard/*.local.json
 
 # --- Doxygen ---
 docs/latex/

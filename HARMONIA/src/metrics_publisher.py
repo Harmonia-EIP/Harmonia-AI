@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import http.client
 from pathlib import Path
-from urllib import error, request
+from urllib.parse import urlparse
 
 DEFAULT_METRICS_URL = os.environ.get("HARMONIA_METRICS_URL", "https://harmonia.mcoet.com/receiver.php")
 DEFAULT_TOKEN = os.environ.get("METRICS_TOKEN", os.environ.get("HARMONIA_METRICS_TOKEN", ""))
+ALLOWED_METRICS_HOSTS = {"harmonia.mcoet.com", "www.harmonia.mcoet.com", "127.0.0.1", "localhost"}
 
 
 def _load_local_token(base_dir: Path) -> str:
@@ -40,10 +42,28 @@ def _guess_content_type(path: Path) -> str:
     return "application/octet-stream"
 
 
+def _validate_metrics_url(url: str) -> tuple[bool, str]:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"https", "http"}:
+        return False, f"unsupported URL scheme: {parsed.scheme or 'empty'}"
+
+    host = (parsed.hostname or "").lower()
+    if host not in ALLOWED_METRICS_HOSTS:
+        return False, f"host not allowed: {host or 'empty'}"
+
+    if not parsed.path:
+        return False, "URL path is required"
+    return True, ""
+
+
 def push_metrics_report(report_path: Path, url: str | None = None, token: str | None = None, base_dir: Path | None = None) -> dict:
     base_dir = base_dir or Path.cwd()
     url = (url or DEFAULT_METRICS_URL).strip()
     token = (token or resolve_token(base_dir)).strip()
+
+    url_is_valid, reason = _validate_metrics_url(url)
+    if not url_is_valid:
+        return {"ok": False, "skipped": True, "reason": reason, "url": url}
 
     if not report_path.exists():
         return {"ok": False, "skipped": True, "reason": f"report not found: {report_path}"}
@@ -51,24 +71,31 @@ def push_metrics_report(report_path: Path, url: str | None = None, token: str | 
         return {"ok": False, "skipped": True, "reason": "missing token"}
 
     payload = report_path.read_bytes()
+    parsed = urlparse(url)
+    endpoint = parsed.path or "/"
+    if parsed.query:
+        endpoint = f"{endpoint}?{parsed.query}"
+
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": _guess_content_type(report_path),
+        "Content-Length": str(len(payload)),
     }
-    req = request.Request(url, data=payload, headers=headers, method="POST")
 
     try:
-        with request.urlopen(req, timeout=30) as response:
-            body = response.read().decode("utf-8", errors="replace")
-            return {
-                "ok": 200 <= getattr(response, "status", 200) < 300,
-                "status": getattr(response, "status", 200),
-                "response": body,
-                "url": url,
-            }
-    except error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
-        return {"ok": False, "status": exc.code, "response": body, "url": url}
+        connection_cls = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
+        conn = connection_cls(parsed.netloc, timeout=30)
+        conn.request("POST", endpoint, body=payload, headers=headers)
+        response = conn.getresponse()
+        body = response.read().decode("utf-8", errors="replace")
+        status = int(response.status)
+        conn.close()
+        return {
+            "ok": 200 <= status < 300,
+            "status": status,
+            "response": body,
+            "url": url,
+        }
     except Exception as exc:  # pragma: no cover - network failures
         return {"ok": False, "error": str(exc), "url": url}
 

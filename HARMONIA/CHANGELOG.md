@@ -2,6 +2,17 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.16] - Bandit B310 Fix on Metrics Publisher
+### Changed
+- **Security hardening** (`src/metrics_publisher.py`):
+  - Replaced `urllib.request.urlopen` with `http.client` to remove Bandit `B310` finding.
+  - Added strict URL validation before push (scheme + host allowlist).
+  - Restricted metrics push hosts to trusted targets (`harmonia.mcoet.com`, `localhost`, `127.0.0.1`).
+
+### Verified
+- `python -m bandit -q -r scripts src` -> no `B310` issue
+- `python -m pytest -q` -> `25 passed`
+
 ## [0.0.15] - Secure Token Handling and Push-Time Dashboard Refresh
 ### Changed
 - **Secret hygiene**:
