@@ -237,6 +237,16 @@ cd HARMONIA
 make metrics-api
 ```
 
+Automatic metrics push is enabled after training and after `make test` when a report exists.
+It uses `HARMONIA/metrics_dashboard/.env.local` or the `METRICS_TOKEN` environment variable.
+CI also refreshes the dashboard on each git push (if GitHub secret `METRICS_PUSH_TOKEN` is set).
+
+Files ignored by git so a `git add *` won't stage secrets or generated metrics:
+
+- `HARMONIA/metrics_dashboard/.env.local`
+- `HARMONIA/metrics_dashboard/latest_metrics.json`
+- `HARMONIA/benchmarks/reports/`
+
 Test the HTTP API generation endpoint:
 
 ```bash

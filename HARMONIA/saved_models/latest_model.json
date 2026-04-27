@@ -1,7 +1,7 @@
 {
-    "model_version": "train-20260426-171134-seed42",
-    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260426-171134-seed42/my_plugin_ai.pth",
-    "metadata_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260426-171134-seed42/my_plugin_ai.meta.json",
-    "model_hash": "9fdcf2a989199d558c33911b8e240d6216ea13f1add64544c02bb0c56ad7bced",
-    "updated_at": "2026-04-26 17:11:36"
+    "model_version": "train-20260427-164018-seed42",
+    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260427-164018-seed42/my_plugin_ai.pth",
+    "metadata_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260427-164018-seed42/my_plugin_ai.meta.json",
+    "model_hash": "cdf0d0793c08924bdf555229674e84b43975a9076174fa7d0a64f9fb3360a04d",
+    "updated_at": "2026-04-27 16:40:18"
 }

@@ -2,6 +2,66 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.15] - Secure Token Handling and Push-Time Dashboard Refresh
+### Changed
+- **Secret hygiene**:
+  - Removed any hardcoded token fallback from `metrics_dashboard/push_metrics.sh`.
+  - Hardened `metrics_dashboard/receiver.php` to reject requests when `METRICS_PUSH_TOKEN` is not configured.
+- **Dashboard richness**:
+  - Upgraded `metrics_dashboard/index.html` to display many more metrics:
+    - dynamic KPI cards,
+    - complete numeric metrics table,
+    - history/per-parameter chart selection,
+    - resilient fallback behavior.
+- **Push-time refresh**:
+  - Updated `.github/workflows/harmonia-ci.yml` to publish a CI metrics payload to `https://harmonia.mcoet.com/receiver.php` on every push (when `METRICS_PUSH_TOKEN` secret is present).
+
+### Security
+- Removed local plaintext token file and kept only `.gitignore`-protected secret paths (`metrics_dashboard/.env.local`, generated metrics files).
+
+## [0.0.14] - Automatic Metrics Push and Safer Git Add
+### Added
+- **Automatic metrics publisher**:
+  - Added `src/metrics_publisher.py` to send evaluation reports directly to `https://harmonia.mcoet.com/receiver.php`.
+  - Added `scripts/push_latest_metrics.py` to push the latest report from benchmark history.
+- **Training hook**:
+  - `scripts/train.py` now pushes `eval_*.json` automatically after each successful training run.
+
+### Changed
+- **Makefile behavior**:
+  - `make test` now runs tests and then pushes latest metrics (non-blocking when no report/token is available).
+- **Git safety**:
+  - Updated `HARMONIA/.gitignore` to ignore local dashboard secrets and generated metrics files:
+    - `metrics_dashboard/.env.local`
+    - `metrics_dashboard/latest_metrics.json`
+    - `benchmarks/reports/`
+
+### Verified
+- `make test` -> `25 passed` + metrics pushed (`HTTP 200`)
+- `HARMONIA_EPOCHS=1 make train DATASET=data/processed/presets.json` -> success + auto-push (`HTTP 200`)
+
+## [0.0.13] - Static Web Metrics Dashboard (Apache/PHP)
+### Added
+- **Static dashboard package** (`HARMONIA/metrics_dashboard/`):
+  - `index.html` with TailwindCSS + Chart.js for modern metric visualization.
+  - Dynamic cards for key KPIs (`Loss`, `Accuracy`, `MSE`, `MAE`).
+  - Automatic chart rendering from `per_param_mse` (bar) or `loss_history` (line).
+  - Built-in fallback to simulated JSON when `latest_metrics.json` is missing.
+- **Secure receiver endpoint**:
+  - Added `receiver.php` to accept `POST` metric payloads and save `latest_metrics.json`.
+  - Supports token auth via `Authorization: Bearer ...` or `POST token`.
+  - Supports upload modes: multipart file (`metrics_file`), `metrics_json`, or raw JSON body.
+- **Push automation scripts**:
+  - Added `push_metrics.sh` (curl-based) and `push_metrics.py` (requests-based).
+  - Designed for direct integration at the end of PyTorch training pipelines.
+- **Usage documentation**:
+  - Added `HARMONIA/metrics_dashboard/README.md` with deployment, local test, and production push examples.
+
+### Verified
+- `bash -n HARMONIA/metrics_dashboard/push_metrics.sh` -> success
+- `python3 -m py_compile HARMONIA/metrics_dashboard/push_metrics.py` -> success
+- PHP syntax check not run locally in this environment (`php` executable unavailable).
+
 ## [0.0.12] - CI Python Compatibility Fix
 ### Changed
 - **GitHub Actions runtime**:

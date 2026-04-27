@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Harmonia Metrics Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <main class="max-w-6xl mx-auto px-4 py-8">
+    <header class="mb-8">
+      <h1 class="text-3xl md:text-4xl font-bold">Harmonia - Metrics Dashboard</h1>
+      <p id="sourceLabel" class="text-slate-400 mt-2">Chargement des métriques...</p>
+    </header>
+
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" id="cards"></section>
+
+    <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg mb-8">
+      <h2 class="text-xl font-semibold mb-4">Toutes les métriques numériques</h2>
+      <div class="overflow-auto max-h-[320px]">
+        <table class="w-full text-sm" id="metricsTable">
+          <thead class="text-slate-300 border-b border-slate-700">
+            <tr>
+              <th class="text-left py-2 pr-4">Nom</th>
+              <th class="text-left py-2">Valeur</th>
+            </tr>
+          </thead>
+          <tbody id="metricsTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg mb-8">
+      <h2 class="text-xl font-semibold mb-4">Visualisation</h2>
+      <div class="h-[420px]">
+        <canvas id="metricsChart"></canvas>
+      </div>
+    </section>
+
+    <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg">
+      <h2 class="text-xl font-semibold mb-4">Résumé brut</h2>
+      <pre id="rawJson" class="text-xs md:text-sm bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-auto max-h-[420px]"></pre>
+    </section>
+  </main>
+
+  <script>
+    const simulatedData = {
+      timestamp: "2026-04-26T16:00:00Z",
+      model_version: "train-20260426-160000-seed42",
+      metrics: {
+        mse: 0.0312,
+        mae: 0.1128,
+        final_loss: 0.0284,
+        accuracy: 0.914,
+        per_param_mse: {
+          "Cutoff": 0.024,
+          "Resonance": 0.041,
+          "Attack": 0.019,
+          "Decay": 0.028,
+          "Release": 0.035,
+          "Volume": 0.021
+        }
+      },
+      loss_history: [0.21, 0.17, 0.14, 0.11, 0.09, 0.07, 0.05, 0.04, 0.03, 0.028]
+    };
+
+    const preferredKeys = [
+      { key: "final_loss", label: "Loss" },
+      { key: "accuracy", label: "Accuracy" },
+      { key: "mse", label: "MSE" },
+      { key: "mae", label: "MAE" }
+    ];
+
+    const cardsEl = document.getElementById("cards");
+    const metricsTableBodyEl = document.getElementById("metricsTableBody");
+    const rawJsonEl = document.getElementById("rawJson");
+    const sourceLabelEl = document.getElementById("sourceLabel");
+    const chartCtx = document.getElementById("metricsChart");
+
+    let chartInstance = null;
+
+    function getMetricContainer(payload) {
+      if (payload && typeof payload.metrics === "object") return payload.metrics;
+      if (payload && payload.latest_evaluation_report && typeof payload.latest_evaluation_report.metrics === "object") {
+        return payload.latest_evaluation_report.metrics;
+      }
+      if (payload && payload.latest_benchmark && typeof payload.latest_benchmark.eval_metrics === "object") {
+        return payload.latest_benchmark.eval_metrics;
+      }
+      return payload || {};
+    }
+
+    function formatValue(value) {
+      if (typeof value !== "number" || Number.isNaN(value)) return "n/a";
+      if (value >= 1) return value.toFixed(3);
+      return value.toFixed(4);
+    }
+
+    function flattenNumericMetrics(obj, prefix = "") {
+      const entries = [];
+      if (!obj || typeof obj !== "object") return entries;
+
+      for (const [key, value] of Object.entries(obj)) {
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+        if (typeof value === "number" && Number.isFinite(value)) {
+          entries.push([fullKey, value]);
+        } else if (value && typeof value === "object" && !Array.isArray(value)) {
+          entries.push(...flattenNumericMetrics(value, fullKey));
+        }
+      }
+      return entries;
+    }
+
+    function renderCards(metrics) {
+      cardsEl.innerHTML = "";
+
+      const flattened = Object.fromEntries(flattenNumericMetrics(metrics));
+      preferredKeys.forEach(({ key, label }) => {
+        const value = (metrics && metrics[key] !== undefined) ? metrics[key] : flattened[key];
+        const card = document.createElement("article");
+        card.className = "bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg";
+        card.innerHTML = `
+          <p class="text-slate-400 text-sm">${label}</p>
+          <p class="text-2xl font-bold mt-1">${formatValue(value)}</p>
+        `;
+        cardsEl.appendChild(card);
+      });
+
+      // Show additional top metrics to make dashboard richer.
+      const extras = flattenNumericMetrics(metrics)
+        .filter(([k]) => !preferredKeys.some((x) => x.key === k))
+        .slice(0, 8);
+      extras.forEach(([key, value]) => {
+        const card = document.createElement("article");
+        card.className = "bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg";
+        card.innerHTML = `
+          <p class="text-slate-400 text-sm truncate" title="${key}">${key}</p>
+          <p class="text-2xl font-bold mt-1">${formatValue(value)}</p>
+        `;
+        cardsEl.appendChild(card);
+      });
+    }
+
+    function renderMetricsTable(metrics) {
+      metricsTableBodyEl.innerHTML = "";
+      const rows = flattenNumericMetrics(metrics).sort((a, b) => a[0].localeCompare(b[0]));
+      if (!rows.length) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = "<td colspan='2' class='py-2 text-slate-400'>Aucune métrique numérique détectée.</td>";
+        metricsTableBodyEl.appendChild(tr);
+        return;
+      }
+
+      rows.forEach(([name, value]) => {
+        const tr = document.createElement("tr");
+        tr.className = "border-b border-slate-800";
+        tr.innerHTML = `
+          <td class="py-2 pr-4 text-slate-300">${name}</td>
+          <td class="py-2 font-mono">${formatValue(value)}</td>
+        `;
+        metricsTableBodyEl.appendChild(tr);
+      });
+    }
+
+    function renderChart(payload, metrics) {
+      const perParam = metrics.per_param_mse && typeof metrics.per_param_mse === "object"
+        ? metrics.per_param_mse
+        : null;
+
+      const history = Array.isArray(payload.loss_history)
+        ? payload.loss_history
+        : (payload.latest_benchmark && Array.isArray(payload.latest_benchmark.loss_history)
+            ? payload.latest_benchmark.loss_history
+            : null);
+
+      let chartData = null;
+      let chartOptions = null;
+      let chartType = "line";
+
+      if (history && history.length > 0) {
+        chartType = "line";
+        chartData = {
+          labels: history.map((_, i) => `Epoch ${i + 1}`),
+          datasets: [{
+            label: "Loss history",
+            data: history,
+            tension: 0.35,
+            fill: true
+          }]
+        };
+        chartOptions = {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "#e2e8f0" } }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#94a3b8" },
+              grid: { color: "rgba(148,163,184,0.15)" }
+            },
+            y: {
+              ticks: { color: "#94a3b8" },
+              grid: { color: "rgba(148,163,184,0.15)" }
+            }
+          }
+        };
+      } else if (perParam && Object.keys(perParam).length > 0) {
+        const topEntries = Object.entries(perParam).slice(0, 20);
+        chartType = "bar";
+        chartData = {
+          labels: topEntries.map(([name]) => name),
+          datasets: [{
+            label: "Per-parameter MSE",
+            data: topEntries.map(([, value]) => value),
+            borderWidth: 1
+          }]
+        };
+        chartOptions = {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: "#e2e8f0" } }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#94a3b8", maxRotation: 45, minRotation: 45 },
+              grid: { color: "rgba(148,163,184,0.15)" }
+            },
+            y: {
+              ticks: { color: "#94a3b8" },
+              grid: { color: "rgba(148,163,184,0.15)" }
+            }
+          }
+        };
+      }
+
+      if (!chartData) {
+        chartCtx.parentElement.innerHTML = "<p class='text-slate-400'>Pas assez de données pour afficher un graphique.</p>";
+        return;
+      }
+
+      if (chartInstance) {
+        chartInstance.destroy();
+      }
+
+      chartInstance = new Chart(chartCtx, {
+        type: chartType,
+        data: chartData,
+        options: chartOptions
+      });
+    }
+
+    async function loadMetrics() {
+      let payload = null;
+      let source = "latest_metrics.json";
+
+      try {
+        const response = await fetch(`latest_metrics.json?ts=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        payload = await response.json();
+      } catch (error) {
+        payload = simulatedData;
+        source = "Données simulées (fichier introuvable)";
+      }
+
+      const metrics = getMetricContainer(payload);
+      sourceLabelEl.textContent = `Source: ${source}`;
+      renderCards(metrics);
+      renderMetricsTable(metrics);
+      renderChart(payload, metrics);
+      rawJsonEl.textContent = JSON.stringify(payload, null, 2);
+    }
+
+    loadMetrics();
+  </script>
+</body>
+</html>
+

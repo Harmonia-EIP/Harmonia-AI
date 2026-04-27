@@ -22,6 +22,7 @@ if str(BASE_DIR) not in sys.path:
 from src.model import TextToParams
 from src.dataset import PresetDataset
 from src.artifact_registry import build_versioned_paths, write_latest_pointer
+from src.metrics_publisher import push_metrics_report
 
 # --- CONFIG ---
 def _env_int(name, default):
@@ -70,6 +71,8 @@ TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 TOKENIZER_MAX_LENGTH = 32
 MODEL_VERSION_OVERRIDE = os.environ.get("HARMONIA_MODEL_VERSION", "").strip()
 DATASET_PATH_OVERRIDE = os.environ.get("HARMONIA_DATASET_PATH", "").strip()
+PUSH_METRICS_ON_TRAIN = os.environ.get("HARMONIA_PUSH_METRICS", "1").strip().lower() not in {"0", "false", "no", "off"}
+METRICS_PUSH_URL = os.environ.get("HARMONIA_METRICS_URL", os.environ.get("METRICS_URL", "https://harmonia.mcoet.com/receiver.php"))
 BENCHMARK_FILE = BASE_DIR / "benchmarks" / "history.json"
 EVAL_REPORT_DIR = BASE_DIR / "benchmarks" / "reports"
 SAVED_MODELS_DIR = BASE_DIR / "saved_models"
@@ -231,6 +234,29 @@ def write_model_metadata(path, payload):
     return path
 
 
+def maybe_push_metrics(eval_report_path):
+    if not PUSH_METRICS_ON_TRAIN:
+        print("Metrics push disabled (HARMONIA_PUSH_METRICS=0).")
+        return
+
+    result = push_metrics_report(
+        Path(eval_report_path),
+        url=METRICS_PUSH_URL,
+        base_dir=BASE_DIR,
+    )
+    if result.get("skipped"):
+        print(f"[METRICS] {result.get('reason', 'skipped')}")
+        return
+
+    status = result.get("status", "n/a")
+    if result.get("ok"):
+        print(f"[METRICS] Pushed evaluation report to {result.get('url')} (HTTP {status})")
+    else:
+        print(f"[METRICS] Push failed to {result.get('url')} (HTTP {status})")
+        if result.get("response"):
+            print(result["response"])
+
+
 def resolve_dataset_path():
     if DATASET_PATH_OVERRIDE:
         return Path(DATASET_PATH_OVERRIDE)
@@ -376,6 +402,7 @@ def train():
     write_model_metadata(LEGACY_METADATA_PATH, metadata_payload)
     print(f"Model metadata saved to {metadata_path}")
     print(f"Evaluation report saved to {eval_report_path}")
+    maybe_push_metrics(eval_report_path)
 
     # Save Benchmark Stats
     final_loss = loss_history[-1] if loss_history else 0.0

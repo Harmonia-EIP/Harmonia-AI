@@ -31,7 +31,7 @@ setup: venv
 	$(PIP) install -r requirements-ci.txt -r requirements-dev.txt
 
 test:
-	$(PYTHON) -m pytest -q
+	$(PYTHON) -m pytest -q && $(PYTHON) scripts/push_latest_metrics.py
 
 security:
 	$(PYTHON) -m bandit -q -r scripts src
