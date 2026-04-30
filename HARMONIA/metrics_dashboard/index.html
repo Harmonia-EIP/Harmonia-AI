@@ -8,269 +8,226 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
-  <main class="max-w-6xl mx-auto px-4 py-8">
-    <header class="mb-8">
+  <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+    <header>
       <h1 class="text-3xl md:text-4xl font-bold">Harmonia - Metrics Dashboard</h1>
       <p id="sourceLabel" class="text-slate-400 mt-2">Chargement des métriques...</p>
     </header>
 
-    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8" id="cards"></section>
-
-    <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg mb-8">
-      <h2 class="text-xl font-semibold mb-4">Toutes les métriques numériques</h2>
-      <div class="overflow-auto max-h-[320px]">
-        <table class="w-full text-sm" id="metricsTable">
-          <thead class="text-slate-300 border-b border-slate-700">
-            <tr>
-              <th class="text-left py-2 pr-4">Nom</th>
-              <th class="text-left py-2">Valeur</th>
-            </tr>
-          </thead>
-          <tbody id="metricsTableBody"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg mb-8">
-      <h2 class="text-xl font-semibold mb-4">Visualisation</h2>
-      <div class="h-[420px]">
-        <canvas id="metricsChart"></canvas>
-      </div>
-    </section>
+    <section id="cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4"></section>
 
     <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg">
-      <h2 class="text-xl font-semibold mb-4">Résumé brut</h2>
-      <pre id="rawJson" class="text-xs md:text-sm bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-auto max-h-[420px]"></pre>
+      <div class="flex items-center justify-between gap-4 mb-4">
+        <h2 class="text-xl font-semibold">Évolution des modèles</h2>
+        <span class="text-sm text-slate-400">Loss et MSE dans le temps</span>
+      </div>
+      <div class="h-[380px]"><canvas id="historyChart"></canvas></div>
+    </section>
+
+    <section class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <article class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg">
+        <div class="flex items-center justify-between gap-4 mb-4">
+          <h2 class="text-xl font-semibold">Paramètres VST</h2>
+          <span class="text-sm text-slate-400">Radar chart</span>
+        </div>
+        <div class="h-[420px]"><canvas id="radarChart"></canvas></div>
+      </article>
+
+      <article class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg">
+        <h2 class="text-xl font-semibold mb-4">Résumé brut</h2>
+        <pre id="rawJson" class="text-xs md:text-sm bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-auto max-h-[420px]"></pre>
+      </article>
     </section>
   </main>
 
   <script>
-    const simulatedData = {
-      timestamp: "2026-04-26T16:00:00Z",
-      model_version: "train-20260426-160000-seed42",
+    const fallbackLatest = {
+      timestamp: "2026-04-30T12:00:00Z",
+      model_version: "model_20260430_1200",
+      model_hash: "demo-hash",
       metrics: {
+        loss: 0.0284,
         mse: 0.0312,
         mae: 0.1128,
-        final_loss: 0.0284,
-        accuracy: 0.914,
+        continuous_mse: 0.0211,
+        binary_bce: 0.0073,
         per_param_mse: {
-          "Cutoff": 0.024,
-          "Resonance": 0.041,
-          "Attack": 0.019,
-          "Decay": 0.028,
-          "Release": 0.035,
-          "Volume": 0.021
+          Cutoff: 0.024,
+          Resonance: 0.041,
+          Attack: 0.019,
+          Decay: 0.028,
+          Release: 0.035,
+          Volume: 0.021
         }
       },
       loss_history: [0.21, 0.17, 0.14, 0.11, 0.09, 0.07, 0.05, 0.04, 0.03, 0.028]
     };
-
-    const preferredKeys = [
-      { key: "final_loss", label: "Loss" },
-      { key: "accuracy", label: "Accuracy" },
-      { key: "mse", label: "MSE" },
-      { key: "mae", label: "MAE" }
+    const fallbackHistory = [
+      { timestamp: "2026-04-24T16:00:00Z", model_version: "model_a", loss: 0.041, mse: 0.049 },
+      { timestamp: "2026-04-25T16:00:00Z", model_version: "model_b", loss: 0.035, mse: 0.041 },
+      { timestamp: "2026-04-30T12:00:00Z", model_version: "model_c", loss: 0.0284, mse: 0.0312 }
     ];
 
     const cardsEl = document.getElementById("cards");
-    const metricsTableBodyEl = document.getElementById("metricsTableBody");
-    const rawJsonEl = document.getElementById("rawJson");
     const sourceLabelEl = document.getElementById("sourceLabel");
-    const chartCtx = document.getElementById("metricsChart");
+    const rawJsonEl = document.getElementById("rawJson");
+    let historyChart = null;
+    let radarChart = null;
 
-    let chartInstance = null;
-
-    function getMetricContainer(payload) {
-      if (payload && typeof payload.metrics === "object") return payload.metrics;
-      if (payload && payload.latest_evaluation_report && typeof payload.latest_evaluation_report.metrics === "object") {
-        return payload.latest_evaluation_report.metrics;
-      }
-      if (payload && payload.latest_benchmark && typeof payload.latest_benchmark.eval_metrics === "object") {
-        return payload.latest_benchmark.eval_metrics;
-      }
+    function extractMetrics(payload) {
+      if (payload && payload.metrics && typeof payload.metrics === "object") return payload.metrics;
+      if (payload && payload.latest_evaluation_report && payload.latest_evaluation_report.metrics) return payload.latest_evaluation_report.metrics;
+      if (payload && payload.latest_benchmark && payload.latest_benchmark.eval_metrics) return payload.latest_benchmark.eval_metrics;
       return payload || {};
     }
 
-    function formatValue(value) {
+    function formatNumber(value) {
       if (typeof value !== "number" || Number.isNaN(value)) return "n/a";
-      if (value >= 1) return value.toFixed(3);
-      return value.toFixed(4);
+      return Math.abs(value) >= 1 ? value.toFixed(3) : value.toFixed(4);
     }
 
-    function flattenNumericMetrics(obj, prefix = "") {
-      const entries = [];
-      if (!obj || typeof obj !== "object") return entries;
-
+    function flattenNumbers(obj, prefix = "") {
+      if (!obj || typeof obj !== "object") return [];
+      const items = [];
       for (const [key, value] of Object.entries(obj)) {
         const fullKey = prefix ? `${prefix}.${key}` : key;
         if (typeof value === "number" && Number.isFinite(value)) {
-          entries.push([fullKey, value]);
+          items.push([fullKey, value]);
         } else if (value && typeof value === "object" && !Array.isArray(value)) {
-          entries.push(...flattenNumericMetrics(value, fullKey));
+          items.push(...flattenNumbers(value, fullKey));
         }
       }
-      return entries;
+      return items;
     }
 
     function renderCards(metrics) {
       cardsEl.innerHTML = "";
+      const items = [
+        ["Loss", metrics.loss ?? metrics.final_loss],
+        ["MSE", metrics.mse],
+        ["MAE", metrics.mae],
+        ["Continuous MSE", metrics.continuous_mse],
+        ["Binary BCE", metrics.binary_bce],
+        ["Samples", metrics.sample_count]
+      ];
 
-      const flattened = Object.fromEntries(flattenNumericMetrics(metrics));
-      preferredKeys.forEach(({ key, label }) => {
-        const value = (metrics && metrics[key] !== undefined) ? metrics[key] : flattened[key];
+      for (const [label, value] of items) {
         const card = document.createElement("article");
         card.className = "bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg";
         card.innerHTML = `
           <p class="text-slate-400 text-sm">${label}</p>
-          <p class="text-2xl font-bold mt-1">${formatValue(value)}</p>
+          <p class="text-2xl font-bold mt-1">${formatNumber(value)}</p>
         `;
         cardsEl.appendChild(card);
-      });
+      }
+    }
 
-      // Show additional top metrics to make dashboard richer.
-      const extras = flattenNumericMetrics(metrics)
-        .filter(([k]) => !preferredKeys.some((x) => x.key === k))
-        .slice(0, 8);
-      extras.forEach(([key, value]) => {
-        const card = document.createElement("article");
-        card.className = "bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg";
-        card.innerHTML = `
-          <p class="text-slate-400 text-sm truncate" title="${key}">${key}</p>
-          <p class="text-2xl font-bold mt-1">${formatValue(value)}</p>
-        `;
-        cardsEl.appendChild(card);
+    function renderHistoryChart(history) {
+      const ctx = document.getElementById("historyChart");
+      if (historyChart) historyChart.destroy();
+      const labels = history.map((row) => row.model_version || (row.timestamp || "").slice(0, 10));
+      const lossSeries = history.map((row) => Number(row.loss ?? row.final_loss ?? row?.metrics?.loss ?? row?.metrics?.final_loss ?? NaN));
+      const mseSeries = history.map((row) => Number(row.mse ?? row?.metrics?.mse ?? NaN));
+      historyChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Loss globale",
+              data: lossSeries,
+              borderColor: "#60a5fa",
+              backgroundColor: "rgba(96,165,250,0.12)",
+              tension: 0.3,
+              fill: false,
+            },
+            {
+              label: "MSE globale",
+              data: mseSeries,
+              borderColor: "#a78bfa",
+              backgroundColor: "rgba(167,139,250,0.12)",
+              tension: 0.3,
+              fill: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#e2e8f0" } } },
+          scales: {
+            x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,0.12)" } },
+            y: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,0.12)" } },
+          },
+        },
       });
     }
 
-    function renderMetricsTable(metrics) {
-      metricsTableBodyEl.innerHTML = "";
-      const rows = flattenNumericMetrics(metrics).sort((a, b) => a[0].localeCompare(b[0]));
-      if (!rows.length) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = "<td colspan='2' class='py-2 text-slate-400'>Aucune métrique numérique détectée.</td>";
-        metricsTableBodyEl.appendChild(tr);
+    function renderRadarChart(metrics) {
+      const perParam = metrics.per_param_mse && typeof metrics.per_param_mse === "object" ? metrics.per_param_mse : null;
+      const ctx = document.getElementById("radarChart");
+      if (radarChart) radarChart.destroy();
+      if (!perParam || !Object.keys(perParam).length) {
+        ctx.parentElement.innerHTML = '<p class="text-slate-400">Aucune métrique par paramètre disponible.</p>';
         return;
       }
 
-      rows.forEach(([name, value]) => {
-        const tr = document.createElement("tr");
-        tr.className = "border-b border-slate-800";
-        tr.innerHTML = `
-          <td class="py-2 pr-4 text-slate-300">${name}</td>
-          <td class="py-2 font-mono">${formatValue(value)}</td>
-        `;
-        metricsTableBodyEl.appendChild(tr);
-      });
-    }
-
-    function renderChart(payload, metrics) {
-      const perParam = metrics.per_param_mse && typeof metrics.per_param_mse === "object"
-        ? metrics.per_param_mse
-        : null;
-
-      const history = Array.isArray(payload.loss_history)
-        ? payload.loss_history
-        : (payload.latest_benchmark && Array.isArray(payload.latest_benchmark.loss_history)
-            ? payload.latest_benchmark.loss_history
-            : null);
-
-      let chartData = null;
-      let chartOptions = null;
-      let chartType = "line";
-
-      if (history && history.length > 0) {
-        chartType = "line";
-        chartData = {
-          labels: history.map((_, i) => `Epoch ${i + 1}`),
-          datasets: [{
-            label: "Loss history",
-            data: history,
-            tension: 0.35,
-            fill: true
-          }]
-        };
-        chartOptions = {
+      const labels = Object.keys(perParam);
+      const values = labels.map((key) => Number(perParam[key] ?? 0));
+      radarChart = new Chart(ctx, {
+        type: "radar",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "MSE par paramètre",
+              data: values,
+              backgroundColor: "rgba(34,197,94,0.18)",
+              borderColor: "#22c55e",
+              pointBackgroundColor: "#22c55e",
+            },
+          ],
+        },
+        options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: "#e2e8f0" } }
-          },
+          plugins: { legend: { labels: { color: "#e2e8f0" } } },
           scales: {
-            x: {
+            r: {
+              angleLines: { color: "rgba(148,163,184,0.2)" },
+              grid: { color: "rgba(148,163,184,0.15)" },
+              pointLabels: { color: "#e2e8f0" },
               ticks: { color: "#94a3b8" },
-              grid: { color: "rgba(148,163,184,0.15)" }
             },
-            y: {
-              ticks: { color: "#94a3b8" },
-              grid: { color: "rgba(148,163,184,0.15)" }
-            }
-          }
-        };
-      } else if (perParam && Object.keys(perParam).length > 0) {
-        const topEntries = Object.entries(perParam).slice(0, 20);
-        chartType = "bar";
-        chartData = {
-          labels: topEntries.map(([name]) => name),
-          datasets: [{
-            label: "Per-parameter MSE",
-            data: topEntries.map(([, value]) => value),
-            borderWidth: 1
-          }]
-        };
-        chartOptions = {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: "#e2e8f0" } }
           },
-          scales: {
-            x: {
-              ticks: { color: "#94a3b8", maxRotation: 45, minRotation: 45 },
-              grid: { color: "rgba(148,163,184,0.15)" }
-            },
-            y: {
-              ticks: { color: "#94a3b8" },
-              grid: { color: "rgba(148,163,184,0.15)" }
-            }
-          }
-        };
-      }
-
-      if (!chartData) {
-        chartCtx.parentElement.innerHTML = "<p class='text-slate-400'>Pas assez de données pour afficher un graphique.</p>";
-        return;
-      }
-
-      if (chartInstance) {
-        chartInstance.destroy();
-      }
-
-      chartInstance = new Chart(chartCtx, {
-        type: chartType,
-        data: chartData,
-        options: chartOptions
+        },
       });
     }
 
     async function loadMetrics() {
-      let payload = null;
-      let source = "latest_metrics.json";
+      let latest = fallbackLatest;
+      let history = fallbackHistory;
+      let source = "Données simulées";
 
       try {
-        const response = await fetch(`latest_metrics.json?ts=${Date.now()}`, { cache: "no-store" });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        payload = await response.json();
-      } catch (error) {
-        payload = simulatedData;
-        source = "Données simulées (fichier introuvable)";
-      }
+        const res = await fetch(`latest_metrics.json?ts=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        latest = await res.json();
+        source = "latest_metrics.json";
+      } catch (_) {}
 
-      const metrics = getMetricContainer(payload);
+      try {
+        const res = await fetch(`history_metrics.json?ts=${Date.now()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        history = await res.json();
+      } catch (_) {}
+
+      const metrics = extractMetrics(latest);
       sourceLabelEl.textContent = `Source: ${source}`;
       renderCards(metrics);
-      renderMetricsTable(metrics);
-      renderChart(payload, metrics);
-      rawJsonEl.textContent = JSON.stringify(payload, null, 2);
+      renderHistoryChart(Array.isArray(history) ? history : []);
+      renderRadarChart(metrics);
+      rawJsonEl.textContent = JSON.stringify(latest, null, 2);
     }
 
     loadMetrics();

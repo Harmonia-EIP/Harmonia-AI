@@ -22,11 +22,11 @@ if [[ ! -f "$INPUT_FILE" ]]; then
 fi
 
 if [[ -z "$METRICS_TOKEN" ]]; then
-  echo "Error: METRICS_TOKEN is not set"
+  echo "Error: METRICS_TOKEN is not set. Set it in your environment or export before running."
   exit 1
 fi
 
-curl --fail --show-error --silent \
+curl --fail --show-error \
   -X POST "$METRICS_URL" \
   -H "Authorization: Bearer $METRICS_TOKEN" \
   -F "metrics_file=@$INPUT_FILE;type=application/json"

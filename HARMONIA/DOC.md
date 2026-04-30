@@ -248,7 +248,7 @@ python -m pytest -q tests/test_server.py
 ```
 
 CI note:
-- The same three commands are executed in GitHub Actions on push/PR via `.github/workflows/harmonia-ci.yml`.
+- The same three commands are executed in GitHub Actions on push/PR via `../.github/workflows/harmonia-ci.yml`.
 
 Metrics helpers:
 - `make metrics-local` prints latest local benchmark + report.

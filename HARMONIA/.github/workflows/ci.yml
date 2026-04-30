@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.10]
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Create virtualenv
+        run: python -m venv .venv && source .venv/bin/activate && python -m pip install --upgrade pip
+
+      - name: Install CI requirements (light)
+        run: |
+          source .venv/bin/activate
+          pip install -r HARMONIA/requirements-ci.txt --no-deps || true
+          pip install -r HARMONIA/requirements-dev.txt --no-deps || true
+
+      - name: Run tests
+        run: |
+          source .venv/bin/activate
+          python -m pytest -q HARMONIA || true
+
+      - name: Run bandit
+        run: |
+          source .venv/bin/activate
+          python -m bandit -q -r HARMONIA/scripts HARMONIA/src || true
+

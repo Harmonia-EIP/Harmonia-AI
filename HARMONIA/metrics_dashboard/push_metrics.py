@@ -24,7 +24,7 @@ def main() -> None:
     if not args.json_file.exists():
         raise SystemExit(f"File not found: {args.json_file}")
     if not args.token:
-        raise SystemExit("Missing token. Use --token or METRICS_TOKEN env var.")
+        raise SystemExit("Missing token. Use --token or METRICS_TOKEN env var or set METRICS_TOKEN in your environment.")
 
     with args.json_file.open("rb") as f:
         files = {

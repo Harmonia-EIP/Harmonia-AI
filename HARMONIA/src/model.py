@@ -7,7 +7,7 @@ MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 
 class TextToParams(nn.Module):
-    def __init__(self, num_plugin_parameters=9):
+    def __init__(self, num_plugin_parameters=9, output_activation='sigmoid'):
         super().__init__()
         if int(num_plugin_parameters) <= 0:
             raise ValueError("num_plugin_parameters must be > 0")
@@ -16,14 +16,11 @@ class TextToParams(nn.Module):
         self.bert = AutoModel.from_pretrained(MODEL_ID, revision=MODEL_REVISION)  # nosec B615
         hidden_size = int(getattr(self.bert.config, "hidden_size", 128))
 
-        # 2. maping
-        self.head = nn.Sequential(
-            nn.Linear(hidden_size, 256),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(256, int(num_plugin_parameters)),
-            nn.Sigmoid() # Output 0.0 - 1.0
-        )
+        # 2. mapping
+        layers = [nn.Linear(hidden_size, 256), nn.ReLU(), nn.Dropout(0.1), nn.Linear(256, int(num_plugin_parameters))]
+        if output_activation == 'sigmoid':
+            layers.append(nn.Sigmoid())
+        self.head = nn.Sequential(*layers)
 
     def forward(self, input_ids, attention_mask):
         # text feature

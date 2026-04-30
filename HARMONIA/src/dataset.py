@@ -27,6 +27,7 @@ class PresetDataset(Dataset):
         if not records:
             self.samples = []
             self.param_keys = []
+            self.training_param_keys = []
             self._continuous_keys = []
             self._binary_keys = []
             self._categorical_keys = []
@@ -39,6 +40,7 @@ class PresetDataset(Dataset):
             self._categorical_keys,
         ) = self._extract_group_keys(records)
         self.param_keys = self._continuous_keys + self._binary_keys + self._categorical_keys
+        self.training_param_keys = self._continuous_keys + self._binary_keys
         self._categorical_max = self._compute_categorical_max(records)
 
         self.samples = [

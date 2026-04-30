@@ -5,7 +5,7 @@ DATASET ?= data/cleaned_dataset.npy
 PROMPT ?= Warm cinematic pad with soft attack
 OUTPUT ?= data/processed/generated_from_prompt.json
 
-.PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve metrics-local metrics-api estimate-train-time
+.PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve metrics-local metrics-api estimate-train-time push-metrics
 
 help:
 	@echo "Targets:"
@@ -31,7 +31,7 @@ setup: venv
 	$(PIP) install -r requirements-ci.txt -r requirements-dev.txt
 
 test:
-	$(PYTHON) -m pytest -q && $(PYTHON) scripts/push_latest_metrics.py
+	$(PYTHON) -m pytest -q
 
 security:
 	$(PYTHON) -m bandit -q -r scripts src
@@ -43,6 +43,12 @@ check: test security compile
 
 train:
 	HARMONIA_DATASET_PATH="$(DATASET)" $(PYTHON) scripts/train.py
+
+push-metrics:
+	# Usage: make push-metrics FILE=benchmarks/reports/eval_latest.json
+	@FILE=${FILE:-}; if [ -z "$$FILE" ]; then echo "Provide FILE=path/to/report.json"; exit 1; fi; \
+	METRICS_TOKEN=$${METRICS_TOKEN:-} && if [ -z "$$METRICS_TOKEN" ]; then echo "Set METRICS_TOKEN env var before running"; exit 1; fi; \
+	$(PYTHON) metrics_dashboard/push_metrics.py $$FILE --token "$$METRICS_TOKEN"
 
 train-cleaned:
 	HARMONIA_DATASET_PATH="data/cleaned_dataset.npy" $(PYTHON) scripts/train.py

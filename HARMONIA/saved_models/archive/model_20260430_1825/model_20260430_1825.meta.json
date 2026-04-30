@@ -1,7 +1,7 @@
 {
-    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/model_20260430_1827-r2.pth",
-    "model_version": "model_20260430_1827-r2",
-    "model_hash": "b881114fc9a88b95d51a41d67f59c050d7f346a6714f0061efb4ee4c426500c1",
+    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/model_20260430_1825.pth",
+    "model_version": "model_20260430_1825",
+    "model_hash": "e38961ce19cba4b183f575a70b97db4b0b0458093c022fd4f46841886270a3ca",
     "plugin_param_count": 9,
     "param_keys": [
         "param_0000",
@@ -14,7 +14,7 @@
         "param_0007",
         "param_0008"
     ],
-    "trained_at": "2026-04-30 18:27:42",
+    "trained_at": "2026-04-30 18:25:46",
     "seed": 42,
     "epochs": 120,
     "learning_rate": 0.0001,
@@ -30,5 +30,5 @@
     "tokenizer_max_length": 32,
     "dataset_path": "/Users/malo/Harmonia-AI/HARMONIA/data/processed/presets.json",
     "normalize_categorical": true,
-    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260430_182742.json"
+    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260430_182546.json"
 }

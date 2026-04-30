@@ -61,6 +61,31 @@ make serve
 make metrics-api
 ```
 
+## Commandes de test (ultra clair)
+
+Depuis `HARMONIA/`:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements-ci.txt -r requirements-dev.txt
+```
+
+Checks (les 3 commandes CI):
+
+```bash
+python -m pytest -q
+python -m bandit -q -r scripts src
+python -m compileall scripts src tests
+```
+
+Equivalent Makefile:
+
+```bash
+make check
+```
+
 ### 1) Prepare dataset
 
 Place raw dump file in `HARMONIA/data/raw/my_raw_dump.txt`, then run:
@@ -237,7 +262,7 @@ cd HARMONIA
 make metrics-api
 ```
 
-Automatic metrics push is enabled after training and after `make test` when a report exists.
+Automatic metrics push is enabled after training when a report exists.
 It uses `HARMONIA/metrics_dashboard/.env.local` or the `METRICS_TOKEN` environment variable.
 CI also refreshes the dashboard on each git push (if GitHub secret `METRICS_PUSH_TOKEN` is set).
 

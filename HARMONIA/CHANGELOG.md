@@ -2,6 +2,31 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.17] - CI Reliability, Dashboard History, and Secret Hygiene
+### Changed
+- **CI hardening**:
+  - Updated `HARMONIA/.github/workflows/ci.yml` to run real quality gates (no `|| true`, no `--no-deps`).
+  - Standardized CI runtime to Python `3.12` and added compile check (`python -m compileall scripts src tests`).
+- **Dependency compatibility**:
+  - Simplified `numpy` pin in `requirements-ci.txt` and `requirement.txt` to `numpy==2.2.6` for stable installs across environments.
+  - Aligned `torch` runtime pin in `requirement.txt` with CI (`torch==2.11.0`).
+- **Training/runtime robustness**:
+  - `scripts/train.py` now evaluates on the active device (CPU/MPS) and saves best checkpoint by validation MSE when available.
+  - Fixed training loop mode switch so the model returns to `train()` after validation, preventing accidental eval-mode epochs.
+  - Improved Apple Silicon detection with `torch.backends.mps.is_available()`.
+  - Re-enforced strict safe model loading in `scripts/server.py` (`weights_only=True` required).
+- **Metrics dashboard pipeline**:
+  - `metrics_dashboard/receiver.php` now writes both `latest_metrics.json` and rolling `history_metrics.json`.
+  - `metrics_dashboard/index.html` now plots model evolution from `history_metrics.json` and per-parameter errors with a radar chart.
+
+### Security
+- Removed hardcoded token fallback from `metrics_dashboard/receiver.php` and require server-side `METRICS_PUSH_TOKEN` configuration.
+- `metrics_dashboard/push_metrics.sh` now requires `METRICS_TOKEN` from environment (no plaintext secret in code).
+
+### Docs
+- Added/clarified "Commandes de test" in `README.md` and aligned CI notes in `DOC.md`.
+- Updated `metrics_dashboard/README.md` examples to match current metrics schema (no accuracy key).
+
 ## [0.0.16] - Bandit B310 Fix on Metrics Publisher
 ### Changed
 - **Security hardening** (`src/metrics_publisher.py`):

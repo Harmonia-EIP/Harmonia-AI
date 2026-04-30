@@ -58,7 +58,6 @@ cat > sample_eval_report.json <<'JSON'
     "mse": 0.0321,
     "mae": 0.1104,
     "final_loss": 0.0289,
-    "accuracy": 0.91,
     "per_param_mse": {
       "Cutoff": 0.024,
       "Resonance": 0.041,
@@ -106,13 +105,13 @@ python3 push_metrics.py /chemin/vers/eval_report.json --url "https://harmonia.mc
 ### Option D - envoi automatique integre au projet Harmonia
 
 - `scripts/train.py` pousse automatiquement le dernier `eval_*.json` apres l'entraienement.
-- `make test` pousse aussi le dernier rapport local si un benchmark existe deja.
 - Le comportement peut etre coupe avec `HARMONIA_PUSH_METRICS=0`.
 - Le workflow CI pousse aussi un payload de statut a chaque `push` quand `METRICS_PUSH_TOKEN` est configure dans les secrets GitHub.
 
 ## Notes
 
 - `index.html` tente de charger `latest_metrics.json`.
+- `receiver.php` maintient aussi `history_metrics.json` (evolution des modeles).
 - Si le fichier n'existe pas encore, il affiche automatiquement des donnees simulees.
 - Le dashboard sait aussi parser des structures proches de ton `eval_report` actuel (`metrics`, `latest_evaluation_report.metrics`, `latest_benchmark.eval_metrics`).
 
