@@ -22,9 +22,37 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 from src.artifact_registry import archive_artifacts, build_flat_model_paths, resolve_latest_model, write_latest_pointer
+from src.charter import CHARTER, DISCRETE_INDICES, PARAM_NAMES
 from src.dataset import PresetDataset
 from src.metrics_publisher import push_metrics_report
 from src.model import TextToParams
+
+
+# Perceptual loss weights: discrete topology choices and the most audible
+# continuous controls weigh more than utility params. Keeps the model honest
+# about waveform/filter type/cutoff even on small datasets.
+CHARTER_LOSS_WEIGHTS = {
+    "osc_1_waveform": 2.0,
+    "osc_2_waveform": 1.5,
+    "osc_mix": 1.0,
+    "osc_2_detune": 0.8,
+    "noise_level": 0.8,
+    "filter_cutoff": 2.0,
+    "filter_resonance": 1.2,
+    "filter_type": 2.0,
+    "amp_attack": 1.5,
+    "amp_decay": 1.2,
+    "amp_sustain": 1.2,
+    "amp_release": 1.5,
+    "filter_env_amount": 1.0,
+    "filter_env_decay": 1.0,
+    "lfo_rate": 0.8,
+    "lfo_to_pitch": 0.6,
+    "lfo_to_cutoff": 0.8,
+    "velocity_to_filter": 0.8,
+    "distortion_mix": 1.5,
+    "reverb_mix": 1.2,
+}
 
 
 def _env_int(name, default):
@@ -277,7 +305,13 @@ def train():
         print(f"Error: {dataset_path} not found. Run prepare_dataset.py first.")
         return
 
-    dataset = PresetDataset(dataset_path, tokenizer, tokenizer_max_length=TOKENIZER_MAX_LENGTH, normalize_categorical=True)
+    dataset = PresetDataset(
+        dataset_path,
+        tokenizer,
+        tokenizer_max_length=TOKENIZER_MAX_LENGTH,
+        normalize_categorical=True,
+        prompt_augment=True,
+    )
     if len(dataset) == 0:
         print(f"Error: {dataset_path} is empty. Add presets before training.")
         return
@@ -287,11 +321,21 @@ def train():
         print(f"Error: no trainable parameter keys detected in {dataset_path}.")
         return
 
-    continuous_count = len(getattr(dataset, "_continuous_keys", []))
-    binary_count = len(getattr(dataset, "_binary_keys", []))
-    if continuous_count + binary_count == 0:
+    charter_mode = bool(getattr(dataset, "charter_mode", False))
+    if charter_mode:
         continuous_count = len(training_keys)
         binary_count = 0
+        loss_weights = torch.tensor(
+            [CHARTER_LOSS_WEIGHTS.get(name, 1.0) for name in training_keys],
+            dtype=torch.float32,
+        )
+    else:
+        continuous_count = len(getattr(dataset, "_continuous_keys", []))
+        binary_count = len(getattr(dataset, "_binary_keys", []))
+        if continuous_count + binary_count == 0:
+            continuous_count = len(training_keys)
+            binary_count = 0
+        loss_weights = None
 
     train_size, val_size = compute_split_sizes(len(dataset), VAL_SPLIT)
     if val_size > 0:
@@ -305,6 +349,8 @@ def train():
 
     device = torch.device("mps") if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else torch.device("cpu")
     model = TextToParams(num_plugin_parameters=len(training_keys)).to(device)
+    if loss_weights is not None:
+        loss_weights = loss_weights.to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=0.01)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, EPOCHS))
 
@@ -326,11 +372,15 @@ def train():
             preds = model(input_ids, attention_mask)[:, : len(training_keys)]
 
             loss = 0.0
-            if continuous_count > 0:
-                loss = loss + F.mse_loss(preds[:, :continuous_count], labels[:, :continuous_count])
-            if binary_count > 0:
-                bp = preds[:, continuous_count:continuous_count + binary_count].clamp(1e-6, 1 - 1e-6)
-                loss = loss + F.binary_cross_entropy(bp, labels[:, continuous_count:continuous_count + binary_count])
+            if charter_mode and loss_weights is not None:
+                err = (preds - labels) ** 2
+                loss = loss + (err * loss_weights).mean()
+            else:
+                if continuous_count > 0:
+                    loss = loss + F.mse_loss(preds[:, :continuous_count], labels[:, :continuous_count])
+                if binary_count > 0:
+                    bp = preds[:, continuous_count:continuous_count + binary_count].clamp(1e-6, 1 - 1e-6)
+                    loss = loss + F.binary_cross_entropy(bp, labels[:, continuous_count:continuous_count + binary_count])
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -431,6 +481,8 @@ def train():
         "dataset_path": str(dataset_path),
         "normalize_categorical": True,
         "evaluation_report_path": str(eval_report_written),
+        "charter_mode": charter_mode,
+        "charter_version": "1.0" if charter_mode else None,
     }
     write_model_metadata(metadata_path, metadata_payload)
     write_latest_pointer(SAVED_MODELS_DIR, {"model_version": model_version, "model_path": str(model_path), "metadata_path": str(metadata_path), "evaluation_report_path": str(eval_report_written), "model_hash": model_hash, "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})

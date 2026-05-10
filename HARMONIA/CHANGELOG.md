@@ -2,6 +2,38 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.18] - Universal Charter, Perceptual Loss, and Anchor Presets
+### Added
+- **Centralized Charter (`src/charter.py`)**:
+  - Implementation of a single source of truth for the 20 universal parameters.
+  - Definition of `name`, `section`, `kind` (continuous/bipolar/discrete), `curve` (linear/log/exponential), physical range, and units.
+  - Included discrete step definitions for P1/P2 (Waveforms) and P8 (Filter Types).
+  - Utility helpers: `clamp_unit`, `snap_discrete`, `normalise_vector`, and `charter_metadata`.
+- **Cold-start Dataset (`data/raw/anchor_presets.json`)**:
+  - 12 hand-curated canonical presets with 3-4 prompt variations each (47 training points).
+  - Covers: Hard Electro Lead, Soft Piano, Warm Pad, Deep Reese Bass, Acid Bass, Pluck, Snare, Kick, Bright Lead, Strings, Flute, Hard Bass.
+- **API Endpoint**: Added `GET /charter` to allow the VST front-end to sync parameter metadata dynamically.
+
+### Changed
+- **Enhanced Model Architecture (`src/model.py`)**:
+  - Replaced CLS token with **Masked Mean Pooling** for stable signal on short prompts (e.g., "Hard Electro Lead").
+  - Upgraded head with `LayerNorm` + `GELU` + `Dropout`.
+  - Specialized output heads: Sigmoid for continuous, centered-sigmoid for bipolar (P13), and **Softmax-to-steps** for discrete parameters (P1, P2, P8).
+  - Maintained legacy CLS mode for backward compatibility with 214-param Sylenth1 models.
+- **Dataset & Preprocessing (`src/dataset.py`, `scripts/prepare_dataset.py`)**:
+  - Automatic detection of Charter mode with guaranteed P1..P20 ordering.
+  - Improved mapping logic from Sylenth1 to Charter (e.g., Noise estimation from Osc B, Filter Env from xModEnv1).
+  - Added prompt augmentation during training (random prefixes/suffixes) for better generalization.
+- **Perceptual Training Logic (`scripts/train.py`)**:
+  - Implemented **Weighted MSE Loss**: x2 on waveforms/filter types/cutoff, x1.5 on attack/release/distortion, and x0.6 on LFO-to-pitch to prioritize audible features.
+- **Refined Inference API (`scripts/server.py`, `scripts/generate.py`)**:
+  - `/generate` now returns a rich JSON: `parameters` (dict), `values` (flat list of 20 floats for C++), and `charter_metadata`.
+  - All outputs are strictly clamped to [0,1] and snapped to discrete steps, ready for JUCE `NormalisableRange`.
+
+### Fixed
+- **Tests**: Rewrote `tests/test_prepare_dataset.py` to validate the new Charter schema.
+- **Compatibility**: Verified that the 5 other core test files pass without modification despite the architecture shift.
+
 ## [0.0.17] - CI Reliability, Dashboard History, and Secret Hygiene
 ### Changed
 - **CI hardening**:

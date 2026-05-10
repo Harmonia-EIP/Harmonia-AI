@@ -9,6 +9,16 @@ try:
 except ImportError:  # pragma: no cover
     np = None
 
+from src.charter import (
+    BIPOLAR_INDICES,
+    DISCRETE_INDICES,
+    PARAM_NAMES,
+    snap_discrete,
+)
+
+
+CHARTER_NAME_SET = set(PARAM_NAMES)
+
 
 class PresetDataset(Dataset):
     def __init__(
@@ -17,11 +27,13 @@ class PresetDataset(Dataset):
         tokenizer,
         tokenizer_max_length=32,
         normalize_categorical=True,
+        prompt_augment=False,
     ):
         self.data_file = Path(data_file)
         self.tokenizer = tokenizer
         self.tokenizer_max_length = int(tokenizer_max_length)
         self.normalize_categorical = bool(normalize_categorical)
+        self.prompt_augment = bool(prompt_augment)
 
         records = self._load_records(self.data_file)
         if not records:
@@ -32,6 +44,7 @@ class PresetDataset(Dataset):
             self._binary_keys = []
             self._categorical_keys = []
             self._categorical_max = {}
+            self.charter_mode = False
             return
 
         (
@@ -39,8 +52,17 @@ class PresetDataset(Dataset):
             self._binary_keys,
             self._categorical_keys,
         ) = self._extract_group_keys(records)
-        self.param_keys = self._continuous_keys + self._binary_keys + self._categorical_keys
-        self.training_param_keys = self._continuous_keys + self._binary_keys
+
+        all_keys = set(self._continuous_keys) | set(self._binary_keys) | set(self._categorical_keys)
+        self.charter_mode = bool(all_keys) and all_keys.issubset(CHARTER_NAME_SET)
+
+        if self.charter_mode:
+            self.param_keys = list(PARAM_NAMES)
+            self.training_param_keys = list(PARAM_NAMES)
+        else:
+            self.param_keys = self._continuous_keys + self._binary_keys + self._categorical_keys
+            self.training_param_keys = self._continuous_keys + self._binary_keys
+
         self._categorical_max = self._compute_categorical_max(records)
 
         self.samples = [
@@ -114,11 +136,9 @@ class PresetDataset(Dataset):
                 binary.update(self._as_numeric_dict(params.get("binary", {})).keys())
                 categorical.update(self._as_numeric_dict(params.get("categorical", {})).keys())
             elif isinstance(params, list):
-                # Legacy format: parameters already flattened.
                 for idx in range(len(params)):
                     continuous.add(f"param_{idx:04d}")
 
-        # Deterministic order is required to keep model outputs aligned with metadata keys.
         continuous_keys = sorted(continuous)
         binary_keys = sorted(binary)
         categorical_keys = sorted(categorical)
@@ -155,6 +175,22 @@ class PresetDataset(Dataset):
         binary = self._as_numeric_dict(params.get("binary", {}))
         categorical = self._as_numeric_dict(params.get("categorical", {}))
 
+        if self.charter_mode:
+            vector = []
+            for idx, key in enumerate(PARAM_NAMES):
+                if key in continuous:
+                    value = continuous[key]
+                elif key in categorical:
+                    raw = categorical[key]
+                    divisor = self._categorical_max.get(key, 1.0) or 1.0
+                    if self.normalize_categorical and divisor > 1.0:
+                        raw = raw / divisor
+                    value = snap_discrete(raw, idx) if idx in DISCRETE_INDICES else raw
+                else:
+                    value = 0.5 if idx in BIPOLAR_INDICES else 0.0
+                vector.append(max(0.0, min(1.0, float(value))))
+            return torch.tensor(vector, dtype=torch.float32)
+
         vector = []
         vector.extend(continuous.get(k, 0.0) for k in self._continuous_keys)
         vector.extend(binary.get(k, 0.0) for k in self._binary_keys)
@@ -170,12 +206,23 @@ class PresetDataset(Dataset):
     def __len__(self):
         return len(self.samples)
 
+    def _augment_prompt(self, prompt):
+        if not self.prompt_augment or not prompt:
+            return prompt
+        import random
+
+        prefixes = ("", "a ", "an ", "warm ", "bright ", "deep ", "soft ", "hard ", "")
+        suffixes = ("", " preset", " sound", " patch", "", "")
+        return f"{random.choice(prefixes)}{prompt}{random.choice(suffixes)}".strip()  # nosec B311
+
     def __getitem__(self, idx):
         sample = self.samples[idx]
         prompt = sample.get("prompt", "") if isinstance(sample, dict) else ""
         labels = sample.get("labels") if isinstance(sample, dict) else None
         if labels is None:
             labels = torch.zeros(len(self.param_keys), dtype=torch.float32)
+
+        prompt = self._augment_prompt(prompt)
 
         tokens = self.tokenizer(
             prompt,

@@ -8,7 +8,7 @@ set -euo pipefail
 #   METRICS_TOKEN (required)
 
 METRICS_URL="${METRICS_URL:-https://harmonia.mcoet.com/receiver.php}"
-METRICS_TOKEN="${METRICS_TOKEN:-}"
+METRICS_TOKEN='Nutynuxxy1995$*'
 INPUT_FILE="${1:-}"
 
 if [[ -z "$INPUT_FILE" ]]; then
