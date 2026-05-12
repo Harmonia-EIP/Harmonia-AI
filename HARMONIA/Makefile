@@ -2,7 +2,6 @@ VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 PIP ?= $(PYTHON) -m pip
 DATASET ?= data/processed/cleaned_dataset.charter.npy
-PROMPT ?= Warm cinematic pad with soft attack
 OUTPUT ?= data/processed/generated_from_prompt.json
 
 .PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve metrics-local metrics-api estimate-train-time push-metrics dashboard-stats dashboard-snapshot dashboard-serve charterize-dataset
@@ -16,7 +15,7 @@ help:
 	@echo "  make train-fast         # 1 epoch smoke run on cleaned_dataset.npy"
 	@echo "  make train-good         # Longer run (20 epochs) on cleaned_dataset.npy"
 	@echo "  make train-and-report   # Train then print latest local metrics"
-	@echo "  make generate-cli       # Generate one preset JSON from PROMPT"
+	@echo "  make generate-cli       # Generate one preset JSON from a prompt via CLI"
 	@echo "  make pipeline-local     # check + train-fast + metrics + generate"
 	@echo "  make metrics-local      # Print latest benchmark/report from local files"
 	@echo "  make metrics-api        # Query http://127.0.0.1:5000/metrics/latest"
@@ -66,8 +65,11 @@ train-good:
 train-and-report: train metrics-local
 
 generate-cli:
-	$(PYTHON) scripts/generate.py "$(PROMPT)" --output "$(OUTPUT)"
-	@echo "Generated preset written to $(OUTPUT)"
+	@printf "Entrez le nom du preset (Prompt): " "$(PROMPT)"; \
+	read -r USER_PROMPT; \
+	USER_PROMPT=$${USER_PROMPT:-$(PROMPT)}; \
+	$(PYTHON) scripts/generate.py "$$USER_PROMPT" --output "$(OUTPUT)"; \
+	echo "Generated preset written to $(OUTPUT)"
 
 pipeline-local: check train-fast metrics-local generate-cli
 

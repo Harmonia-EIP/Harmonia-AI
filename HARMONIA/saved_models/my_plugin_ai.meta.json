@@ -1,7 +1,7 @@
 {
-    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/model_20260512_1825.pth",
-    "model_version": "model_20260512_1825",
-    "model_hash": "f59ec9e8236192ddd7739dbd5043729be3fb7bbb0cb991ae05a667cd4d1303c3",
+    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/model_Light_1_Epoch_20260512_1905.pth",
+    "model_version": "model_Light_1_Epoch_20260512_1905",
+    "model_hash": "cf5a358424011c5917ba40b19f6cb55b896e5a48a3363dfcdf4e191bbc77b0f4",
     "plugin_param_count": 20,
     "param_keys": [
         "osc_1_waveform",
@@ -25,11 +25,11 @@
         "distortion_mix",
         "reverb_mix"
     ],
-    "trained_at": "2026-05-12 18:25:24",
+    "trained_at": "2026-05-12 19:05:13",
     "seed": 42,
-    "epochs": 20,
+    "epochs": 1,
     "learning_rate": 0.0001,
-    "batch_size": 16,
+    "batch_size": 32,
     "val_split": 0.0,
     "dataset_size": 52810,
     "train_size": 52810,
@@ -41,7 +41,7 @@
     "tokenizer_max_length": 32,
     "dataset_path": "data/processed/cleaned_dataset.charter.npy",
     "normalize_categorical": true,
-    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260512_182524.json",
+    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260512_190513.json",
     "charter_mode": true,
     "charter_version": "1.0"
 }

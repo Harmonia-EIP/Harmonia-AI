@@ -6,7 +6,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-
+import re
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
@@ -242,12 +242,32 @@ def compute_file_sha256(path):
             sha256.update(chunk)
     return sha256.hexdigest()
 
+def prompt_model_name():
+    if not sys.stdin.isatty():
+        return ""
+    try:
+        return input("Nom du modèle (laisser vide pour automatique) : ").strip()
+    except EOFError:
+        return ""
+
+
+def sanitize_model_name(value):
+    sanitized = re.sub(r"[^A-Za-z0-9._-]", "-", value.strip())
+    return sanitized.strip(".-")
 
 def resolve_model_version():
     if MODEL_VERSION_OVERRIDE:
-        return MODEL_VERSION_OVERRIDE
-    return f"{MODEL_FILE_PREFIX}{datetime.now().strftime('%Y%m%d_%H%M')}"
+        return sanitize_model_name(MODEL_VERSION_OVERRIDE)
 
+    custom_name = prompt_model_name()
+    timestamp = datetime.now().strftime("%d-%m-%y")
+
+    if custom_name:
+        safe_name = sanitize_model_name(custom_name)
+        if safe_name:
+            return f"{MODEL_FILE_PREFIX}{safe_name}_{timestamp}"
+
+    return f"{MODEL_FILE_PREFIX}{timestamp}"
 
 def ensure_unique_model_version(model_version):
     candidate = model_version
@@ -422,6 +442,7 @@ def train():
     duration = time.time() - start_time
     model_version = ensure_unique_model_version(resolve_model_version())
     artifact_paths = build_flat_model_paths(SAVED_MODELS_DIR, model_version)
+    model_version = artifact_paths["model_version"]
     model_path = artifact_paths["model_path"]
     metadata_path = artifact_paths["metadata_path"]
     eval_file_path = artifact_paths["evaluation_report_path"]
