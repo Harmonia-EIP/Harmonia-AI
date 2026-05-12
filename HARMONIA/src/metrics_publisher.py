@@ -13,8 +13,8 @@ ALLOWED_METRICS_HOSTS = {"harmonia.mcoet.com", "www.harmonia.mcoet.com", "127.0.
 
 def _load_local_token(base_dir: Path) -> str:
     candidates = [
-        base_dir / "metrics_dashboard" / ".env.local",
-        base_dir / ".env.local",
+        base_dir / "metrics_dashboard" / ".env",
+        base_dir / ".env",
     ]
     for candidate in candidates:
         if not candidate.exists():

@@ -23,6 +23,7 @@ if str(BASE_DIR) not in sys.path:
 
 from src.artifact_registry import archive_artifacts, build_flat_model_paths, resolve_latest_model, write_latest_pointer
 from src.charter import CHARTER, DISCRETE_INDICES, PARAM_NAMES
+from src.dashboard_events import publish_command, publish_training
 from src.dataset import PresetDataset
 from src.metrics_publisher import push_metrics_report
 from src.model import TextToParams
@@ -271,7 +272,23 @@ def maybe_push_metrics(eval_report_path):
     if not PUSH_METRICS_ON_TRAIN:
         print("Metrics push disabled (HARMONIA_PUSH_METRICS=0).")
         return
-    result = push_metrics_report(Path(eval_report_path), url=METRICS_PUSH_URL, base_dir=BASE_DIR)
+
+    report_path = Path(eval_report_path)
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[METRICS] Could not read report for dashboard event: {exc}")
+        report = {}
+
+    dashboard_result = publish_training(report, base_dir=BASE_DIR) if report else {"skipped": True, "reason": "missing-report"}
+    if dashboard_result.get("ok"):
+        print(f"[DASHBOARD] Training event pushed (HTTP {dashboard_result.get('status')}).")
+    elif dashboard_result.get("skipped"):
+        print(f"[DASHBOARD] {dashboard_result.get('reason', 'skipped')}")
+    else:
+        print(f"[DASHBOARD] push error: {dashboard_result.get('error', dashboard_result.get('status'))}")
+
+    result = push_metrics_report(report_path, url=METRICS_PUSH_URL, base_dir=BASE_DIR)
     if result.get("skipped"):
         print(f"[METRICS] {result.get('reason', 'skipped')}")
         return
@@ -489,6 +506,19 @@ def train():
     write_model_metadata(LEGACY_METADATA_PATH, metadata_payload)
     maybe_push_metrics(eval_report_written)
     save_benchmark(duration, loss_history[-1] if loss_history else 0.0, loss_history, len(dataset), train_size=train_size, val_size=val_size, eval_metrics=eval_metrics, evaluation_report_path=eval_report_written, model_version=model_version, model_hash=model_hash)
+    publish_command(
+        "train.py",
+        status="ok",
+        duration_seconds=duration,
+        detail={
+            "epochs": EPOCHS,
+            "batch_size": BATCH_SIZE,
+            "dataset_size": len(dataset),
+            "charter_mode": charter_mode,
+        },
+        model_version=model_version,
+        base_dir=BASE_DIR,
+    )
     print(f"Model saved to {model_path}!")
     print(f"Model metadata saved to {metadata_path}")
     print(f"Evaluation report saved to {eval_report_written}")

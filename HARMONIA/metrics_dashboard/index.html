@@ -3,235 +3,1047 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Harmonia Metrics Dashboard</title>
+  <title>Harmonia · Live Metrics</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-0: #04040a;
+      --bg-1: #08080f;
+      --bg-2: #0d0d17;
+      --accent-1: #6b5cff;   /* iris */
+      --accent-2: #38a3ff;   /* steel blue */
+      --accent-3: #c66bff;   /* muted plum */
+      --accent-warn: #d9a04a;
+      --accent-good: #4cc99f;
+      --text-1: #e4e4f0;
+      --text-2: #9c9cb5;
+      --text-3: #5b5b75;
+    }
+    html, body { background: var(--bg-0); font-family: 'Inter', system-ui, sans-serif; color: var(--text-1); }
+    body::before {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background:
+        radial-gradient(circle at 15% 12%, rgba(107,92,255,0.10), transparent 50%),
+        radial-gradient(circle at 85% 5%, rgba(56,163,255,0.07), transparent 50%),
+        radial-gradient(circle at 70% 85%, rgba(198,107,255,0.06), transparent 55%);
+    }
+    main, aside, header, footer { position: relative; z-index: 1; }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+    .glass {
+      background: linear-gradient(140deg, rgba(255,255,255,0.025), rgba(255,255,255,0.005));
+      border: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    .gradient-text {
+      background: linear-gradient(120deg, #8c7dff 0%, #6b5cff 50%, #38a3ff 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .pill {
+      font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase;
+      border-radius: 9999px; padding: 0.18rem 0.6rem;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.025);
+      color: var(--text-2);
+    }
+    .pill-pink { background: rgba(198,107,255,0.08); border-color: rgba(198,107,255,0.25); color: #c8a9e6; }
+    .pill-purple { background: rgba(107,92,255,0.08); border-color: rgba(107,92,255,0.25); color: #a99dec; }
+    .pill-cyan { background: rgba(56,163,255,0.08); border-color: rgba(56,163,255,0.25); color: #8dc0eb; }
+    .pill-amber { background: rgba(217,160,74,0.08); border-color: rgba(217,160,74,0.28); color: #d4b27a; }
+    .pill-green { background: rgba(76,201,159,0.08); border-color: rgba(76,201,159,0.28); color: #94d8bb; }
+    .nav-link { transition: color .15s ease, background .15s ease, transform .15s ease; }
+    .nav-link.active {
+      background: rgba(107,92,255,0.10);
+      color: var(--text-1);
+      border-color: rgba(107,92,255,0.30) !important;
+    }
+    .stat-card {
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(107,92,255,0.25);
+      box-shadow: 0 12px 36px -18px rgba(0,0,0,0.7);
+    }
+    .scroll-cap { max-height: 70vh; overflow-y: auto; }
+    .scroll-cap::-webkit-scrollbar { width: 8px; }
+    .scroll-cap::-webkit-scrollbar-track { background: transparent; }
+    .scroll-cap::-webkit-scrollbar-thumb { background: rgba(138,92,255,0.4); border-radius: 8px; }
+    .clickable { cursor: pointer; transition: background .12s ease, transform .12s ease; }
+    .clickable:hover { background: rgba(138,92,255,0.12); }
+    .badge-dot { width: 8px; height: 8px; border-radius: 9999px; display: inline-block; }
+    .meter {
+      height: 6px; background: rgba(255,255,255,0.04); border-radius: 9999px; overflow: hidden;
+    }
+    .meter > div { height: 100%; border-radius: inherit;
+      background: linear-gradient(90deg, #6b5cff, #38a3ff);
+    }
+    .fade-enter { animation: fade .25s ease; }
+    @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  <main class="max-w-7xl mx-auto px-4 py-8 space-y-8">
-    <header>
-      <h1 class="text-3xl md:text-4xl font-bold">Harmonia - Metrics Dashboard</h1>
-      <p id="sourceLabel" class="text-slate-400 mt-2">Chargement des métriques...</p>
-    </header>
+<body class="min-h-screen">
+  <div class="flex flex-col xl:flex-row min-h-screen">
 
-    <section id="cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4"></section>
-
-    <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg">
-      <div class="flex items-center justify-between gap-4 mb-4">
-        <h2 class="text-xl font-semibold">Évolution des modèles</h2>
-        <span class="text-sm text-slate-400">Loss et MSE dans le temps</span>
-      </div>
-      <div class="h-[380px]"><canvas id="historyChart"></canvas></div>
-    </section>
-
-    <section class="grid grid-cols-1 xl:grid-cols-2 gap-8">
-      <article class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg">
-        <div class="flex items-center justify-between gap-4 mb-4">
-          <h2 class="text-xl font-semibold">Paramètres VST</h2>
-          <span class="text-sm text-slate-400">Radar chart</span>
+    <aside class="xl:w-72 xl:min-h-screen glass border-b xl:border-b-0 xl:border-r border-white/10 px-6 py-6 flex xl:flex-col gap-6 items-stretch justify-between">
+      <div class="flex xl:flex-col gap-4 items-center xl:items-start w-full">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 via-violet-500 to-sky-500 shadow-md shadow-indigo-900/40 flex items-center justify-center font-extrabold text-white/90">H</div>
+          <div>
+            <p class="text-xs uppercase tracking-widest text-white/40">Harmonia</p>
+            <p class="text-lg font-bold gradient-text">Live Metrics</p>
+          </div>
         </div>
-        <div class="h-[420px]"><canvas id="radarChart"></canvas></div>
-      </article>
 
-      <article class="bg-slate-900 border border-slate-800 rounded-xl p-4 md:p-6 shadow-lg">
-        <h2 class="text-xl font-semibold mb-4">Résumé brut</h2>
-        <pre id="rawJson" class="text-xs md:text-sm bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-auto max-h-[420px]"></pre>
-      </article>
-    </section>
-  </main>
+        <nav id="navMenu" class="hidden xl:flex flex-col gap-1 w-full">
+          <button data-view="overview" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Overview</button>
+          <button data-view="models" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Modèles</button>
+          <button data-view="training" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Entraînement</button>
+          <button data-view="presets" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Presets générés</button>
+          <button data-view="activity" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Activité</button>
+          <button data-view="charter" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Charte 20 paramètres</button>
+        </nav>
+
+        <select id="navMenuMobile" class="xl:hidden bg-black/30 border border-white/15 rounded-lg px-3 py-2 text-sm w-full">
+          <option value="overview">Overview</option>
+          <option value="models">Modèles</option>
+          <option value="training">Entraînement</option>
+          <option value="presets">Presets générés</option>
+          <option value="activity">Activité</option>
+          <option value="charter">Charte 20 paramètres</option>
+        </select>
+      </div>
+
+      <div class="hidden xl:flex flex-col gap-3 text-xs text-white/40">
+        <div class="flex items-center gap-2">
+          <span id="apiStatusDot" class="badge-dot bg-amber-300"></span>
+          <span id="apiStatusLabel">Connexion…</span>
+        </div>
+        <button id="refreshBtn" class="text-left text-white/70 hover:text-white border border-white/10 hover:border-white/30 rounded-lg px-3 py-2">↻ Rafraîchir</button>
+        <p class="leading-relaxed">harmonia.mcoet.com<br>API: <span id="apiPathLabel" class="mono">api.php</span></p>
+      </div>
+    </aside>
+
+    <main class="flex-1 px-5 md:px-10 py-8 max-w-7xl mx-auto w-full">
+      <header class="flex items-start justify-between gap-4 mb-8">
+        <div>
+          <p class="uppercase tracking-[0.4em] text-xs text-white/40">Harmonia AI</p>
+          <h1 class="text-3xl md:text-4xl font-extrabold mt-1"><span id="viewTitle" class="gradient-text">Overview</span></h1>
+          <p id="viewSubtitle" class="text-sm text-white/50 mt-1">État global du moteur d'IA et des paramètres VST.</p>
+        </div>
+        <div class="text-right text-xs text-white/40 hidden md:block">
+          <p>Dernière mise à jour</p>
+          <p id="lastSync" class="mono text-white/70">—</p>
+        </div>
+      </header>
+
+      <section id="view-overview" class="space-y-8"></section>
+      <section id="view-models" class="hidden space-y-6"></section>
+      <section id="view-training" class="hidden space-y-6"></section>
+      <section id="view-presets" class="hidden space-y-6"></section>
+      <section id="view-activity" class="hidden space-y-6"></section>
+      <section id="view-charter" class="hidden space-y-6"></section>
+
+      <footer class="mt-12 py-6 border-t border-white/10 text-xs text-white/30 flex flex-wrap gap-3 justify-between">
+        <span>Harmonia Universal Control Charter · 20 paramètres</span>
+        <span class="mono" id="versionTag">build · live</span>
+      </footer>
+    </main>
+  </div>
 
   <script>
-    const fallbackLatest = {
-      timestamp: "2026-04-30T12:00:00Z",
-      model_version: "model_20260430_1200",
-      model_hash: "demo-hash",
-      metrics: {
-        loss: 0.0284,
-        mse: 0.0312,
-        mae: 0.1128,
-        continuous_mse: 0.0211,
-        binary_bce: 0.0073,
-        per_param_mse: {
-          Cutoff: 0.024,
-          Resonance: 0.041,
-          Attack: 0.019,
-          Decay: 0.028,
-          Release: 0.035,
-          Volume: 0.021
-        }
-      },
-      loss_history: [0.21, 0.17, 0.14, 0.11, 0.09, 0.07, 0.05, 0.04, 0.03, 0.028]
+    const STATE = {
+      view: 'overview',
+      summary: null,
+      models: [],
+      history: [],
+      presets: [],
+      events: [],
+      activeModel: null,
+      activeEvent: null,
+      apiMode: 'static',
     };
-    const fallbackHistory = [
-      { timestamp: "2026-04-24T16:00:00Z", model_version: "model_a", loss: 0.041, mse: 0.049 },
-      { timestamp: "2026-04-25T16:00:00Z", model_version: "model_b", loss: 0.035, mse: 0.041 },
-      { timestamp: "2026-04-30T12:00:00Z", model_version: "model_c", loss: 0.0284, mse: 0.0312 }
-    ];
 
-    const cardsEl = document.getElementById("cards");
-    const sourceLabelEl = document.getElementById("sourceLabel");
-    const rawJsonEl = document.getElementById("rawJson");
-    let historyChart = null;
-    let radarChart = null;
-
-    function extractMetrics(payload) {
-      if (payload && payload.metrics && typeof payload.metrics === "object") return payload.metrics;
-      if (payload && payload.latest_evaluation_report && payload.latest_evaluation_report.metrics) return payload.latest_evaluation_report.metrics;
-      if (payload && payload.latest_benchmark && payload.latest_benchmark.eval_metrics) return payload.latest_benchmark.eval_metrics;
-      return payload || {};
+    const charts = {};
+    const VIEWS = ['overview', 'models', 'training', 'presets', 'activity', 'charter'];
+    // Muted palette aligned with the dashboard accent colors (no rainbow).
+    const CHART_COLORS = {
+      primary: '#6b5cff',
+      secondary: '#38a3ff',
+      tertiary: '#c66bff',
+      warm: '#d9a04a',
+      good: '#4cc99f',
+      grid: 'rgba(140, 140, 175, 0.07)',
+      tick: '#9c9cb5',
+      tooltipBg: '#0a0a14',
+      tooltipBorder: '#2a2a3d',
+    };
+    function paletteForCount(n) {
+      const stops = [CHART_COLORS.primary, CHART_COLORS.secondary, CHART_COLORS.tertiary, CHART_COLORS.warm, CHART_COLORS.good];
+      const out = [];
+      for (let i = 0; i < n; i++) out.push(stops[i % stops.length]);
+      return out;
+    }
+    function withAlpha(hex, alpha) {
+      const m = hex.replace('#','');
+      const v = parseInt(m.length === 3 ? m.split('').map(c => c + c).join('') : m, 16);
+      return `rgba(${(v >> 16) & 255}, ${(v >> 8) & 255}, ${v & 255}, ${alpha})`;
     }
 
-    function formatNumber(value) {
-      if (typeof value !== "number" || Number.isNaN(value)) return "n/a";
-      return Math.abs(value) >= 1 ? value.toFixed(3) : value.toFixed(4);
-    }
+    const VIEW_TITLES = {
+      overview: { title: 'Overview', subtitle: 'État global du moteur d\'IA et des paramètres VST.' },
+      models: { title: 'Modèles', subtitle: 'Historique complet des entraînements et choix du modèle actif.' },
+      training: { title: 'Entraînement', subtitle: 'Loss, MSE, MAE par run, comparaison des modèles.' },
+      presets: { title: 'Presets générés', subtitle: 'Toutes les générations envoyées par l\'IA, prompt et 20 valeurs.' },
+      activity: { title: 'Activité', subtitle: 'Journal des commandes lancées sur le projet Harmonia.' },
+      charter: { title: 'Charte 20 paramètres', subtitle: 'Description officielle des 20 contrôles HARMONIA.' },
+    };
 
-    function flattenNumbers(obj, prefix = "") {
-      if (!obj || typeof obj !== "object") return [];
-      const items = [];
-      for (const [key, value] of Object.entries(obj)) {
-        const fullKey = prefix ? `${prefix}.${key}` : key;
-        if (typeof value === "number" && Number.isFinite(value)) {
-          items.push([fullKey, value]);
-        } else if (value && typeof value === "object" && !Array.isArray(value)) {
-          items.push(...flattenNumbers(value, fullKey));
+    async function fetchJson(url, fallbackUrl) {
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.json();
+      } catch (err) {
+        if (fallbackUrl) {
+          try {
+            const res = await fetch(fallbackUrl, { cache: 'no-store' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return await res.json();
+          } catch (_) {}
         }
+        return null;
       }
-      return items;
     }
 
-    function renderCards(metrics) {
-      cardsEl.innerHTML = "";
-      const items = [
-        ["Loss", metrics.loss ?? metrics.final_loss],
-        ["MSE", metrics.mse],
-        ["MAE", metrics.mae],
-        ["Continuous MSE", metrics.continuous_mse],
-        ["Binary BCE", metrics.binary_bce],
-        ["Samples", metrics.sample_count]
+    async function loadAll() {
+      document.getElementById('apiStatusDot').className = 'badge-dot bg-amber-300';
+      document.getElementById('apiStatusLabel').textContent = 'Connexion…';
+
+      const summary = await fetchJson('api.php?action=summary');
+      if (summary && summary.ok) {
+        STATE.summary = summary;
+        STATE.apiMode = 'api';
+      } else {
+        STATE.summary = await buildStaticSummary();
+        STATE.apiMode = 'static';
+      }
+
+      if (STATE.apiMode === 'api') {
+        const [models, history, presets, events] = await Promise.all([
+          fetchJson('api.php?action=models'),
+          fetchJson('api.php?action=history'),
+          fetchJson('api.php?action=presets&limit=500'),
+          fetchJson('api.php?action=index&limit=500'),
+        ]);
+        STATE.models = models?.models || [];
+        STATE.history = history?.history || [];
+        STATE.presets = presets?.presets || [];
+        STATE.events = events?.events || [];
+      } else {
+        const history = await fetchJson('history_metrics.json');
+        STATE.history = Array.isArray(history) ? history : [];
+        const presets = await fetchJson('presets.json');
+        STATE.presets = Array.isArray(presets) ? presets : [];
+        const events = await fetchJson('index.json');
+        STATE.events = Array.isArray(events) ? events : [];
+        const models = await fetchJson('models.json');
+        STATE.models = Array.isArray(models) ? models : extractModelsFromHistory(STATE.history);
+      }
+
+      document.getElementById('apiStatusDot').className =
+        STATE.apiMode === 'api' ? 'badge-dot bg-emerald-400' : 'badge-dot bg-amber-300';
+      document.getElementById('apiStatusLabel').textContent =
+        STATE.apiMode === 'api' ? 'Connecté à api.php' : 'Mode fichiers statiques';
+      document.getElementById('apiPathLabel').textContent = STATE.apiMode === 'api' ? 'api.php' : 'JSON local';
+      document.getElementById('lastSync').textContent = new Date().toLocaleString();
+
+      render();
+    }
+
+    async function buildStaticSummary() {
+      const latest = await fetchJson('latest_metrics.json');
+      return { ok: !!latest, latest_training_payload: latest, counts: {} };
+    }
+
+    function extractModelsFromHistory(history) {
+      const seen = {};
+      for (const entry of history) {
+        const v = entry?.model_version;
+        if (!v) continue;
+        if (!seen[v]) seen[v] = { model_version: v, training_count: 0, generation_count: 0, last_seen_at: entry.timestamp };
+        seen[v].training_count += 1;
+        seen[v].last_loss = entry.loss ?? seen[v].last_loss;
+        seen[v].last_mse = entry.mse ?? seen[v].last_mse;
+        seen[v].last_mae = entry.mae ?? seen[v].last_mae;
+        seen[v].last_seen_at = entry.timestamp || seen[v].last_seen_at;
+      }
+      return Object.values(seen);
+    }
+
+    function formatNumber(value, digits = 4) {
+      if (value === null || value === undefined || Number.isNaN(+value)) return '—';
+      const num = Number(value);
+      if (Math.abs(num) >= 100) return num.toFixed(2);
+      if (Math.abs(num) >= 1) return num.toFixed(3);
+      return num.toFixed(digits);
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '—';
+      try {
+        const d = new Date(iso);
+        if (Number.isNaN(d.valueOf())) return iso;
+        return d.toLocaleString();
+      } catch { return iso; }
+    }
+
+    function setView(view, options = {}) {
+      if (!VIEWS.includes(view)) view = 'overview';
+      STATE.view = view;
+      if ('model' in options) STATE.activeModel = options.model;
+      if ('event' in options) STATE.activeEvent = options.event;
+      const hash = STATE.activeEvent ? `#event/${STATE.activeEvent}` :
+                   STATE.activeModel ? `#${view}/${encodeURIComponent(STATE.activeModel)}` :
+                   `#${view}`;
+      if (window.location.hash !== hash) {
+        history.pushState(null, '', hash);
+      }
+      render();
+    }
+
+    function destroyChart(id) {
+      if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    }
+
+    function renderNav() {
+      document.querySelectorAll('#navMenu .nav-link').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.view === STATE.view);
+      });
+      document.getElementById('navMenuMobile').value = STATE.view;
+      const meta = VIEW_TITLES[STATE.view] || VIEW_TITLES.overview;
+      document.getElementById('viewTitle').textContent = meta.title;
+      document.getElementById('viewSubtitle').textContent = meta.subtitle;
+    }
+
+    function showOnly(view) {
+      VIEWS.forEach((v) => {
+        const el = document.getElementById('view-' + v);
+        if (!el) return;
+        if (v === view) {
+          el.classList.remove('hidden');
+          el.classList.add('fade-enter');
+          setTimeout(() => el.classList.remove('fade-enter'), 300);
+        } else {
+          el.classList.add('hidden');
+        }
+      });
+    }
+
+    function metricsFromLatest() {
+      const payload = STATE.summary?.latest_training_payload;
+      if (!payload) return {};
+      if (payload.metrics) return payload.metrics;
+      if (payload.latest_evaluation_report?.metrics) return payload.latest_evaluation_report.metrics;
+      return {};
+    }
+
+    function renderOverview() {
+      const section = document.getElementById('view-overview');
+      const metrics = metricsFromLatest();
+      const counts = STATE.summary?.counts || {};
+      const lastTraining = STATE.summary?.latest_training_summary || STATE.events.find(e => e.kind === 'training');
+      const lastGeneration = STATE.summary?.latest_generation_summary || STATE.events.find(e => e.kind === 'generation');
+      const activeModelVersion = lastTraining?.model_version || STATE.models[0]?.model_version || '—';
+
+      const cards = [
+        { label: 'Loss', value: formatNumber(metrics.loss ?? metrics.final_loss), accent: 'pink' },
+        { label: 'MSE', value: formatNumber(metrics.mse), accent: 'purple' },
+        { label: 'MAE', value: formatNumber(metrics.mae), accent: 'cyan' },
+        { label: 'Continuous MSE', value: formatNumber(metrics.continuous_mse), accent: 'amber' },
+        { label: 'Binary BCE', value: formatNumber(metrics.binary_bce), accent: 'green' },
+        { label: 'Samples', value: metrics.sample_count ?? '—', accent: 'purple' },
       ];
 
-      for (const [label, value] of items) {
-        const card = document.createElement("article");
-        card.className = "bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg";
-        card.innerHTML = `
-          <p class="text-slate-400 text-sm">${label}</p>
-          <p class="text-2xl font-bold mt-1">${formatNumber(value)}</p>
-        `;
-        cardsEl.appendChild(card);
-      }
+      section.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="glass rounded-2xl p-5 stat-card">
+            <p class="text-xs uppercase tracking-[0.25em] text-white/40">Modèle actif</p>
+            <p class="mt-2 text-xl font-semibold mono">${activeModelVersion}</p>
+            <p class="text-xs text-white/40 mt-2">Dernière mise à jour: ${formatDate(lastTraining?.timestamp)}</p>
+            <button class="mt-3 pill pill-purple clickable" data-action="open-model" data-model="${activeModelVersion}">Voir le modèle →</button>
+          </div>
+          <div class="glass rounded-2xl p-5 stat-card">
+            <p class="text-xs uppercase tracking-[0.25em] text-white/40">Activité</p>
+            <p class="mt-2 text-xl font-semibold">${counts.events ?? STATE.events.length} évènements</p>
+            <div class="flex gap-2 mt-3 text-xs flex-wrap">
+              <span class="pill pill-pink">${counts.training ?? STATE.history.length} trainings</span>
+              <span class="pill pill-cyan">${counts.generations ?? STATE.presets.length} générations</span>
+              <span class="pill pill-purple">${counts.models ?? STATE.models.length} modèles</span>
+            </div>
+          </div>
+          <div class="glass rounded-2xl p-5 stat-card">
+            <p class="text-xs uppercase tracking-[0.25em] text-white/40">Dernière génération</p>
+            <p class="mt-2 text-base">${lastGeneration?.prompt ? `"${lastGeneration.prompt}"` : '—'}</p>
+            <p class="text-xs text-white/40 mt-2">${formatDate(lastGeneration?.timestamp)} · ${lastGeneration?.model_version ?? ''}</p>
+            ${lastGeneration?.file ? `<button class="mt-3 pill pill-cyan clickable" data-action="open-event" data-file="${lastGeneration.file}">Voir le preset →</button>` : ''}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          ${cards.map((c, i) => `
+            <div class="glass rounded-xl p-4 stat-card">
+              <p class="text-[0.7rem] uppercase tracking-[0.2em] text-white/40">${c.label}</p>
+              <p class="text-2xl font-bold mt-1 mono">${c.value}</p>
+              <div class="meter mt-2"><div style="width: ${Math.min(100, (i + 1) * 14)}%"></div></div>
+            </div>`).join('')}
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <div class="glass rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <p class="text-xs uppercase tracking-[0.25em] text-white/40">Évolution de la loss</p>
+                <h2 class="text-xl font-semibold">Tous les entraînements</h2>
+              </div>
+              <span class="pill pill-purple">${STATE.history.length} runs</span>
+            </div>
+            <div class="h-[320px]"><canvas id="lossHistoryChart"></canvas></div>
+          </div>
+
+          <div class="glass rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <p class="text-xs uppercase tracking-[0.25em] text-white/40">Erreur par paramètre</p>
+                <h2 class="text-xl font-semibold">MAE par paramètre · dernier modèle</h2>
+              </div>
+              <span class="pill pill-cyan">${Object.keys(metrics.per_param_mae || metrics.per_param_mse || {}).length} params</span>
+            </div>
+            <div class="h-[320px]"><canvas id="perParamChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="glass rounded-2xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <p class="text-xs uppercase tracking-[0.25em] text-white/40">Dernières activités</p>
+              <h2 class="text-xl font-semibold">Flux temps réel</h2>
+            </div>
+            <button class="text-xs underline text-white/60 hover:text-white" data-action="goto-activity">Voir tout →</button>
+          </div>
+          <ul class="space-y-2">
+            ${STATE.events.slice(0, 6).map(eventRow).join('') || '<p class="text-white/40">Aucun évènement pour l\'instant.</p>'}
+          </ul>
+        </div>
+      `;
+
+      drawLossHistory('lossHistoryChart');
+      drawPerParam('perParamChart', metrics);
+      bindOverviewActions();
     }
 
-    function renderHistoryChart(history) {
-      const ctx = document.getElementById("historyChart");
-      if (historyChart) historyChart.destroy();
-      const labels = history.map((row) => row.model_version || (row.timestamp || "").slice(0, 10));
-      const lossSeries = history.map((row) => Number(row.loss ?? row.final_loss ?? row?.metrics?.loss ?? row?.metrics?.final_loss ?? NaN));
-      const mseSeries = history.map((row) => Number(row.mse ?? row?.metrics?.mse ?? NaN));
-      historyChart = new Chart(ctx, {
-        type: "line",
+    function eventRow(event) {
+      const color = event.kind === 'training' ? 'pill-pink' :
+                    event.kind === 'generation' ? 'pill-cyan' :
+                    event.kind === 'system' ? 'pill-amber' :
+                    event.kind === 'dataset' ? 'pill-green' : 'pill-purple';
+      const detail = event.prompt ? `"${event.prompt}"` :
+                     event.loss !== null && event.loss !== undefined ? `loss ${formatNumber(event.loss)}` :
+                     event.command ? event.command : '';
+      return `
+        <li class="flex items-center justify-between gap-3 py-2 border-b border-white/5 last:border-b-0 clickable rounded-lg px-2" data-action="open-event" data-file="${event.file || ''}">
+          <div class="flex items-center gap-3">
+            <span class="pill ${color}">${event.kind || 'event'}</span>
+            <span class="font-medium">${event.model_version || '—'}</span>
+            <span class="text-white/50 text-sm">${detail}</span>
+          </div>
+          <span class="text-xs text-white/40 mono">${formatDate(event.timestamp || event.received_at)}</span>
+        </li>`;
+    }
+
+    function bindOverviewActions() {
+      document.querySelectorAll('[data-action="open-model"]').forEach((el) => {
+        el.addEventListener('click', () => setView('models', { model: el.dataset.model }));
+      });
+      document.querySelectorAll('[data-action="open-event"]').forEach((el) => {
+        el.addEventListener('click', () => {
+          if (el.dataset.file) {
+            showEventDetail(el.dataset.file);
+          }
+        });
+      });
+      document.querySelectorAll('[data-action="goto-activity"]').forEach((el) => {
+        el.addEventListener('click', () => setView('activity'));
+      });
+    }
+
+    function gradientBackground(canvas, color) {
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.offsetHeight || 300);
+      gradient.addColorStop(0, withAlpha(color, 0.32));
+      gradient.addColorStop(1, withAlpha(color, 0));
+      return gradient;
+    }
+
+    function drawLossHistory(canvasId) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      destroyChart(canvasId);
+      const data = STATE.history.length ? STATE.history : (STATE.summary?.latest_training_payload ? [STATE.summary.latest_training_payload] : []);
+      const labels = data.map((row) => row.model_version || (row.timestamp || '').slice(0, 10));
+      const losses = data.map((row) => Number(row.loss ?? row.final_loss ?? row?.metrics?.loss ?? row?.metrics?.final_loss ?? NaN));
+      const mses = data.map((row) => Number(row.mse ?? row?.metrics?.mse ?? NaN));
+      charts[canvasId] = new Chart(canvas, {
+        type: 'line',
         data: {
           labels,
           datasets: [
             {
-              label: "Loss globale",
-              data: lossSeries,
-              borderColor: "#60a5fa",
-              backgroundColor: "rgba(96,165,250,0.12)",
+              label: 'Loss',
+              data: losses,
+              borderColor: CHART_COLORS.primary,
+              backgroundColor: gradientBackground(canvas, CHART_COLORS.primary),
+              fill: true,
               tension: 0.3,
-              fill: false,
+              pointBackgroundColor: CHART_COLORS.primary,
+              pointRadius: 2.5,
             },
             {
-              label: "MSE globale",
-              data: mseSeries,
-              borderColor: "#a78bfa",
-              backgroundColor: "rgba(167,139,250,0.12)",
+              label: 'MSE',
+              data: mses,
+              borderColor: CHART_COLORS.secondary,
+              backgroundColor: gradientBackground(canvas, CHART_COLORS.secondary),
+              fill: true,
               tension: 0.3,
-              fill: false,
+              pointBackgroundColor: CHART_COLORS.secondary,
+              pointRadius: 2.5,
             },
           ],
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { labels: { color: "#e2e8f0" } } },
-          scales: {
-            x: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,0.12)" } },
-            y: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,0.12)" } },
-          },
-        },
+        options: lineChartOptions(),
       });
     }
 
-    function renderRadarChart(metrics) {
-      const perParam = metrics.per_param_mse && typeof metrics.per_param_mse === "object" ? metrics.per_param_mse : null;
-      const ctx = document.getElementById("radarChart");
-      if (radarChart) radarChart.destroy();
-      if (!perParam || !Object.keys(perParam).length) {
-        ctx.parentElement.innerHTML = '<p class="text-slate-400">Aucune métrique par paramètre disponible.</p>';
+    function lineChartOptions() {
+      return {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: CHART_COLORS.tick } },
+          tooltip: { backgroundColor: CHART_COLORS.tooltipBg, borderColor: CHART_COLORS.tooltipBorder, borderWidth: 1, padding: 10 },
+        },
+        scales: {
+          x: { ticks: { color: CHART_COLORS.tick, autoSkip: true, maxTicksLimit: 12 }, grid: { color: CHART_COLORS.grid } },
+          y: { ticks: { color: CHART_COLORS.tick }, grid: { color: CHART_COLORS.grid } },
+        },
+      };
+    }
+
+    function drawPerParam(canvasId, metrics) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      destroyChart(canvasId);
+      const source = metrics.per_param_mae || metrics.per_param_mse || {};
+      const labels = Object.keys(source);
+      const values = labels.map((k) => Number(source[k]));
+      if (!labels.length) {
+        canvas.parentElement.innerHTML = '<p class="text-white/40">Aucune métrique par paramètre disponible.</p>';
         return;
       }
+      const palette = paletteForCount(labels.length);
+      charts[canvasId] = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Erreur',
+            data: values,
+            backgroundColor: palette.map((c) => withAlpha(c, 0.38)),
+            borderColor: palette.map((c) => withAlpha(c, 0.8)),
+            borderWidth: 1,
+            borderRadius: 4,
+          }],
+        },
+        options: {
+          ...lineChartOptions(),
+          plugins: { legend: { display: false }, tooltip: { backgroundColor: CHART_COLORS.tooltipBg, borderColor: CHART_COLORS.tooltipBorder, borderWidth: 1, padding: 10 } },
+        },
+      });
+    }
 
-      const labels = Object.keys(perParam);
-      const values = labels.map((key) => Number(perParam[key] ?? 0));
-      radarChart = new Chart(ctx, {
-        type: "radar",
+    function renderModels() {
+      const section = document.getElementById('view-models');
+      const models = STATE.models.slice().sort((a, b) => String(b.last_seen_at || '').localeCompare(String(a.last_seen_at || '')));
+
+      const active = STATE.activeModel && models.find(m => m.model_version === STATE.activeModel);
+
+      const grid = `
+        <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          ${models.length ? models.map((m) => modelCard(m)).join('') : '<p class="text-white/40">Aucun modèle référencé pour l\'instant.</p>'}
+        </div>`;
+
+      const detail = active ? modelDetailPanel(active) : '';
+
+      section.innerHTML = `${grid}${detail}`;
+
+      section.querySelectorAll('[data-action="open-model"]').forEach((el) => {
+        el.addEventListener('click', () => setView('models', { model: el.dataset.model }));
+      });
+      section.querySelectorAll('[data-action="open-event"]').forEach((el) => {
+        el.addEventListener('click', () => showEventDetail(el.dataset.file));
+      });
+
+      if (active) drawModelLossChart('modelLossChart', active.model_version);
+      if (active) drawModelParamChart('modelParamChart', active.model_version);
+    }
+
+    function modelCard(model) {
+      const isActive = STATE.activeModel === model.model_version;
+      return `
+        <article class="glass rounded-2xl p-5 stat-card clickable ${isActive ? 'border-pink-400/50' : ''}" data-action="open-model" data-model="${model.model_version}">
+          <div class="flex items-center justify-between gap-3">
+            <p class="mono text-lg font-semibold">${model.model_version}</p>
+            <span class="pill ${isActive ? 'pill-pink' : 'pill-purple'}">${isActive ? 'sélectionné' : (model.training_count || 0) + ' runs'}</span>
+          </div>
+          <p class="text-xs text-white/40 mt-2">Dernier signal · ${formatDate(model.last_seen_at)}</p>
+          <div class="grid grid-cols-3 gap-3 mt-4 text-center">
+            <div><p class="text-[0.6rem] uppercase tracking-widest text-white/40">Loss</p><p class="mono font-semibold">${formatNumber(model.last_loss)}</p></div>
+            <div><p class="text-[0.6rem] uppercase tracking-widest text-white/40">MSE</p><p class="mono font-semibold">${formatNumber(model.last_mse)}</p></div>
+            <div><p class="text-[0.6rem] uppercase tracking-widest text-white/40">MAE</p><p class="mono font-semibold">${formatNumber(model.last_mae)}</p></div>
+          </div>
+          <div class="flex gap-2 mt-4 text-xs flex-wrap">
+            <span class="pill pill-purple">${model.training_count || 0} trainings</span>
+            <span class="pill pill-cyan">${model.generation_count || 0} générations</span>
+          </div>
+        </article>`;
+    }
+
+    function modelDetailPanel(model) {
+      const trainings = STATE.history.filter(h => h.model_version === model.model_version);
+      const presets = STATE.presets.filter(p => p.model_version === model.model_version);
+      return `
+        <article class="glass rounded-2xl p-6 mt-6">
+          <div class="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-white/40">Détail du modèle</p>
+              <h2 class="mono text-2xl font-bold">${model.model_version}</h2>
+              <p class="text-xs text-white/50 mt-2 mono">${model.model_hash || ''}</p>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <span class="pill pill-pink">${trainings.length} trainings</span>
+              <span class="pill pill-cyan">${presets.length} générations</span>
+              <span class="pill pill-amber">${formatDate(model.last_seen_at)}</span>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-white/40 mb-2">Loss au fil des runs</p>
+              <div class="h-[300px]"><canvas id="modelLossChart"></canvas></div>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-white/40 mb-2">Erreur par paramètre · dernier run</p>
+              <div class="h-[300px]"><canvas id="modelParamChart"></canvas></div>
+            </div>
+          </div>
+          <div class="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-white/40 mb-2">Trainings</p>
+              <ul class="scroll-cap space-y-2">
+                ${trainings.slice().reverse().slice(0, 30).map((t) => `
+                  <li class="glass rounded-xl p-3 text-sm flex items-center justify-between clickable" data-action="open-event" data-file="${t.event_file || ''}">
+                    <span class="mono text-white/80">${formatDate(t.timestamp)}</span>
+                    <span class="text-white/60">loss ${formatNumber(t.loss)} · MSE ${formatNumber(t.mse)}</span>
+                  </li>`).join('') || '<p class="text-white/40 text-sm">Aucun training enregistré.</p>'}
+              </ul>
+            </div>
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-white/40 mb-2">Presets générés</p>
+              <ul class="scroll-cap space-y-2">
+                ${presets.slice().reverse().slice(0, 30).map((p) => `
+                  <li class="glass rounded-xl p-3 text-sm clickable" data-action="open-event" data-file="${p.file || ''}">
+                    <p class="mono text-white/80 truncate">"${p.prompt || p.preset_name || '—'}"</p>
+                    <p class="text-xs text-white/40 mt-1">${formatDate(p.timestamp)}</p>
+                  </li>`).join('') || '<p class="text-white/40 text-sm">Aucune génération.</p>'}
+              </ul>
+            </div>
+          </div>
+        </article>`;
+    }
+
+    function drawModelLossChart(canvasId, modelVersion) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      destroyChart(canvasId);
+      const runs = STATE.history.filter(h => h.model_version === modelVersion);
+      const labels = runs.map((r, i) => `run ${i + 1}`);
+      charts[canvasId] = new Chart(canvas, {
+        type: 'line',
         data: {
           labels,
           datasets: [
-            {
-              label: "MSE par paramètre",
-              data: values,
-              backgroundColor: "rgba(34,197,94,0.18)",
-              borderColor: "#22c55e",
-              pointBackgroundColor: "#22c55e",
-            },
+            { label: 'Loss', data: runs.map(r => Number(r.loss ?? r.final_loss ?? NaN)), borderColor: CHART_COLORS.primary, backgroundColor: gradientBackground(canvas, CHART_COLORS.primary), fill: true, tension: 0.3 },
+            { label: 'MSE', data: runs.map(r => Number(r.mse ?? NaN)), borderColor: CHART_COLORS.secondary, backgroundColor: gradientBackground(canvas, CHART_COLORS.secondary), fill: true, tension: 0.3 },
           ],
+        },
+        options: lineChartOptions(),
+      });
+    }
+
+    function drawModelParamChart(canvasId, modelVersion) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      destroyChart(canvasId);
+      const runs = STATE.history.filter(h => h.model_version === modelVersion);
+      const latest = runs[runs.length - 1];
+      const source = latest?.metrics?.per_param_mae || latest?.metrics?.per_param_mse || {};
+      const labels = Object.keys(source);
+      if (!labels.length) {
+        canvas.parentElement.innerHTML = '<p class="text-white/40 text-sm">Aucune métrique par paramètre.</p>';
+        return;
+      }
+      charts[canvasId] = new Chart(canvas, {
+        type: 'radar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Erreur',
+            data: labels.map((k) => Number(source[k])),
+            backgroundColor: withAlpha(CHART_COLORS.primary, 0.16),
+            borderColor: CHART_COLORS.primary,
+            pointBackgroundColor: CHART_COLORS.secondary,
+            borderWidth: 1.5,
+          }],
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { labels: { color: "#e2e8f0" } } },
+          plugins: { legend: { labels: { color: CHART_COLORS.tick } } },
           scales: {
             r: {
-              angleLines: { color: "rgba(148,163,184,0.2)" },
-              grid: { color: "rgba(148,163,184,0.15)" },
-              pointLabels: { color: "#e2e8f0" },
-              ticks: { color: "#94a3b8" },
+              angleLines: { color: CHART_COLORS.grid },
+              grid: { color: CHART_COLORS.grid },
+              pointLabels: { color: CHART_COLORS.tick, font: { size: 10 } },
+              ticks: { color: CHART_COLORS.tick, backdropColor: 'transparent' },
             },
           },
         },
       });
     }
 
-    async function loadMetrics() {
-      let latest = fallbackLatest;
-      let history = fallbackHistory;
-      let source = "Données simulées";
+    function renderTraining() {
+      const section = document.getElementById('view-training');
+      const allModels = Array.from(new Set(STATE.history.map(h => h.model_version).filter(Boolean)));
+      section.innerHTML = `
+        <div class="glass rounded-2xl p-5">
+          <div class="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-white/40">Toutes les runs</p>
+              <h2 class="text-xl font-semibold">Comparaison Loss / MSE</h2>
+            </div>
+            <div class="flex items-center gap-2">
+              <select id="trainingModelFilter" class="bg-black/30 border border-white/15 rounded-lg px-3 py-2 text-sm">
+                <option value="">Tous les modèles</option>
+                ${allModels.map(m => `<option value="${m}">${m}</option>`).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="h-[420px] mt-4"><canvas id="trainingChart"></canvas></div>
+        </div>
 
-      try {
-        const res = await fetch(`latest_metrics.json?ts=${Date.now()}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        latest = await res.json();
-        source = "latest_metrics.json";
-      } catch (_) {}
+        <div class="glass rounded-2xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-xs uppercase tracking-[0.3em] text-white/40">Historique détaillé</p>
+            <span class="pill pill-purple">${STATE.history.length} entrées</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="text-left text-white/40 uppercase text-[0.65rem] tracking-widest">
+                <tr><th class="py-2 pr-3">Date</th><th class="py-2 pr-3">Modèle</th><th class="py-2 pr-3">Loss</th><th class="py-2 pr-3">MSE</th><th class="py-2 pr-3">MAE</th><th class="py-2 pr-3"></th></tr>
+              </thead>
+              <tbody id="trainingTableBody">
+                ${STATE.history.slice().reverse().map(h => `
+                  <tr class="border-t border-white/5 hover:bg-white/5 transition-colors">
+                    <td class="py-2 pr-3 mono text-white/70">${formatDate(h.timestamp)}</td>
+                    <td class="py-2 pr-3"><button class="underline decoration-dotted text-white" data-action="open-model" data-model="${h.model_version}">${h.model_version}</button></td>
+                    <td class="py-2 pr-3 mono">${formatNumber(h.loss)}</td>
+                    <td class="py-2 pr-3 mono">${formatNumber(h.mse)}</td>
+                    <td class="py-2 pr-3 mono">${formatNumber(h.mae)}</td>
+                    <td class="py-2 pr-3 text-right"><button class="pill pill-cyan clickable" data-action="open-event" data-file="${h.event_file || ''}">Voir →</button></td>
+                  </tr>`).join('') || `<tr><td class="py-3 text-white/40" colspan="6">Aucune entrée.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
 
-      try {
-        const res = await fetch(`history_metrics.json?ts=${Date.now()}`, { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        history = await res.json();
-      } catch (_) {}
-
-      const metrics = extractMetrics(latest);
-      sourceLabelEl.textContent = `Source: ${source}`;
-      renderCards(metrics);
-      renderHistoryChart(Array.isArray(history) ? history : []);
-      renderRadarChart(metrics);
-      rawJsonEl.textContent = JSON.stringify(latest, null, 2);
+      drawTrainingChart(null);
+      document.getElementById('trainingModelFilter').addEventListener('change', (e) => {
+        drawTrainingChart(e.target.value || null);
+      });
+      section.querySelectorAll('[data-action="open-model"]').forEach((el) => {
+        el.addEventListener('click', () => setView('models', { model: el.dataset.model }));
+      });
+      section.querySelectorAll('[data-action="open-event"]').forEach((el) => {
+        el.addEventListener('click', () => showEventDetail(el.dataset.file));
+      });
     }
 
-    loadMetrics();
+    function drawTrainingChart(filterModel) {
+      const canvas = document.getElementById('trainingChart');
+      if (!canvas) return;
+      destroyChart('trainingChart');
+      const runs = filterModel ? STATE.history.filter(r => r.model_version === filterModel) : STATE.history;
+      const labels = runs.map((r) => r.timestamp ? r.timestamp.slice(0, 16).replace('T', ' ') : '');
+      charts.trainingChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Loss', data: runs.map(r => Number(r.loss ?? r.final_loss ?? NaN)), borderColor: CHART_COLORS.primary, backgroundColor: gradientBackground(canvas, CHART_COLORS.primary), fill: true, tension: 0.3 },
+            { label: 'MSE', data: runs.map(r => Number(r.mse ?? NaN)), borderColor: CHART_COLORS.secondary, backgroundColor: gradientBackground(canvas, CHART_COLORS.secondary), fill: true, tension: 0.3 },
+            { label: 'MAE', data: runs.map(r => Number(r.mae ?? NaN)), borderColor: CHART_COLORS.tertiary, backgroundColor: 'transparent', fill: false, tension: 0.3, borderDash: [4, 4] },
+          ],
+        },
+        options: lineChartOptions(),
+      });
+    }
+
+    function renderPresets() {
+      const section = document.getElementById('view-presets');
+      const models = Array.from(new Set(STATE.presets.map(p => p.model_version).filter(Boolean)));
+      section.innerHTML = `
+        <div class="glass rounded-2xl p-5">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-white/40">Catalogue</p>
+              <h2 class="text-xl font-semibold">Presets générés (${STATE.presets.length})</h2>
+            </div>
+            <div class="flex gap-2 items-center flex-wrap">
+              <select id="presetModelFilter" class="bg-black/30 border border-white/15 rounded-lg px-3 py-2 text-sm">
+                <option value="">Tous les modèles</option>
+                ${models.map(m => `<option value="${m}">${m}</option>`).join('')}
+              </select>
+              <input id="presetSearch" type="search" placeholder="Recherche par prompt…" class="bg-black/30 border border-white/15 rounded-lg px-3 py-2 text-sm w-64">
+            </div>
+          </div>
+          <div id="presetGrid" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+        </div>
+      `;
+      const filterEl = document.getElementById('presetModelFilter');
+      const searchEl = document.getElementById('presetSearch');
+      const apply = () => renderPresetGrid(filterEl.value, searchEl.value);
+      filterEl.addEventListener('change', apply);
+      searchEl.addEventListener('input', apply);
+      apply();
+    }
+
+    function renderPresetGrid(filterModel, search) {
+      const grid = document.getElementById('presetGrid');
+      if (!grid) return;
+      const needle = (search || '').toLowerCase().trim();
+      const items = STATE.presets.filter((p) => {
+        if (filterModel && p.model_version !== filterModel) return false;
+        if (needle && !(String(p.prompt || '').toLowerCase().includes(needle))) return false;
+        return true;
+      }).slice().reverse();
+
+      if (!items.length) {
+        grid.innerHTML = '<p class="text-white/40 col-span-full">Aucun preset trouvé.</p>';
+        return;
+      }
+      grid.innerHTML = items.slice(0, 60).map((p) => presetCard(p)).join('');
+      grid.querySelectorAll('[data-action="open-event"]').forEach((el) => {
+        el.addEventListener('click', () => showEventDetail(el.dataset.file));
+      });
+    }
+
+    function presetCard(preset) {
+      const values = Array.isArray(preset.values) ? preset.values : null;
+      const sparkline = values ? values.map((v, i) => {
+        const h = Math.max(2, Math.round(Number(v || 0) * 100));
+        // Two-tone bars: alternating muted indigo + steel blue keeps it calm.
+        const color = (i % 2 === 0) ? CHART_COLORS.primary : CHART_COLORS.secondary;
+        return `<span style="height:${h}%; background:${withAlpha(color, 0.75)};" class="w-1.5 rounded-sm inline-block"></span>`;
+      }).join('') : '';
+      return `
+        <article class="glass rounded-2xl p-4 stat-card clickable" data-action="open-event" data-file="${preset.file || ''}">
+          <div class="flex items-center justify-between gap-3 mb-2">
+            <p class="mono text-sm truncate">"${preset.prompt || preset.preset_name || '—'}"</p>
+            <span class="pill pill-cyan">${preset.model_version || '—'}</span>
+          </div>
+          <p class="text-xs text-white/40">${formatDate(preset.timestamp || preset.received_at)}</p>
+          ${values ? `<div class="flex items-end gap-1 h-16 mt-3">${sparkline}</div>` : '<p class="text-xs text-white/40 mt-3">Pas de vecteur 20 paramètres.</p>'}
+        </article>`;
+    }
+
+    function renderActivity() {
+      const section = document.getElementById('view-activity');
+      section.innerHTML = `
+        <div class="glass rounded-2xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-white/40">Journal global</p>
+              <h2 class="text-xl font-semibold">Tous les évènements (${STATE.events.length})</h2>
+            </div>
+            <div class="flex gap-2">
+              <select id="activityKindFilter" class="bg-black/30 border border-white/15 rounded-lg px-3 py-2 text-sm">
+                <option value="">Toutes catégories</option>
+                <option value="training">Training</option>
+                <option value="generation">Génération</option>
+                <option value="command">Commande</option>
+                <option value="system">System</option>
+                <option value="dataset">Dataset</option>
+              </select>
+            </div>
+          </div>
+          <ul id="activityList" class="space-y-2"></ul>
+        </div>
+      `;
+      const filterEl = document.getElementById('activityKindFilter');
+      const apply = () => {
+        const items = STATE.events.filter(e => !filterEl.value || e.kind === filterEl.value);
+        document.getElementById('activityList').innerHTML = items.slice(0, 200).map(eventRow).join('') || '<p class="text-white/40">Aucun évènement.</p>';
+        section.querySelectorAll('[data-action="open-event"]').forEach((el) => {
+          el.addEventListener('click', () => showEventDetail(el.dataset.file));
+        });
+      };
+      filterEl.addEventListener('change', apply);
+      apply();
+    }
+
+    function renderCharter() {
+      const section = document.getElementById('view-charter');
+      const charter = STATE.summary?.latest_training_payload?.charter || [];
+      const fallback = [
+        ['P1', 'osc_1_waveform'], ['P2', 'osc_2_waveform'], ['P3', 'osc_mix'], ['P4', 'osc_2_detune'],
+        ['P5', 'noise_level'], ['P6', 'filter_cutoff'], ['P7', 'filter_resonance'], ['P8', 'filter_type'],
+        ['P9', 'amp_attack'], ['P10', 'amp_decay'], ['P11', 'amp_sustain'], ['P12', 'amp_release'],
+        ['P13', 'filter_env_amount'], ['P14', 'filter_env_decay'], ['P15', 'lfo_rate'], ['P16', 'lfo_to_pitch'],
+        ['P17', 'lfo_to_cutoff'], ['P18', 'velocity_to_filter'], ['P19', 'distortion_mix'], ['P20', 'reverb_mix'],
+      ];
+      const rows = charter.length ? charter : fallback.map(([pid, name]) => ({ id: pid, name, section: '—', kind: '—', mapping: '—', role: '' }));
+      section.innerHTML = `
+        <div class="glass rounded-2xl p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-white/40">Charte Universelle de Contrôle</p>
+              <h2 class="text-xl font-semibold">20 paramètres HARMONIA</h2>
+            </div>
+            <span class="pill pill-purple">v1.0</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="text-left text-white/40 uppercase text-[0.65rem] tracking-widest">
+                <tr><th class="py-2 pr-3">ID</th><th class="py-2 pr-3">Nom</th><th class="py-2 pr-3">Section</th><th class="py-2 pr-3">Type</th><th class="py-2 pr-3">Mapping</th><th class="py-2 pr-3">Range</th><th class="py-2 pr-3">Rôle</th></tr>
+              </thead>
+              <tbody>
+                ${rows.map((r) => `
+                  <tr class="border-t border-white/5">
+                    <td class="py-2 pr-3 mono text-white/70">${r.id || ''}</td>
+                    <td class="py-2 pr-3 mono">${r.name || ''}</td>
+                    <td class="py-2 pr-3">${r.section || ''}</td>
+                    <td class="py-2 pr-3">${r.kind || ''}</td>
+                    <td class="py-2 pr-3">${r.mapping || ''}</td>
+                    <td class="py-2 pr-3 mono">${r.range_min !== undefined ? `${r.range_min} → ${r.range_max} ${r.unit || ''}` : ''}</td>
+                    <td class="py-2 pr-3 text-white/60">${r.role || ''}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    async function showEventDetail(file) {
+      if (!file) return;
+      let payload = null;
+      if (STATE.apiMode === 'api') {
+        const res = await fetchJson(`api.php?action=event&file=${encodeURIComponent(file)}`);
+        payload = res?.event;
+      }
+      if (!payload) {
+        payload = await fetchJson(file);
+      }
+      if (!payload) return;
+      const overlay = document.createElement('div');
+      overlay.className = 'fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6';
+      overlay.innerHTML = `
+        <article class="glass rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto p-6">
+          <div class="flex items-center justify-between mb-4">
+            <p class="text-xs uppercase tracking-[0.3em] text-white/40">Évènement</p>
+            <button class="pill pill-pink clickable" id="closeOverlay">Fermer ✕</button>
+          </div>
+          <h3 class="mono text-lg font-semibold mb-2 break-all">${payload.preset_name || payload.command || payload.model_version || 'Évènement'}</h3>
+          <p class="text-xs text-white/40 mb-4">${formatDate(payload.timestamp)}</p>
+          ${payload.values ? `<div class="h-40 mb-4"><canvas id="overlayChart"></canvas></div>` : ''}
+          <pre class="text-xs bg-black/40 border border-white/10 rounded-lg p-3 overflow-auto mono">${JSON.stringify(payload, null, 2)}</pre>
+        </article>
+      `;
+      document.body.appendChild(overlay);
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) document.body.removeChild(overlay); });
+      document.getElementById('closeOverlay').addEventListener('click', () => document.body.removeChild(overlay));
+      if (payload.values) {
+        const canvas = overlay.querySelector('#overlayChart');
+        const palette = paletteForCount(payload.values.length);
+        new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels: (payload.parameters && typeof payload.parameters === 'object' ? Object.keys(payload.parameters) : payload.values.map((_, i) => `P${i + 1}`)),
+            datasets: [{
+              label: 'Valeur',
+              data: payload.values.map(Number),
+              backgroundColor: palette.map((c) => withAlpha(c, 0.32)),
+              borderColor: palette.map((c) => withAlpha(c, 0.85)),
+              borderWidth: 1,
+              borderRadius: 3,
+            }],
+          },
+          options: {
+            ...lineChartOptions(),
+            plugins: { legend: { display: false }, tooltip: { backgroundColor: CHART_COLORS.tooltipBg, borderColor: CHART_COLORS.tooltipBorder, borderWidth: 1 } },
+            scales: { x: { ticks: { color: CHART_COLORS.tick, autoSkip: false, maxRotation: 60, minRotation: 45 }, grid: { display: false } }, y: { ticks: { color: CHART_COLORS.tick }, grid: { color: CHART_COLORS.grid }, min: 0, max: 1 } },
+          },
+        });
+      }
+    }
+
+    function render() {
+      renderNav();
+      showOnly(STATE.view);
+      switch (STATE.view) {
+        case 'overview': return renderOverview();
+        case 'models': return renderModels();
+        case 'training': return renderTraining();
+        case 'presets': return renderPresets();
+        case 'activity': return renderActivity();
+        case 'charter': return renderCharter();
+      }
+    }
+
+    function handleHash() {
+      const hash = decodeURIComponent(window.location.hash || '#overview').slice(1);
+      const [view, arg] = hash.split('/');
+      if (view === 'event' && arg) {
+        showEventDetail(arg);
+        return;
+      }
+      setView(view || 'overview', { model: arg });
+    }
+
+    document.querySelectorAll('#navMenu .nav-link').forEach((btn) => {
+      btn.addEventListener('click', () => setView(btn.dataset.view, { model: null }));
+    });
+    document.getElementById('navMenuMobile').addEventListener('change', (e) => setView(e.target.value, { model: null }));
+    document.getElementById('refreshBtn').addEventListener('click', loadAll);
+    window.addEventListener('hashchange', handleHash);
+
+    loadAll().then(handleHash);
   </script>
 </body>
 </html>
-

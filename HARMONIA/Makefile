@@ -5,7 +5,7 @@ DATASET ?= data/cleaned_dataset.npy
 PROMPT ?= Warm cinematic pad with soft attack
 OUTPUT ?= data/processed/generated_from_prompt.json
 
-.PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve metrics-local metrics-api estimate-train-time push-metrics
+.PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve metrics-local metrics-api estimate-train-time push-metrics dashboard-stats dashboard-snapshot dashboard-serve
 
 help:
 	@echo "Targets:"
@@ -22,6 +22,9 @@ help:
 	@echo "  make metrics-api        # Query http://127.0.0.1:5000/metrics/latest"
 	@echo "  make estimate-train-time# Estimate duration from benchmark history"
 	@echo "  make serve              # Run Flask API"
+	@echo "  make dashboard-stats    # Build snapshot + push to harmonia.mcoet.com"
+	@echo "  make dashboard-snapshot # Build local snapshot only (no push)"
+	@echo "  make dashboard-serve    # Serve metrics_dashboard/ on http://127.0.0.1:8080"
 
 venv:
 	@test -d "$(VENV)" || python3 -m venv "$(VENV)"
@@ -78,4 +81,14 @@ metrics-api:
 
 estimate-train-time:
 	$(PYTHON) scripts/metrics_summary.py --estimate
+
+dashboard-stats:
+	$(PYTHON) scripts/dashboard_stats.py
+
+dashboard-snapshot:
+	$(PYTHON) scripts/dashboard_stats.py --no-push
+
+dashboard-serve:
+	@echo "Serving metrics_dashboard/ on http://127.0.0.1:8080 (Ctrl+C to stop)"
+	cd metrics_dashboard && php -S 127.0.0.1:8080
 

@@ -15,6 +15,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 from src.charter import PARAM_NAMES, charter_metadata, normalise_vector
+from src.dashboard_events import publish_generation
 from src.model import TextToParams
 from src.artifact_registry import resolve_latest_model
 
@@ -280,6 +281,19 @@ def generate():
     if is_charter:
         response["values"] = [named_parameters[name] for name in PARAM_NAMES]
         response["charter"] = charter_metadata()
+
+    try:
+        publish_generation(
+            prompt,
+            named_parameters,
+            response.get("values"),
+            model_version=runtime.model_version,
+            model_hash=runtime.model_hash,
+            charter_version="1.0" if is_charter else None,
+            source="http",
+        )
+    except Exception as exc:  # pragma: no cover - best effort
+        app.logger.warning("dashboard publish failed: %s", exc)
 
     return jsonify(response)
 

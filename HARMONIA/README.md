@@ -272,6 +272,23 @@ Files ignored by git so a `git add *` won't stage secrets or generated metrics:
 - `HARMONIA/metrics_dashboard/latest_metrics.json`
 - `HARMONIA/benchmarks/reports/`
 
+### Dashboard live (harmonia.mcoet.com)
+
+```bash
+make dashboard-stats     # snapshot complet + push
+make dashboard-snapshot  # snapshot local only
+make dashboard-serve
+```
+
+Tous les scripts Harmonia (`train.py`, `generate.py`, `prepare_dataset.py`, `server.py`) publient automatiquement leurs évènements sur le dashboard. Pour wrapper n'importe quelle autre commande :
+
+```bash
+scripts/harmonia.sh make check
+scripts/harmonia.sh python scripts/train.py
+```
+
+Voir `metrics_dashboard/README.md` pour les détails (vues, format des évènements, déploiement).
+
 Test the HTTP API generation endpoint:
 
 ```bash

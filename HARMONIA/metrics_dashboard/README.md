@@ -1,117 +1,115 @@
-# Metrics Dashboard (Static + PHP)
+# Harmonia Metrics Dashboard
 
-Petit tableau de bord statique pour visualiser les metriques de ton modele IA sur un hebergement Apache/PHP.
+Site live des métriques du moteur IA Harmonia.
+URL prod : <https://harmonia.mcoet.com/>
 
-## Fichiers
+## Architecture
 
-- `index.html` : dashboard (Tailwind CDN + Chart.js CDN)
-- `receiver.php` : endpoint `POST` securise par token, sauvegarde dans `latest_metrics.json`
-- `push_metrics.sh` : envoi des metriques via `curl`
-- `push_metrics.py` : envoi des metriques via Python `requests`
+| Fichier                       | Rôle                                                              |
+| ----------------------------- | ----------------------------------------------------------------- |
+| `index.html`                  | SPA dashboard (Tailwind + Chart.js, palette synthwave)            |
+| `receiver.php`                | Endpoint **POST** sécurisé par token. Multi-kind, écrit `events/` |
+| `api.php`                     | Endpoint **GET** public. Lit `events/`, `models.json`, etc.       |
+| `events/`                     | Un fichier JSON par évènement (training/generation/command/...)   |
+| `index.json`                  | Index sommaire de tous les évènements (kind + résumé)             |
+| `models.json`                 | Index par `model_version` avec compteurs cumulés                  |
+| `presets.json`                | Catalogue des générations (prompt + 20 paramètres)                |
+| `latest_metrics.json`         | Dernier rapport training brut (compat legacy)                     |
+| `history_metrics.json`        | Historique training (compat legacy)                               |
+| `stats_snapshot.json`         | Snapshot complet produit par `scripts/dashboard_stats.py`         |
+| `push_metrics.{sh,py}`        | Push manuel d'un rapport (legacy)                                 |
 
-## 1) Deploiement sur ton domaine
+## Vues côté navigateur
 
-Place les fichiers de ce dossier dans ton vhost (`harmonia.mcoet.com` ou `metrics.mcoet.com`).
+L'`index.html` est une SPA avec 6 vues, navigables via la sidebar :
 
-Configure un token cote serveur (Apache):
+- **Overview** : modèle actif, compteurs, loss + erreur par paramètre, flux temps réel.
+- **Modèles** : tuiles cliquables par `model_version`. Cliquer une tuile ouvre le détail (loss au fil des runs, radar erreur par paramètre, liste des trainings + presets).
+- **Entraînement** : table complète + comparateur (filter par modèle).
+- **Presets générés** : grille avec sparkline 20 paramètres + recherche par prompt.
+- **Activité** : journal des évènements (training, generation, command, system).
+- **Charte 20 paramètres** : description officielle des contrôles HARMONIA.
+
+Chaque ligne/évènement est cliquable et ouvre une fenêtre avec le payload complet + bargraph 20 paramètres si applicable.
+
+## Push vers le site
+
+Les scripts Harmonia poussent automatiquement à chaque action :
+
+| Action                                | Évènement poussé      |
+| ------------------------------------- | --------------------- |
+| `python scripts/train.py`             | `training` + `command`|
+| `python scripts/generate.py "..."`    | `generation` + `command` |
+| `python scripts/prepare_dataset.py`   | `command` (dataset)   |
+| `python scripts/server.py` `/generate`| `generation` (kind=http) |
+| `python scripts/dashboard_stats.py`   | `system` (snapshot)   |
+
+### Wrapper "tout terminal"
+
+```bash
+scripts/harmonia.sh <ta-commande> [args...]
+```
+
+Encadre n'importe quelle commande : capture exit code, durée, et publie un event `command`. Exemple :
+
+```bash
+scripts/harmonia.sh make check
+scripts/harmonia.sh python scripts/train.py
+```
+
+### Désactiver les push (ex : tests, hors-ligne)
+
+```bash
+export HARMONIA_PUSH_METRICS=0
+```
+
+Les évènements continuent d'être miroirés en local (`metrics_dashboard/events/`).
+
+## Commandes locales
+
+```bash
+make dashboard-stats     # build snapshot + push
+make dashboard-snapshot  # build snapshot local (no push)
+make dashboard-serve     # php -S 127.0.0.1:8080 sur metrics_dashboard/
+```
+
+`make dashboard-serve` requiert PHP installé localement (mac : `brew install php`).
+Sans PHP, ouvrir directement `metrics_dashboard/index.html` fonctionne : la SPA bascule automatiquement en mode "fichiers statiques" (lit `*.json` locaux).
+
+## Déploiement serveur
+
+1. Pousser les fichiers du dossier sur `harmonia.mcoet.com` (PHP 8+).
+2. Configurer le token :
 
 ```apache
 SetEnv METRICS_PUSH_TOKEN "TON_TOKEN_TRES_FORT"
 ```
 
-Si cette variable n'est pas configuree, `receiver.php` refuse les requetes (HTTP 500).
+3. Donner le droit d'écriture à PHP sur `events/`, `index.json`, `models.json`, `presets.json`, `history_metrics.json`, `latest_metrics.json`.
 
-## 1b) Token local pour l'envoi automatique depuis Harmonia
+4. Le dashboard JS pointe automatiquement sur `api.php` (même domaine) ; cross-origin et `Access-Control-Allow-Origin: *` sont gérés.
 
-Dans le repo Harmonia, le token peut etre stocke localement dans un fichier ignore par git:
+## Token côté client
 
-```bash
-HARMONIA/metrics_dashboard/.env.local
-```
-
-Contenu:
-
-```env
-METRICS_TOKEN=TON_TOKEN_TRES_FORT
-```
-
-Le helper Python et le training loop lisent ce token automatiquement si aucune variable d'environnement n'est fournie.
-
-## 2) Test local rapide
-
-Lancer un serveur PHP local:
+env :
 
 ```bash
-cd HARMONIA/metrics_dashboard
-php -S 127.0.0.1:8080
+HARMONIA/metrics_dashboard/.env
+# METRICS_TOKEN=ton_token
 ```
 
-Dans un autre terminal, pousser un JSON de test:
+## Format des évènements
 
-```bash
-cd HARMONIA/metrics_dashboard
-cat > sample_eval_report.json <<'JSON'
+Chaque event POST a la forme :
+
+```json
 {
-  "timestamp": "2026-04-26T17:15:00Z",
-  "model_version": "train-test-v1",
-  "metrics": {
-    "mse": 0.0321,
-    "mae": 0.1104,
-    "final_loss": 0.0289,
-    "per_param_mse": {
-      "Cutoff": 0.024,
-      "Resonance": 0.041,
-      "Attack": 0.018
-    }
-  },
-  "loss_history": [0.18, 0.14, 0.11, 0.08, 0.06, 0.04, 0.03]
+  "event_kind": "training" | "generation" | "command" | "system" | "dataset",
+  "timestamp": "2026-05-12T12:34:56Z",
+  "model_version": "charter_v1",
+  "model_hash": "...",
+  "...": "champs spécifiques selon kind"
 }
-JSON
-
-METRICS_URL="http://127.0.0.1:8080/receiver.php" \
-METRICS_TOKEN="TON_TOKEN_TRES_FORT" \
-./push_metrics.sh sample_eval_report.json
 ```
 
-Puis ouvre:
-
-- `http://127.0.0.1:8080/index.html`
-
-## 3) Envoi automatique depuis ton training PyTorch
-
-### Option A - commande `curl`
-
-```bash
-curl -X POST "https://harmonia.mcoet.com/receiver.php" \
-  -H "Authorization: Bearer TON_TOKEN" \
-  -F "metrics_file=@/chemin/vers/eval_report.json;type=application/json"
-```
-
-### Option B - script shell
-
-```bash
-METRICS_URL="https://harmonia.mcoet.com/receiver.php" \
-METRICS_TOKEN="TON_TOKEN" \
-./push_metrics.sh /chemin/vers/eval_report.json
-```
-
-### Option C - script Python `requests`
-
-```bash
-python3 -m pip install requests
-python3 push_metrics.py /chemin/vers/eval_report.json --url "https://harmonia.mcoet.com/receiver.php" --token "TON_TOKEN"
-```
-
-### Option D - envoi automatique integre au projet Harmonia
-
-- `scripts/train.py` pousse automatiquement le dernier `eval_*.json` apres l'entraienement.
-- Le comportement peut etre coupe avec `HARMONIA_PUSH_METRICS=0`.
-- Le workflow CI pousse aussi un payload de statut a chaque `push` quand `METRICS_PUSH_TOKEN` est configure dans les secrets GitHub.
-
-## Notes
-
-- `index.html` tente de charger `latest_metrics.json`.
-- `receiver.php` maintient aussi `history_metrics.json` (evolution des modeles).
-- Si le fichier n'existe pas encore, il affiche automatiquement des donnees simulees.
-- Le dashboard sait aussi parser des structures proches de ton `eval_report` actuel (`metrics`, `latest_evaluation_report.metrics`, `latest_benchmark.eval_metrics`).
-
+Le receiver détermine le kind à partir du champ `event_kind` ou du query string `?kind=...`.

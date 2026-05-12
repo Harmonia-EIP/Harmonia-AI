@@ -17,6 +17,7 @@ from src.charter import (
     charter_metadata,
     normalise_vector,
 )
+from src.dashboard_events import publish_command, publish_generation
 from src.model import TextToParams
 
 # --- CONFIG ---
@@ -140,6 +141,28 @@ def generate_preset(prompt, output_filename):
         json.dump(preset_data, f, indent=4)
 
     print(f"Success! Preset saved to: {output_path}")
+
+    model_version = str(metadata_payload.get("model_version", artifact.get("model_version", "unknown")))
+    model_hash = str(metadata_payload.get("model_hash", "unknown"))
+    pub = publish_generation(
+        prompt,
+        named_parameters,
+        param_list if is_charter else None,
+        model_version=model_version,
+        model_hash=model_hash,
+        charter_version="1.0" if is_charter else None,
+        source="cli",
+    )
+    if pub.get("ok"):
+        print(f"[dashboard] generation event pushed (HTTP {pub.get('status')}).")
+    elif pub.get("skipped"):
+        print(f"[dashboard] generation event mirrored locally only ({pub.get('reason', 'skipped')}).")
+    publish_command(
+        "generate.py",
+        status="ok",
+        detail={"prompt": prompt, "output": str(output_path)},
+        model_version=model_version,
+    )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate JUCE presets from text")

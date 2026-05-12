@@ -37,6 +37,7 @@ from src.charter import (  # noqa: E402  (needs sys.path)
     clamp_unit,
     snap_discrete,
 )
+from src.dashboard_events import publish_command  # noqa: E402
 
 
 DEFAULT_INPUT_PATH = BASE_DIR / "data" / "raw" / "my_raw_dump.txt"
@@ -301,6 +302,20 @@ def convert_fxp_dump_to_json(input_file, output_file, anchor_path: Optional[Path
         json.dump(dataset, f, indent=4, ensure_ascii=False)
 
     print(f"Success! Converted {len(dataset)} preset(s) to {output_path}")
+
+    try:
+        publish_command(
+            "prepare_dataset.py",
+            status="ok",
+            detail={
+                "records": len(dataset),
+                "output": str(output_path),
+                "charter_version": "1.0",
+            },
+        )
+    except Exception:  # pragma: no cover - best effort  # nosec B110
+        pass  # publishing failures must never break the data pipeline
+
     return len(dataset)
 
 
