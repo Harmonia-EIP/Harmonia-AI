@@ -1,17 +1,17 @@
 VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 PIP ?= $(PYTHON) -m pip
-DATASET ?= data/cleaned_dataset.npy
+DATASET ?= data/processed/cleaned_dataset.charter.npy
 PROMPT ?= Warm cinematic pad with soft attack
 OUTPUT ?= data/processed/generated_from_prompt.json
 
-.PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve metrics-local metrics-api estimate-train-time push-metrics dashboard-stats dashboard-snapshot dashboard-serve
+.PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve metrics-local metrics-api estimate-train-time push-metrics dashboard-stats dashboard-snapshot dashboard-serve charterize-dataset
 
 help:
 	@echo "Targets:"
 	@echo "  make setup              # Create venv and install dependencies"
 	@echo "  make check              # pytest + bandit + compileall"
-	@echo "  make train              # Train with DATASET (default: data/cleaned_dataset.npy)"
+	@echo "  make train              # Train with DATASET"
 	@echo "  make train-cleaned      # Shortcut for cleaned_dataset.npy"
 	@echo "  make train-fast         # 1 epoch smoke run on cleaned_dataset.npy"
 	@echo "  make train-good         # Longer run (20 epochs) on cleaned_dataset.npy"
@@ -25,6 +25,7 @@ help:
 	@echo "  make dashboard-stats    # Build snapshot + push to harmonia.mcoet.com"
 	@echo "  make dashboard-snapshot # Build local snapshot only (no push)"
 	@echo "  make dashboard-serve    # Serve metrics_dashboard/ on http://127.0.0.1:8080"
+	@echo "  make charterize-dataset # Convert cleaned_dataset.npy -> 20-param charter NPY"
 
 venv:
 	@test -d "$(VENV)" || python3 -m venv "$(VENV)"
@@ -54,13 +55,13 @@ push-metrics:
 	$(PYTHON) metrics_dashboard/push_metrics.py $$FILE --token "$$METRICS_TOKEN"
 
 train-cleaned:
-	HARMONIA_DATASET_PATH="data/cleaned_dataset.npy" $(PYTHON) scripts/train.py
+	HARMONIA_DATASET_PATH="$(DATASET)" $(PYTHON) scripts/train.py
 
 train-fast:
-	HARMONIA_DATASET_PATH="data/cleaned_dataset.npy" HARMONIA_EPOCHS=1 HARMONIA_BATCH_SIZE=32 $(PYTHON) scripts/train.py
+	HARMONIA_DATASET_PATH="$(DATASET)" HARMONIA_EPOCHS=1 HARMONIA_BATCH_SIZE=32 $(PYTHON) scripts/train.py
 
 train-good:
-	HARMONIA_DATASET_PATH="data/cleaned_dataset.npy" HARMONIA_EPOCHS=20 HARMONIA_BATCH_SIZE=16 $(PYTHON) scripts/train.py
+	HARMONIA_DATASET_PATH="$(DATASET)" HARMONIA_EPOCHS=20 HARMONIA_BATCH_SIZE=16 $(PYTHON) scripts/train.py
 
 train-and-report: train metrics-local
 
@@ -91,4 +92,9 @@ dashboard-snapshot:
 dashboard-serve:
 	@echo "Serving metrics_dashboard/ on http://127.0.0.1:8080 (Ctrl+C to stop)"
 	cd metrics_dashboard && php -S 127.0.0.1:8080
+
+charterize-dataset:
+	$(PYTHON) scripts/charterize_dataset.py \
+		--input data/processed/cleaned_dataset.npy \
+		--output data/processed/cleaned_dataset.charter.npy
 

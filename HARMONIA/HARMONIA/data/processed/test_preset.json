@@ -1,0 +1,292 @@
+{
+    "metadata": {
+        "name": "Hard Synth Bass",
+        "generated_by": "Harmonia-AI",
+        "model_version": "model_20260512_1825",
+        "model_hash": "f59ec9e8236192ddd7739dbd5043729be3fb7bbb0cb991ae05a667cd4d1303c3",
+        "charter_version": "1.0"
+    },
+    "parameters": {
+        "osc_1_waveform": 0.666667,
+        "osc_2_waveform": 0.666667,
+        "osc_mix": 0.354073,
+        "osc_2_detune": 0.379465,
+        "noise_level": 0.087458,
+        "filter_cutoff": 0.564267,
+        "filter_resonance": 0.313524,
+        "filter_type": 0.0,
+        "amp_attack": 0.051902,
+        "amp_decay": 0.385411,
+        "amp_sustain": 0.746781,
+        "amp_release": 0.216448,
+        "filter_env_amount": 0.640018,
+        "filter_env_decay": 0.479478,
+        "lfo_rate": 0.30417,
+        "lfo_to_pitch": 0.044141,
+        "lfo_to_cutoff": 0.084593,
+        "velocity_to_filter": 0.543119,
+        "distortion_mix": 0.223809,
+        "reverb_mix": 0.207895
+    },
+    "charter": [
+        {
+            "id": "P1",
+            "name": "osc_1_waveform",
+            "section": "Generators",
+            "kind": "discrete",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "step",
+            "role": "Primary oscillator waveform.",
+            "steps": [
+                "Sine",
+                "Triangle",
+                "Saw",
+                "Square"
+            ]
+        },
+        {
+            "id": "P2",
+            "name": "osc_2_waveform",
+            "section": "Generators",
+            "kind": "discrete",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "step",
+            "role": "Secondary oscillator waveform.",
+            "steps": [
+                "Sine",
+                "Triangle",
+                "Saw",
+                "Square"
+            ]
+        },
+        {
+            "id": "P3",
+            "name": "osc_mix",
+            "section": "Generators",
+            "kind": "continuous",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "ratio",
+            "role": "Volume balance Osc1 <-> Osc2."
+        },
+        {
+            "id": "P4",
+            "name": "osc_2_detune",
+            "section": "Generators",
+            "kind": "continuous",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 100.0,
+            "unit": "cents",
+            "role": "Detune Osc2 (chorus / beating)."
+        },
+        {
+            "id": "P5",
+            "name": "noise_level",
+            "section": "Generators",
+            "kind": "continuous",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "gain",
+            "role": "Noise generator level (breath / impact)."
+        },
+        {
+            "id": "P6",
+            "name": "filter_cutoff",
+            "section": "Filter",
+            "kind": "continuous",
+            "mapping": "logarithmic",
+            "range_min": 20.0,
+            "range_max": 20000.0,
+            "unit": "Hz",
+            "role": "Brightness."
+        },
+        {
+            "id": "P7",
+            "name": "filter_resonance",
+            "section": "Filter",
+            "kind": "continuous",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 0.95,
+            "unit": "ratio",
+            "role": "Self-oscillation amount."
+        },
+        {
+            "id": "P8",
+            "name": "filter_type",
+            "section": "Filter",
+            "kind": "discrete",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "step",
+            "role": "Filter topology.",
+            "steps": [
+                "Lowpass",
+                "Bandpass",
+                "Highpass"
+            ]
+        },
+        {
+            "id": "P9",
+            "name": "amp_attack",
+            "section": "Envelopes",
+            "kind": "continuous",
+            "mapping": "logarithmic",
+            "range_min": 1.0,
+            "range_max": 5000.0,
+            "unit": "ms",
+            "role": "Amp envelope attack time."
+        },
+        {
+            "id": "P10",
+            "name": "amp_decay",
+            "section": "Envelopes",
+            "kind": "continuous",
+            "mapping": "logarithmic",
+            "range_min": 10.0,
+            "range_max": 5000.0,
+            "unit": "ms",
+            "role": "Amp envelope decay time."
+        },
+        {
+            "id": "P11",
+            "name": "amp_sustain",
+            "section": "Envelopes",
+            "kind": "continuous",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "gain",
+            "role": "Amp envelope sustain level."
+        },
+        {
+            "id": "P12",
+            "name": "amp_release",
+            "section": "Envelopes",
+            "kind": "continuous",
+            "mapping": "logarithmic",
+            "range_min": 10.0,
+            "range_max": 10000.0,
+            "unit": "ms",
+            "role": "Amp envelope release time."
+        },
+        {
+            "id": "P13",
+            "name": "filter_env_amount",
+            "section": "Envelopes",
+            "kind": "bipolar",
+            "mapping": "linear",
+            "range_min": -1.0,
+            "range_max": 1.0,
+            "unit": "ratio",
+            "role": "Filter envelope intensity (bipolar; 0.5 = neutral)."
+        },
+        {
+            "id": "P14",
+            "name": "filter_env_decay",
+            "section": "Envelopes",
+            "kind": "continuous",
+            "mapping": "logarithmic",
+            "range_min": 10.0,
+            "range_max": 5000.0,
+            "unit": "ms",
+            "role": "Filter envelope decay time."
+        },
+        {
+            "id": "P15",
+            "name": "lfo_rate",
+            "section": "Modulation",
+            "kind": "continuous",
+            "mapping": "logarithmic",
+            "range_min": 0.1,
+            "range_max": 20.0,
+            "unit": "Hz",
+            "role": "LFO rate."
+        },
+        {
+            "id": "P16",
+            "name": "lfo_to_pitch",
+            "section": "Modulation",
+            "kind": "continuous",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "depth",
+            "role": "Vibrato depth."
+        },
+        {
+            "id": "P17",
+            "name": "lfo_to_cutoff",
+            "section": "Modulation",
+            "kind": "continuous",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "depth",
+            "role": "Cutoff modulation depth."
+        },
+        {
+            "id": "P18",
+            "name": "velocity_to_filter",
+            "section": "Modulation",
+            "kind": "continuous",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "depth",
+            "role": "Velocity sensitivity on filter (essential for piano)."
+        },
+        {
+            "id": "P19",
+            "name": "distortion_mix",
+            "section": "Effects",
+            "kind": "continuous",
+            "mapping": "exponential",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "mix",
+            "role": "Distortion / drive mix."
+        },
+        {
+            "id": "P20",
+            "name": "reverb_mix",
+            "section": "Effects",
+            "kind": "continuous",
+            "mapping": "linear",
+            "range_min": 0.0,
+            "range_max": 1.0,
+            "unit": "mix",
+            "role": "Reverb dry/wet."
+        }
+    ],
+    "values": [
+        0.666667,
+        0.666667,
+        0.354073,
+        0.379465,
+        0.087458,
+        0.564267,
+        0.313524,
+        0.0,
+        0.051902,
+        0.385411,
+        0.746781,
+        0.216448,
+        0.640018,
+        0.479478,
+        0.30417,
+        0.044141,
+        0.084593,
+        0.543119,
+        0.223809,
+        0.207895
+    ]
+}

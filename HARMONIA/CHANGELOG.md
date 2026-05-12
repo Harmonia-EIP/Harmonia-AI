@@ -2,6 +2,54 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.19] - Dataset Profiles, Auto-Scaffolder, and Live Dashboard Pipeline
+### Added
+- **Pluggable Dataset Profiles (`src/dataset_profiles.py` + `src/profiles/`)**:
+  - JSON-driven mapping from any source synth/dataset to the 20 charter parameters (one profile per source).
+  - Strategy primitives: `direct`, `gated`, `max`, `bipolar_amount`, `routed_amount`, `constant`.
+  - Canonical `src/profiles/sylenth1.json` (formerly hardcoded in `prepare_dataset.py`).
+  - Auto-detection (`autodetect_profile`) based on declarative `detect.required_keys`.
+- **Profile Scaffolder (`scripts/inspect_dataset.py`)**:
+  - Scans an unknown NPY/JSON dataset, lists every native key, and ranks candidates per charter parameter via token-overlap + substring + SequenceMatcher scoring.
+  - Generates an 80-90% pre-filled profile JSON (`--suggest-profile <name>`) ready for manual review.
+  - Embedded `_suggestions` block surfaces the top-N alternatives for each charter parameter so the user can refine quickly.
+- **Charterized Dataset Builder (`scripts/charterize_dataset.py`)**:
+  - Converts a Sylenth1 (or any profile-described) dataset into a charter-shaped NPY/JSON (52,810 records on the current `cleaned_dataset.npy`).
+  - `--profile sylenth1 | <name> | auto | legacy` switches the mapping logic at runtime.
+  - Anchor presets injected automatically; can be disabled with `--no-anchors`.
+- **Live Metrics Dashboard (`metrics_dashboard/`)**:
+  - SPA front-end (`index.html`) with 6 views: Overview, Modèles, Entraînement, Presets générés, Activité, Charte 20 paramètres.
+  - Muted dark palette (indigo / steel blue / plum) replacing the previous synthwave-rainbow palette.
+  - Backend rewrite (`receiver.php`, `api.php`) with multi-kind event store (`events/`), per-model index (`models.json`), and read-only public API.
+  - Diagnostic endpoint `GET api.php?action=probe` reports token source visibility without leaking the value.
+  - `.env` fallback in `receiver.php` for hosts that strip Apache `SetEnv` (`.htaccess` blocks direct download).
+- **Dashboard Event Pipeline (`src/dashboard_events.py`)**:
+  - Unified publisher for `training`, `generation`, `command`, `system`, `dataset` events.
+  - Local mirror under `metrics_dashboard/events/` always written even when the remote is unreachable.
+  - `scripts/flush_events.py` replays the buffered queue once the server is reachable (idempotent: pushed files move to `_uploaded/`).
+- **Local Snapshot Command (`scripts/dashboard_stats.py`)**:
+  - Aggregates every model, eval report, generated preset, and benchmark history into a single JSON, then pushes it as a `system` event.
+- **Terminal Wrapper (`scripts/harmonia.sh`)**:
+  - `scripts/harmonia.sh <any command>` captures exit code + duration and publishes a `command` event.
+- **Makefile targets**: `charterize-dataset`, `train-charter`, `dashboard-stats`, `dashboard-snapshot`, `dashboard-serve`.
+
+### Changed
+- **`prepare_dataset.py`**: emits a `command` dashboard event on completion (best-effort, never breaks the data pipeline).
+- **`generate.py` / `server.py`**: every generation now publishes a `generation` event (CLI source vs HTTP source) carrying the prompt + 20 charter values + parameters dict.
+- **`train.py`**: replaces the legacy push-only helper with `publish_training` (local mirror + remote POST), and emits a final `command` event with `epochs`, `batch_size`, `dataset_size`, `charter_mode`.
+- **`.gitignore`**: tightened scope. Runtime artefacts (`metrics_dashboard/events/`, `*.charter.npy`, snapshots, secrets) stay ignored; dashboard sources, charter anchors (`data/raw/anchor_presets.json`), and registry metadata become tracked.
+
+### Fixed
+- **Reverb / Distortion gating**: the legacy `SYLENTH_KEY_MAP` short-circuited the gated synthesisers via `dict.setdefault`, so `Sw ReverbOnOff = 0` records still carried a non-zero `reverb_mix` into the dataset. The new profile path applies the gate correctly: 15,644 records (vs the ~15,495 source records with the switch off) now correctly land at `reverb_mix = 0`.
+
+### Tests
+- Added `tests/test_dataset_profiles.py`, `tests/test_inspect_dataset.py`, `tests/test_charterize_dataset.py`, `tests/test_dashboard_events.py`, `tests/test_dashboard_stats.py`.
+- Suite grew from 27 → **61 tests** (all passing, bandit + compileall clean).
+
+### Docs
+- `metrics_dashboard/README.md` rewritten: architecture table, 6-view tour, push pipeline, deployment.
+- `README.md` gains a "Dashboard live (harmonia.mcoet.com)" section with new make targets.
+
 ## [0.0.18] - Universal Charter, Perceptual Loss, and Anchor Presets
 ### Added
 - **Centralized Charter (`src/charter.py`)**:

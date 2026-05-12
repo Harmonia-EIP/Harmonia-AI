@@ -1,0 +1,15 @@
+# Block direct download of sensitive server-side config files.
+# Token is read by receiver.php from this folder's .env when Apache SetEnv
+# is unavailable on the host. The file itself must NEVER be served.
+
+<FilesMatch "^\.(env|env\..*|htaccess|htpasswd)$">
+    Require all denied
+</FilesMatch>
+
+# Allow standard JSON files used by the dashboard frontend.
+<FilesMatch "\.json$">
+    Require all granted
+</FilesMatch>
+
+# Disable indexing of the events/ folder (still readable per-file via api.php).
+Options -Indexes

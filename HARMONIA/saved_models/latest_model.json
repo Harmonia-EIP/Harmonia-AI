@@ -1,8 +1,8 @@
 {
-    "model_version": "charter_v1",
-    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/charter_v1.pth",
-    "metadata_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/charter_v1.meta.json",
-    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260510_155539.json",
-    "model_hash": "39a490f0a9cc6c2d74c7eb3484ef70763c1585b2b8bce7a58d486f47d5a2a87d",
-    "updated_at": "2026-05-10 15:55:39"
+    "model_version": "model_20260512_1825",
+    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/model_20260512_1825.pth",
+    "metadata_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/model_20260512_1825.meta.json",
+    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260512_182524.json",
+    "model_hash": "f59ec9e8236192ddd7739dbd5043729be3fb7bbb0cb991ae05a667cd4d1303c3",
+    "updated_at": "2026-05-12 18:25:24"
 }
