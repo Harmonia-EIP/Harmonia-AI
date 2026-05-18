@@ -1,0 +1,33 @@
+{
+    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260427-164018-seed42/my_plugin_ai.pth",
+    "model_dir": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/train-20260427-164018-seed42",
+    "model_version": "train-20260427-164018-seed42",
+    "model_hash": "cdf0d0793c08924bdf555229674e84b43975a9076174fa7d0a64f9fb3360a04d",
+    "plugin_param_count": 9,
+    "param_keys": [
+        "param_0000",
+        "param_0001",
+        "param_0002",
+        "param_0003",
+        "param_0004",
+        "param_0005",
+        "param_0006",
+        "param_0007",
+        "param_0008"
+    ],
+    "trained_at": "2026-04-27 16:40:18",
+    "seed": 42,
+    "epochs": 1,
+    "learning_rate": 0.0001,
+    "batch_size": 8,
+    "val_split": 0.2,
+    "dataset_size": 1,
+    "train_size": 1,
+    "val_size": 0,
+    "tokenizer_model_id": "prajjwal1/bert-tiny",
+    "tokenizer_model_revision": "main",
+    "tokenizer_max_length": 32,
+    "dataset_path": "data/processed/presets.json",
+    "normalize_categorical": true,
+    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260427_164018.json"
+}

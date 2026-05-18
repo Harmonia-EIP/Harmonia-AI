@@ -1,20 +1,26 @@
-import torch
-import json
 import argparse
-import sys
+import json
 import os
+import sys
 from pathlib import Path
+
+import torch
 from transformers import AutoTokenizer
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
-from src.model import TextToParams
 from src.artifact_registry import resolve_latest_model
+from src.charter import (
+    PARAM_NAMES,
+    charter_metadata,
+    normalise_vector,
+)
+from src.dashboard_events import publish_command, publish_generation
+from src.model import TextToParams
 
 # --- CONFIG ---
-PLUGIN_PARAM_COUNT = 9
 SAVED_MODELS_DIR = BASE_DIR / "saved_models"
 LEGACY_MODEL_PATH = SAVED_MODELS_DIR / "my_plugin_ai.pth"
 LEGACY_METADATA_PATH = SAVED_MODELS_DIR / "my_plugin_ai.meta.json"
@@ -22,17 +28,8 @@ TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 TOKENIZER_MAX_LENGTH = 32
 
-PARAM_KEYS = [
-    "frequency",
-    "attack",
-    "cutoff",
-    "decay",
-    "volume",
-    "sustain",
-    "resonance",
-    "release",
-    "waveform"
-]
+PARAM_KEYS = list(PARAM_NAMES)
+
 
 def generate_preset(prompt, output_filename):
     artifact = resolve_latest_model(
@@ -110,6 +107,9 @@ def generate_preset(prompt, output_filename):
         prediction = model(inputs['input_ids'], inputs['attention_mask'])
 
     param_list = prediction[0].tolist()
+    is_charter = list(runtime_param_keys) == list(PARAM_NAMES)
+    if is_charter:
+        param_list = normalise_vector(param_list)
 
     named_parameters = {}
     if len(param_list) != len(runtime_param_keys):
@@ -117,7 +117,7 @@ def generate_preset(prompt, output_filename):
 
     for i, key in enumerate(runtime_param_keys):
         if i < len(param_list):
-            named_parameters[key] = param_list[i]
+            named_parameters[key] = round(float(param_list[i]), 6)
 
     preset_data = {
         "metadata": {
@@ -125,9 +125,14 @@ def generate_preset(prompt, output_filename):
             "generated_by": "Harmonia-AI",
             "model_version": metadata_payload.get("model_version", artifact.get("model_version", "unknown")),
             "model_hash": metadata_payload.get("model_hash", "unknown"),
+            "charter_version": "1.0" if is_charter else None,
         },
-        "parameters": named_parameters
+        "parameters": named_parameters,
     }
+
+    if is_charter:
+        preset_data["charter"] = charter_metadata()
+        preset_data["values"] = [named_parameters[k] for k in PARAM_NAMES]
 
     output_path = Path(output_filename)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -136,6 +141,28 @@ def generate_preset(prompt, output_filename):
         json.dump(preset_data, f, indent=4)
 
     print(f"Success! Preset saved to: {output_path}")
+
+    model_version = str(metadata_payload.get("model_version", artifact.get("model_version", "unknown")))
+    model_hash = str(metadata_payload.get("model_hash", "unknown"))
+    pub = publish_generation(
+        prompt,
+        named_parameters,
+        param_list if is_charter else None,
+        model_version=model_version,
+        model_hash=model_hash,
+        charter_version="1.0" if is_charter else None,
+        source="cli",
+    )
+    if pub.get("ok"):
+        print(f"[dashboard] generation event pushed (HTTP {pub.get('status')}).")
+    elif pub.get("skipped"):
+        print(f"[dashboard] generation event mirrored locally only ({pub.get('reason', 'skipped')}).")
+    publish_command(
+        "generate.py",
+        status="ok",
+        detail={"prompt": prompt, "output": str(output_path)},
+        model_version=model_version,
+    )
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate JUCE presets from text")

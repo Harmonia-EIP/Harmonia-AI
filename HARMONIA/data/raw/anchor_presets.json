@@ -1,0 +1,421 @@
+[
+  {
+    "label": "Hard Electro Lead",
+    "prompts": [
+      "Hard Electro Lead",
+      "aggressive electro lead",
+      "screaming electro lead",
+      "hard supersaw lead"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.55,
+        "osc_2_detune": 0.65,
+        "noise_level": 0.05,
+        "filter_cutoff": 0.82,
+        "filter_resonance": 0.55,
+        "amp_attack": 0.05,
+        "amp_decay": 0.55,
+        "amp_sustain": 0.85,
+        "amp_release": 0.45,
+        "filter_env_amount": 0.7,
+        "filter_env_decay": 0.55,
+        "lfo_rate": 0.6,
+        "lfo_to_pitch": 0.05,
+        "lfo_to_cutoff": 0.25,
+        "velocity_to_filter": 0.4,
+        "distortion_mix": 0.55,
+        "reverb_mix": 0.25
+      },
+      "categorical": {
+        "osc_1_waveform": 0.667,
+        "osc_2_waveform": 0.667,
+        "filter_type": 0.0
+      }
+    }
+  },
+  {
+    "label": "Soft Piano",
+    "prompts": [
+      "Soft Piano",
+      "warm acoustic piano",
+      "gentle piano",
+      "felt piano"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.3,
+        "osc_2_detune": 0.05,
+        "noise_level": 0.02,
+        "filter_cutoff": 0.65,
+        "filter_resonance": 0.05,
+        "amp_attack": 0.0,
+        "amp_decay": 0.6,
+        "amp_sustain": 0.0,
+        "amp_release": 0.4,
+        "filter_env_amount": 0.55,
+        "filter_env_decay": 0.45,
+        "lfo_rate": 0.3,
+        "lfo_to_pitch": 0.0,
+        "lfo_to_cutoff": 0.0,
+        "velocity_to_filter": 0.85,
+        "distortion_mix": 0.0,
+        "reverb_mix": 0.35
+      },
+      "categorical": {
+        "osc_1_waveform": 0.333,
+        "osc_2_waveform": 0.0,
+        "filter_type": 0.0
+      }
+    }
+  },
+  {
+    "label": "Warm Pad",
+    "prompts": [
+      "Warm Pad",
+      "lush pad",
+      "ambient pad",
+      "soft ethereal pad"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.5,
+        "osc_2_detune": 0.5,
+        "noise_level": 0.03,
+        "filter_cutoff": 0.55,
+        "filter_resonance": 0.1,
+        "amp_attack": 0.7,
+        "amp_decay": 0.5,
+        "amp_sustain": 0.85,
+        "amp_release": 0.85,
+        "filter_env_amount": 0.55,
+        "filter_env_decay": 0.6,
+        "lfo_rate": 0.35,
+        "lfo_to_pitch": 0.05,
+        "lfo_to_cutoff": 0.2,
+        "velocity_to_filter": 0.3,
+        "distortion_mix": 0.0,
+        "reverb_mix": 0.7
+      },
+      "categorical": {
+        "osc_1_waveform": 0.667,
+        "osc_2_waveform": 0.333,
+        "filter_type": 0.0
+      }
+    }
+  },
+  {
+    "label": "Deep Reese Bass",
+    "prompts": [
+      "Deep Reese Bass",
+      "dark reese bass",
+      "heavy sub bass",
+      "huge dark bass"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.55,
+        "osc_2_detune": 0.4,
+        "noise_level": 0.0,
+        "filter_cutoff": 0.3,
+        "filter_resonance": 0.25,
+        "amp_attack": 0.0,
+        "amp_decay": 0.4,
+        "amp_sustain": 0.85,
+        "amp_release": 0.25,
+        "filter_env_amount": 0.6,
+        "filter_env_decay": 0.35,
+        "lfo_rate": 0.25,
+        "lfo_to_pitch": 0.0,
+        "lfo_to_cutoff": 0.15,
+        "velocity_to_filter": 0.45,
+        "distortion_mix": 0.35,
+        "reverb_mix": 0.1
+      },
+      "categorical": {
+        "osc_1_waveform": 0.667,
+        "osc_2_waveform": 1.0,
+        "filter_type": 0.0
+      }
+    }
+  },
+  {
+    "label": "Acid Bass",
+    "prompts": [
+      "Acid Bass",
+      "303 acid bass",
+      "squelchy acid bass",
+      "resonant acid lead"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.0,
+        "osc_2_detune": 0.0,
+        "noise_level": 0.0,
+        "filter_cutoff": 0.45,
+        "filter_resonance": 0.85,
+        "amp_attack": 0.0,
+        "amp_decay": 0.3,
+        "amp_sustain": 0.0,
+        "amp_release": 0.15,
+        "filter_env_amount": 0.95,
+        "filter_env_decay": 0.4,
+        "lfo_rate": 0.5,
+        "lfo_to_pitch": 0.0,
+        "lfo_to_cutoff": 0.0,
+        "velocity_to_filter": 0.6,
+        "distortion_mix": 0.4,
+        "reverb_mix": 0.1
+      },
+      "categorical": {
+        "osc_1_waveform": 0.667,
+        "osc_2_waveform": 0.0,
+        "filter_type": 0.0
+      }
+    }
+  },
+  {
+    "label": "Pluck",
+    "prompts": [
+      "Pluck",
+      "crisp pluck",
+      "bright pluck",
+      "short pluck"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.3,
+        "osc_2_detune": 0.15,
+        "noise_level": 0.05,
+        "filter_cutoff": 0.7,
+        "filter_resonance": 0.3,
+        "amp_attack": 0.0,
+        "amp_decay": 0.3,
+        "amp_sustain": 0.0,
+        "amp_release": 0.2,
+        "filter_env_amount": 0.8,
+        "filter_env_decay": 0.25,
+        "lfo_rate": 0.3,
+        "lfo_to_pitch": 0.0,
+        "lfo_to_cutoff": 0.0,
+        "velocity_to_filter": 0.65,
+        "distortion_mix": 0.05,
+        "reverb_mix": 0.3
+      },
+      "categorical": {
+        "osc_1_waveform": 0.667,
+        "osc_2_waveform": 0.333,
+        "filter_type": 0.0
+      }
+    }
+  },
+  {
+    "label": "Snare",
+    "prompts": [
+      "Snare drum",
+      "snappy snare",
+      "synthetic snare hit",
+      "crisp snare"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.5,
+        "osc_2_detune": 0.05,
+        "noise_level": 0.85,
+        "filter_cutoff": 0.7,
+        "filter_resonance": 0.1,
+        "amp_attack": 0.0,
+        "amp_decay": 0.25,
+        "amp_sustain": 0.0,
+        "amp_release": 0.15,
+        "filter_env_amount": 0.75,
+        "filter_env_decay": 0.2,
+        "lfo_rate": 0.0,
+        "lfo_to_pitch": 0.0,
+        "lfo_to_cutoff": 0.0,
+        "velocity_to_filter": 0.4,
+        "distortion_mix": 0.4,
+        "reverb_mix": 0.25
+      },
+      "categorical": {
+        "osc_1_waveform": 0.0,
+        "osc_2_waveform": 0.0,
+        "filter_type": 1.0
+      }
+    }
+  },
+  {
+    "label": "Kick",
+    "prompts": [
+      "Kick drum",
+      "808 kick",
+      "punchy kick",
+      "deep kick"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.0,
+        "osc_2_detune": 0.0,
+        "noise_level": 0.05,
+        "filter_cutoff": 0.35,
+        "filter_resonance": 0.05,
+        "amp_attack": 0.0,
+        "amp_decay": 0.55,
+        "amp_sustain": 0.0,
+        "amp_release": 0.25,
+        "filter_env_amount": 0.55,
+        "filter_env_decay": 0.4,
+        "lfo_rate": 0.0,
+        "lfo_to_pitch": 0.4,
+        "lfo_to_cutoff": 0.0,
+        "velocity_to_filter": 0.3,
+        "distortion_mix": 0.2,
+        "reverb_mix": 0.05
+      },
+      "categorical": {
+        "osc_1_waveform": 0.0,
+        "osc_2_waveform": 0.0,
+        "filter_type": 0.0
+      }
+    }
+  },
+  {
+    "label": "Bright Lead",
+    "prompts": [
+      "Bright Lead",
+      "cutting lead",
+      "screaming saw lead",
+      "synthwave lead"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.5,
+        "osc_2_detune": 0.4,
+        "noise_level": 0.0,
+        "filter_cutoff": 0.85,
+        "filter_resonance": 0.35,
+        "amp_attack": 0.05,
+        "amp_decay": 0.5,
+        "amp_sustain": 0.8,
+        "amp_release": 0.4,
+        "filter_env_amount": 0.65,
+        "filter_env_decay": 0.5,
+        "lfo_rate": 0.5,
+        "lfo_to_pitch": 0.1,
+        "lfo_to_cutoff": 0.15,
+        "velocity_to_filter": 0.5,
+        "distortion_mix": 0.2,
+        "reverb_mix": 0.4
+      },
+      "categorical": {
+        "osc_1_waveform": 0.667,
+        "osc_2_waveform": 0.667,
+        "filter_type": 0.0
+      }
+    }
+  },
+  {
+    "label": "Strings",
+    "prompts": [
+      "Strings",
+      "warm strings",
+      "ensemble strings",
+      "cinematic strings"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.55,
+        "osc_2_detune": 0.55,
+        "noise_level": 0.05,
+        "filter_cutoff": 0.6,
+        "filter_resonance": 0.05,
+        "amp_attack": 0.55,
+        "amp_decay": 0.5,
+        "amp_sustain": 0.85,
+        "amp_release": 0.7,
+        "filter_env_amount": 0.55,
+        "filter_env_decay": 0.6,
+        "lfo_rate": 0.35,
+        "lfo_to_pitch": 0.08,
+        "lfo_to_cutoff": 0.1,
+        "velocity_to_filter": 0.45,
+        "distortion_mix": 0.0,
+        "reverb_mix": 0.65
+      },
+      "categorical": {
+        "osc_1_waveform": 0.667,
+        "osc_2_waveform": 0.667,
+        "filter_type": 0.0
+      }
+    }
+  },
+  {
+    "label": "Flute",
+    "prompts": [
+      "Flute",
+      "soft flute",
+      "breathy flute"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.0,
+        "osc_2_detune": 0.0,
+        "noise_level": 0.2,
+        "filter_cutoff": 0.55,
+        "filter_resonance": 0.1,
+        "amp_attack": 0.4,
+        "amp_decay": 0.4,
+        "amp_sustain": 0.8,
+        "amp_release": 0.4,
+        "filter_env_amount": 0.55,
+        "filter_env_decay": 0.45,
+        "lfo_rate": 0.6,
+        "lfo_to_pitch": 0.15,
+        "lfo_to_cutoff": 0.05,
+        "velocity_to_filter": 0.4,
+        "distortion_mix": 0.0,
+        "reverb_mix": 0.5
+      },
+      "categorical": {
+        "osc_1_waveform": 0.0,
+        "osc_2_waveform": 0.0,
+        "filter_type": 0.0
+      }
+    }
+  },
+  {
+    "label": "Hard Bass",
+    "prompts": [
+      "Hard Bass",
+      "hardstyle bass",
+      "distorted bass",
+      "aggressive bass"
+    ],
+    "parameters": {
+      "continuous": {
+        "osc_mix": 0.4,
+        "osc_2_detune": 0.2,
+        "noise_level": 0.0,
+        "filter_cutoff": 0.55,
+        "filter_resonance": 0.4,
+        "amp_attack": 0.0,
+        "amp_decay": 0.4,
+        "amp_sustain": 0.85,
+        "amp_release": 0.25,
+        "filter_env_amount": 0.65,
+        "filter_env_decay": 0.4,
+        "lfo_rate": 0.3,
+        "lfo_to_pitch": 0.0,
+        "lfo_to_cutoff": 0.1,
+        "velocity_to_filter": 0.5,
+        "distortion_mix": 0.75,
+        "reverb_mix": 0.15
+      },
+      "categorical": {
+        "osc_1_waveform": 1.0,
+        "osc_2_waveform": 0.667,
+        "filter_type": 0.0
+      }
+    }
+  }
+]

@@ -14,13 +14,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
+from src.charter import PARAM_NAMES, charter_metadata, normalise_vector
+from src.dashboard_events import publish_generation
 from src.model import TextToParams
 from src.artifact_registry import resolve_latest_model
 
 app = Flask(__name__)
 
 # --- CONFIG ---
-PLUGIN_PARAM_COUNT = 9
 SAVED_MODELS_DIR = BASE_DIR / "saved_models"
 LEGACY_MODEL_PATH = SAVED_MODELS_DIR / "my_plugin_ai.pth"
 LEGACY_METADATA_PATH = SAVED_MODELS_DIR / "my_plugin_ai.meta.json"
@@ -29,11 +30,8 @@ MAX_PROMPT_LENGTH = 512
 TOKENIZER_MAX_LENGTH = 32
 TOKENIZER_MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
-PARAM_KEYS = [
-    "frequency", "attack", "cutoff", "decay",
-    "volume", "sustain", "resonance", "release",
-    "waveform"
-]
+PARAM_KEYS = list(PARAM_NAMES)
+PLUGIN_PARAM_COUNT = len(PARAM_KEYS)
 
 @dataclass
 class InferenceRuntime:
@@ -259,6 +257,9 @@ def generate():
 
     # 3. Formatd output
     param_list = prediction[0].tolist()
+    is_charter = tuple(runtime.param_keys) == tuple(PARAM_NAMES)
+    if is_charter:
+        param_list = normalise_vector(param_list)
 
     named_parameters = {}
     for i, key in enumerate(runtime.param_keys):
@@ -266,18 +267,40 @@ def generate():
             value = float(param_list[i])
             named_parameters[key] = round(min(1.0, max(0.0, value)), 6)
 
-    # Return the clean JSON to the app
     response = {
         "metadata": {
             "name": prompt,
             "generated_by": "Harmonia-Server",
             "model_version": runtime.model_version,
             "model_hash": runtime.model_hash,
+            "charter_version": "1.0" if is_charter else None,
         },
-        "parameters": named_parameters
+        "parameters": named_parameters,
     }
 
+    if is_charter:
+        response["values"] = [named_parameters[name] for name in PARAM_NAMES]
+        response["charter"] = charter_metadata()
+
+    try:
+        publish_generation(
+            prompt,
+            named_parameters,
+            response.get("values"),
+            model_version=runtime.model_version,
+            model_hash=runtime.model_hash,
+            charter_version="1.0" if is_charter else None,
+            source="http",
+        )
+    except Exception as exc:  # pragma: no cover - best effort
+        app.logger.warning("dashboard publish failed: %s", exc)
+
     return jsonify(response)
+
+
+@app.route("/charter", methods=["GET"])
+def charter():
+    return jsonify({"version": "1.0", "parameters": charter_metadata()})
 
 if __name__ == '__main__':
     print("Server is running on http://127.0.0.1:5000")
