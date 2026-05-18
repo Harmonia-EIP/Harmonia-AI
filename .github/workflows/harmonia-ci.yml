@@ -18,7 +18,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.12"
           cache: "pip"
           cache-dependency-path: |
             HARMONIA/requirements-ci.txt
@@ -41,4 +41,41 @@ jobs:
       - name: Run compile check
         working-directory: HARMONIA
         run: python -m compileall scripts src tests
+
+      - name: Publish metrics dashboard payload
+        if: github.event_name == 'push' && secrets.METRICS_PUSH_TOKEN != ''
+        working-directory: HARMONIA
+        env:
+          METRICS_TOKEN: ${{ secrets.METRICS_PUSH_TOKEN }}
+          HARMONIA_METRICS_URL: https://harmonia.mcoet.com/receiver.php
+        run: |
+          mkdir -p benchmarks/reports
+          python - <<'PY'
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          payload = {
+              "timestamp": datetime.now(timezone.utc).isoformat(),
+              "source": "github-actions",
+              "model_version": f"ci-{os.environ.get('GITHUB_SHA', 'unknown')[:7]}",
+              "model_hash": os.environ.get("GITHUB_SHA", "unknown"),
+              "metrics": {
+                  "ci_tests_passed": 1.0,
+                  "ci_security_passed": 1.0,
+                  "ci_compile_passed": 1.0,
+              },
+              "ci": {
+                  "repository": os.environ.get("GITHUB_REPOSITORY", ""),
+                  "ref": os.environ.get("GITHUB_REF_NAME", ""),
+                  "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+              },
+          }
+
+          out = Path("benchmarks/reports/ci_push_metrics.json")
+          out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+          print(f"Wrote {out}")
+          PY
+          python scripts/push_latest_metrics.py --report benchmarks/reports/ci_push_metrics.json
 
