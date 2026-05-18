@@ -21,6 +21,7 @@ from src.metrics_publisher import (
     _validate_metrics_url,
     resolve_token,
 )
+from src.perf_metrics import capture_snapshot
 import http.client
 from urllib.parse import urlparse
 
@@ -112,38 +113,21 @@ def publish_event(
         "timestamp": payload.get("timestamp") or _now_iso(),
     }
     enriched.update(payload)
+    if "system_metrics" not in enriched:
+        try:
+            enriched["system_metrics"] = capture_snapshot(base_dir=base)
+        except Exception as exc:  # pragma: no cover - defensive
+            enriched["system_metrics"] = {"error": str(exc)}
 
-    result: Dict[str, Any] = {"ok": False, "kind": kind}
+    result: Dict[str, Any] = {"ok": True, "kind": kind, "buffered": True}
 
     try:
         local_path = _write_local_mirror(base, kind, enriched)
         result["local_path"] = str(local_path)
     except OSError as exc:
-        result["error"] = f"local-write-failed: {exc}"
-        return result
+        result.update({"ok": False, "buffered": False, "error": f"local-write-failed: {exc}"})
 
-    target_url = (url or os.environ.get("HARMONIA_METRICS_URL") or DEFAULT_METRICS_URL).strip()
-    valid_url, reason = _validate_metrics_url(target_url)
-    if not valid_url:
-        result.update({"skipped": True, "reason": reason, "url": target_url})
-        return result
-
-    auth_token = (token or resolve_token(base)).strip()
-    if not auth_token:
-        result.update({"skipped": True, "reason": "missing-token", "url": target_url})
-        return result
-
-    if os.environ.get("HARMONIA_PUSH_METRICS", "1").strip().lower() in {"0", "false", "no", "off"}:
-        result.update({"skipped": True, "reason": "push-disabled", "url": target_url})
-        return result
-
-    try:
-        response = _post_json(target_url, enriched, auth_token, kind)
-        result.update(response)
-        result["url"] = target_url
-    except Exception as exc:  # pragma: no cover - network failures
-        result.update({"error": f"network: {exc}", "url": target_url})
-
+    result["reason"] = "deferred-push: run `make push-metrics` to flush the local buffer"
     return result
 
 
@@ -159,6 +143,9 @@ def training_payload(report: Mapping[str, Any]) -> Dict[str, Any]:
         "val_split": report.get("val_split"),
         "train_size": report.get("train_size"),
         "val_size": report.get("val_size"),
+        "perf_series": report.get("perf_series"),
+        "perf_summary": report.get("perf_summary"),
+        "throughput": report.get("throughput"),
     }
 
 
@@ -171,8 +158,10 @@ def generation_payload(
     model_hash: str = "unknown",
     charter_version: Optional[str] = None,
     source: str = "cli",
+    inference_latency_ms: Optional[float] = None,
+    token_count: Optional[int] = None,
 ) -> Dict[str, Any]:
-    return {
+    payload: Dict[str, Any] = {
         "timestamp": _now_iso(),
         "prompt": prompt,
         "preset_name": prompt,
@@ -183,6 +172,11 @@ def generation_payload(
         "charter_version": charter_version,
         "source": source,
     }
+    if inference_latency_ms is not None:
+        payload["inference_latency_ms"] = float(inference_latency_ms)
+    if token_count is not None:
+        payload["token_count"] = int(token_count)
+    return payload
 
 
 def command_payload(
@@ -232,3 +226,83 @@ def publish_command(command: str, **kwargs: Any) -> Dict[str, Any]:
 
 def publish_system(snapshot: Mapping[str, Any], **kwargs: Any) -> Dict[str, Any]:
     return publish_event("system", system_payload(snapshot), **kwargs)
+
+
+def _kind_from_payload(payload: Mapping[str, Any], fallback_name: str) -> str:
+    kind = str(payload.get("event_kind", "")).lower()
+    if kind in VALID_KINDS:
+        return kind
+    parts = fallback_name.split("_")
+    for token in parts:
+        if token in VALID_KINDS:
+            return token
+    return DEFAULT_KIND
+
+
+def flush_pending_events(
+    *,
+    url: Optional[str] = None,
+    token: Optional[str] = None,
+    base_dir: Optional[Path] = None,
+    delete_on_success: bool = True,
+) -> Dict[str, Any]:
+    """Push every JSON event in the local buffer (``metrics_dashboard/events/``)
+    to the receiver, deleting successful ones. Returns a summary dict.
+    """
+    base = _resolve_base_dir(base_dir)
+    events_dir = _local_event_dir(base)
+    target_url = (url or os.environ.get("HARMONIA_METRICS_URL") or DEFAULT_METRICS_URL).strip()
+
+    summary: Dict[str, Any] = {
+        "url": target_url,
+        "succeeded": 0,
+        "failed": 0,
+        "skipped": 0,
+        "failures": [],
+        "buffer_dir": str(events_dir),
+    }
+
+    valid_url, reason = _validate_metrics_url(target_url)
+    if not valid_url:
+        summary.update({"ok": False, "reason": reason})
+        return summary
+
+    auth_token = (token or resolve_token(base)).strip()
+    if not auth_token:
+        summary.update({"ok": False, "reason": "missing-token"})
+        return summary
+
+    files = sorted(p for p in events_dir.glob("*.json") if p.is_file())
+    summary["pending"] = len(files)
+
+    for path in files:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            summary["skipped"] += 1
+            summary["failures"].append({"file": path.name, "error": f"unreadable: {exc}"})
+            continue
+
+        kind = _kind_from_payload(payload, path.stem)
+        try:
+            response = _post_json(target_url, payload, auth_token, kind)
+        except Exception as exc:  # pragma: no cover - network failures
+            summary["failed"] += 1
+            summary["failures"].append({"file": path.name, "error": f"network: {exc}"})
+            continue
+
+        if response.get("ok"):
+            summary["succeeded"] += 1
+            if delete_on_success:
+                try:
+                    path.unlink()
+                except OSError as exc:
+                    summary["failures"].append({"file": path.name, "error": f"delete-failed: {exc}"})
+        else:
+            summary["failed"] += 1
+            summary["failures"].append(
+                {"file": path.name, "status": response.get("status"), "response": response.get("response")}
+            )
+
+    summary["ok"] = summary["failed"] == 0
+    return summary

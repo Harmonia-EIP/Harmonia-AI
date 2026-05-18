@@ -132,6 +132,60 @@ if ($action === 'presets') {
     respond(['ok' => true, 'presets' => $presets]);
 }
 
+if ($action === 'performance') {
+    $perf = readJsonArray($baseDir . '/performance.json');
+    $limit = isset($_GET['limit']) ? max(1, min(1000, (int)$_GET['limit'])) : 200;
+    $kind = isset($_GET['kind']) ? preg_replace('/[^a-z0-9_-]/i', '', (string)$_GET['kind']) : '';
+    if ($kind !== '') {
+        $perf = array_values(array_filter($perf, fn($e) => ($e['kind'] ?? '') === $kind));
+    }
+    $perf = array_reverse($perf);
+    if ($limit < count($perf)) {
+        $perf = array_slice($perf, 0, $limit);
+    }
+    // Lightweight aggregates over the window so the dashboard can render
+    // averages and peaks without re-walking everything client-side.
+    $cpuValues = [];
+    $ramValues = [];
+    $gpuValues = [];
+    $latencies = [];
+    foreach ($perf as $entry) {
+        $sys = $entry['system_metrics'] ?? null;
+        if (is_array($sys)) {
+            if (isset($sys['cpu_percent']) && is_numeric($sys['cpu_percent'])) $cpuValues[] = (float)$sys['cpu_percent'];
+            if (isset($sys['ram_percent']) && is_numeric($sys['ram_percent'])) $ramValues[] = (float)$sys['ram_percent'];
+            $gpu = $sys['gpu_mps'] ?? null;
+            if (is_array($gpu) && isset($gpu['allocated_mb']) && is_numeric($gpu['allocated_mb'])) {
+                $gpuValues[] = (float)$gpu['allocated_mb'];
+            }
+        }
+        if (isset($entry['inference_latency_ms']) && is_numeric($entry['inference_latency_ms'])) {
+            $latencies[] = (float)$entry['inference_latency_ms'];
+        }
+    }
+    $aggregate = function(array $values): array {
+        if (!$values) return ['count' => 0];
+        $sum = array_sum($values);
+        return [
+            'count' => count($values),
+            'avg' => round($sum / count($values), 3),
+            'max' => round(max($values), 3),
+            'min' => round(min($values), 3),
+            'last' => round($values[0], 3),
+        ];
+    };
+    respond([
+        'ok' => true,
+        'entries' => $perf,
+        'aggregates' => [
+            'cpu_percent' => $aggregate($cpuValues),
+            'ram_percent' => $aggregate($ramValues),
+            'gpu_mps_allocated_mb' => $aggregate($gpuValues),
+            'inference_latency_ms' => $aggregate($latencies),
+        ],
+    ]);
+}
+
 if ($action === 'event') {
     $file = isset($_GET['file']) ? (string)$_GET['file'] : '';
     if ($file === '' || strpos($file, '..') !== false) {

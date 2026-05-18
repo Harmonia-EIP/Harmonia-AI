@@ -27,6 +27,7 @@ from src.dashboard_events import publish_command, publish_training
 from src.dataset import PresetDataset
 from src.metrics_publisher import push_metrics_report
 from src.model import TextToParams
+from src.perf_metrics import PerfSampler
 
 
 # Perceptual loss weights: discrete topology choices and the most audible
@@ -301,24 +302,12 @@ def maybe_push_metrics(eval_report_path):
         report = {}
 
     dashboard_result = publish_training(report, base_dir=BASE_DIR) if report else {"skipped": True, "reason": "missing-report"}
-    if dashboard_result.get("ok"):
-        print(f"[DASHBOARD] Training event pushed (HTTP {dashboard_result.get('status')}).")
+    if dashboard_result.get("buffered"):
+        print(f"[DASHBOARD] Training event buffered locally ({dashboard_result.get('local_path')}). Run `make push-metrics` to flush.")
     elif dashboard_result.get("skipped"):
         print(f"[DASHBOARD] {dashboard_result.get('reason', 'skipped')}")
     else:
-        print(f"[DASHBOARD] push error: {dashboard_result.get('error', dashboard_result.get('status'))}")
-
-    result = push_metrics_report(report_path, url=METRICS_PUSH_URL, base_dir=BASE_DIR)
-    if result.get("skipped"):
-        print(f"[METRICS] {result.get('reason', 'skipped')}")
-        return
-    status = result.get("status", "n/a")
-    if result.get("ok"):
-        print(f"[METRICS] Pushed evaluation report to {result.get('url')} (HTTP {status})")
-    else:
-        print(f"[METRICS] Push failed to {result.get('url')} (HTTP {status})")
-        if result.get("response"):
-            print(result["response"])
+        print(f"[DASHBOARD] buffer error: {dashboard_result.get('error', dashboard_result.get('status'))}")
 
 
 def resolve_dataset_path():
@@ -397,6 +386,9 @@ def train():
     best_monitor_loss = None
     best_state_dict = None
 
+    perf_sampler = PerfSampler(interval=2.0, base_dir=BASE_DIR)
+    perf_sampler.__enter__()
+
     for epoch in range(EPOCHS):
         model.train()
         total_loss = 0.0
@@ -439,7 +431,16 @@ def train():
         if (epoch + 1) % 10 == 0 or epoch == 0 or (epoch + 1) == EPOCHS:
             print(f"Epoch {epoch + 1}: train_loss = {avg_loss:.6f}")
 
+    perf_sampler.__exit__(None, None, None)
+    perf_series = list(perf_sampler.samples)
+    perf_summary = perf_sampler.summary()
     duration = time.time() - start_time
+    throughput = {
+        "duration_seconds": round(duration, 3),
+        "epochs": EPOCHS,
+        "epochs_per_minute": round((EPOCHS / duration) * 60, 3) if duration > 0 else None,
+        "samples_per_second": round((train_size * EPOCHS) / duration, 3) if duration > 0 and train_size else None,
+    }
     model_version = ensure_unique_model_version(resolve_model_version())
     artifact_paths = build_flat_model_paths(SAVED_MODELS_DIR, model_version)
     model_version = artifact_paths["model_version"]
@@ -474,6 +475,9 @@ def train():
         "param_keys": training_keys,
         "metrics": eval_metrics,
         "loss_history": loss_history,
+        "perf_series": perf_series,
+        "perf_summary": perf_summary,
+        "throughput": throughput,
     }
     eval_report_written = write_evaluation_report(eval_report_payload)
     if eval_file_path != eval_report_written:

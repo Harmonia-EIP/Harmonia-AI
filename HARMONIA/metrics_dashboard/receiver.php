@@ -220,6 +220,46 @@ if (count($index) > 5000) {
 }
 writeJson($indexPath, $index);
 
+// Persist performance/system metrics history (CPU, RAM, GPU, disk) for the
+// dashboard Performance page. Every event carries a `system_metrics` snapshot
+// captured at publish time; training events additionally embed a `perf_series`
+// time-series and a `throughput` block.
+$systemMetrics = isset($decoded['system_metrics']) && is_array($decoded['system_metrics']) ? $decoded['system_metrics'] : null;
+$perfSeries = isset($decoded['perf_series']) && is_array($decoded['perf_series']) ? $decoded['perf_series'] : null;
+$perfSummary = isset($decoded['perf_summary']) && is_array($decoded['perf_summary']) ? $decoded['perf_summary'] : null;
+$throughput = isset($decoded['throughput']) && is_array($decoded['throughput']) ? $decoded['throughput'] : null;
+$inferenceLatencyMs = isset($decoded['inference_latency_ms']) ? (float)$decoded['inference_latency_ms'] : null;
+
+if ($systemMetrics !== null || $perfSeries !== null || $inferenceLatencyMs !== null) {
+    $perfPath = $baseDir . DIRECTORY_SEPARATOR . 'performance.json';
+    $perfHistory = readJsonArray($perfPath);
+    $perfEntry = [
+        'timestamp' => $timestamp,
+        'received_at' => gmdate('c'),
+        'kind' => $kind,
+        'model_version' => $modelVersion,
+        'event_file' => $summary['file'],
+        'system_metrics' => $systemMetrics,
+    ];
+    if ($perfSeries !== null) {
+        $perfEntry['perf_series'] = $perfSeries;
+    }
+    if ($perfSummary !== null) {
+        $perfEntry['perf_summary'] = $perfSummary;
+    }
+    if ($throughput !== null) {
+        $perfEntry['throughput'] = $throughput;
+    }
+    if ($inferenceLatencyMs !== null) {
+        $perfEntry['inference_latency_ms'] = $inferenceLatencyMs;
+    }
+    $perfHistory[] = $perfEntry;
+    if (count($perfHistory) > 1000) {
+        $perfHistory = array_slice($perfHistory, -1000);
+    }
+    writeJson($perfPath, $perfHistory);
+}
+
 if ($kind === 'training') {
     $latestPath = $baseDir . DIRECTORY_SEPARATOR . 'latest_metrics.json';
     writeJson($latestPath, $decoded);

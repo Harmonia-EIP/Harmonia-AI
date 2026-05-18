@@ -106,6 +106,7 @@
           <button data-view="training" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Entraînement</button>
           <button data-view="presets" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Presets générés</button>
           <button data-view="activity" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Activité</button>
+          <button data-view="performance" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Performance</button>
           <button data-view="charter" class="nav-link text-left px-4 py-3 rounded-xl border border-transparent text-sm font-medium text-white/70 hover:text-white">Charte 20 paramètres</button>
         </nav>
 
@@ -115,6 +116,7 @@
           <option value="training">Entraînement</option>
           <option value="presets">Presets générés</option>
           <option value="activity">Activité</option>
+          <option value="performance">Performance</option>
           <option value="charter">Charte 20 paramètres</option>
         </select>
       </div>
@@ -147,6 +149,7 @@
       <section id="view-training" class="hidden space-y-6"></section>
       <section id="view-presets" class="hidden space-y-6"></section>
       <section id="view-activity" class="hidden space-y-6"></section>
+      <section id="view-performance" class="hidden space-y-6"></section>
       <section id="view-charter" class="hidden space-y-6"></section>
 
       <footer class="mt-12 py-6 border-t border-white/10 text-xs text-white/30 flex flex-wrap gap-3 justify-between">
@@ -164,13 +167,15 @@
       history: [],
       presets: [],
       events: [],
+      performance: [],
+      performanceAggregates: {},
       activeModel: null,
       activeEvent: null,
       apiMode: 'static',
     };
 
     const charts = {};
-    const VIEWS = ['overview', 'models', 'training', 'presets', 'activity', 'charter'];
+    const VIEWS = ['overview', 'models', 'training', 'presets', 'activity', 'performance', 'charter'];
     // Muted palette aligned with the dashboard accent colors (no rainbow).
     const CHART_COLORS = {
       primary: '#6b5cff',
@@ -201,6 +206,7 @@
       training: { title: 'Entraînement', subtitle: 'Loss, MSE, MAE par run, comparaison des modèles.' },
       presets: { title: 'Presets générés', subtitle: 'Toutes les générations envoyées par l\'IA, prompt et 20 valeurs.' },
       activity: { title: 'Activité', subtitle: 'Journal des commandes lancées sur le projet Harmonia.' },
+      performance: { title: 'Performance', subtitle: 'Utilisation CPU/GPU/RAM, throughput et latence d\'inférence.' },
       charter: { title: 'Charte 20 paramètres', subtitle: 'Description officielle des 20 contrôles HARMONIA.' },
     };
 
@@ -235,16 +241,19 @@
       }
 
       if (STATE.apiMode === 'api') {
-        const [models, history, presets, events] = await Promise.all([
+        const [models, history, presets, events, perf] = await Promise.all([
           fetchJson('api.php?action=models'),
           fetchJson('api.php?action=history'),
           fetchJson('api.php?action=presets&limit=500'),
           fetchJson('api.php?action=index&limit=500'),
+          fetchJson('api.php?action=performance&limit=300'),
         ]);
         STATE.models = models?.models || [];
         STATE.history = history?.history || [];
         STATE.presets = presets?.presets || [];
         STATE.events = events?.events || [];
+        STATE.performance = perf?.entries || [];
+        STATE.performanceAggregates = perf?.aggregates || {};
       } else {
         const history = await fetchJson('history_metrics.json');
         STATE.history = Array.isArray(history) ? history : [];
@@ -254,6 +263,9 @@
         STATE.events = Array.isArray(events) ? events : [];
         const models = await fetchJson('models.json');
         STATE.models = Array.isArray(models) ? models : extractModelsFromHistory(STATE.history);
+        const perf = await fetchJson('performance.json');
+        STATE.performance = Array.isArray(perf) ? perf.slice().reverse() : [];
+        STATE.performanceAggregates = {};
       }
 
       document.getElementById('apiStatusDot').className =
@@ -607,9 +619,14 @@
       const isActive = STATE.activeModel === model.model_version;
       return `
         <article class="glass rounded-2xl p-5 stat-card clickable ${isActive ? 'border-pink-400/50' : ''}" data-action="open-model" data-model="${model.model_version}">
-          <div class="flex items-center justify-between gap-3">
-            <p class="mono text-lg font-semibold">${model.model_version}</p>
-            <span class="pill ${isActive ? 'pill-pink' : 'pill-purple'}">${isActive ? 'sélectionné' : (model.training_count || 0) + ' runs'}</span>
+          <div class="flex items-center justify-between gap-3 min-w-0">
+            <p
+              class="mono text-lg font-semibold flex-1 min-w-0 truncate"
+              title="${model.model_version}"
+            >
+              ${model.model_version}
+            </p>
+            <span class="pill ... shrink-0">...</span>
           </div>
           <p class="text-xs text-white/40 mt-2">Dernier signal · ${formatDate(model.last_seen_at)}</p>
           <div class="grid grid-cols-3 gap-3 mt-4 text-center">
@@ -917,6 +934,249 @@
       apply();
     }
 
+    function renderPerformance() {
+      const section = document.getElementById('view-performance');
+      destroyChart('perfCpuRam');
+      destroyChart('perfGpu');
+      destroyChart('perfTraining');
+      destroyChart('perfLatency');
+
+      const entries = (STATE.performance || []).slice().reverse(); // oldest -> newest
+      const latest = entries[entries.length - 1] || null;
+      const sys = latest?.system_metrics || {};
+      const gpu = sys.gpu_mps || {};
+
+      const aggCpu = STATE.performanceAggregates?.cpu_percent || {};
+      const aggRam = STATE.performanceAggregates?.ram_percent || {};
+      const aggGpu = STATE.performanceAggregates?.gpu_mps_allocated_mb || {};
+      const aggLat = STATE.performanceAggregates?.inference_latency_ms || {};
+
+      // Find the most recent training event with a perf_series time-series.
+      let trainingSeriesEntry = null;
+      for (let i = entries.length - 1; i >= 0; i--) {
+        if (entries[i].kind === 'training' && Array.isArray(entries[i].perf_series) && entries[i].perf_series.length) {
+          trainingSeriesEntry = entries[i];
+          break;
+        }
+      }
+      const throughput = trainingSeriesEntry?.throughput || {};
+      const perfSummary = trainingSeriesEntry?.perf_summary || {};
+
+      const card = (label, value, unit, pillClass = 'pill-purple') => `
+        <div class="glass rounded-2xl p-4 stat-card">
+          <p class="text-[0.65rem] uppercase tracking-widest text-white/40">${label}</p>
+          <p class="mono text-2xl font-semibold mt-2">${value ?? '—'}<span class="text-sm text-white/40 ml-1">${unit || ''}</span></p>
+          <p class="text-xs text-white/40 mt-1">${pillClass.includes('amber') ? 'fenêtre récente' : 'dernier event'}</p>
+        </div>`;
+
+      const formatVal = (v, digits = 1) => (v === null || v === undefined || Number.isNaN(+v)) ? '—' : Number(v).toFixed(digits);
+
+      section.innerHTML = `
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          ${card('CPU (dernier)', formatVal(sys.cpu_percent), '%')}
+          ${card('RAM (dernier)', formatVal(sys.ram_percent), '%')}
+          ${card('GPU MPS alloué', formatVal(gpu.allocated_mb, 0), 'MB')}
+          ${card('Disque libre', formatVal(sys.disk_free_mb, 0), 'MB')}
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          ${card('CPU moyen', formatVal(aggCpu.avg), '%', 'pill-amber')}
+          ${card('CPU max', formatVal(aggCpu.max), '%', 'pill-amber')}
+          ${card('RAM moyen', formatVal(aggRam.avg), '%', 'pill-amber')}
+          ${card('GPU max alloué', formatVal(aggGpu.max, 0), 'MB', 'pill-amber')}
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="glass rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-white/40">CPU / RAM</p>
+                <h2 class="text-lg font-semibold">Évolution sur les ${entries.length} derniers événements</h2>
+              </div>
+              <span class="pill pill-purple">${entries.length} pts</span>
+            </div>
+            <div class="h-64"><canvas id="perfCpuRamCanvas"></canvas></div>
+          </div>
+
+          <div class="glass rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-white/40">GPU (MPS) alloué</p>
+                <h2 class="text-lg font-semibold">Mémoire GPU au fil du temps</h2>
+              </div>
+              <span class="pill pill-cyan">${gpu.available ? 'MPS dispo' : 'MPS off'}</span>
+            </div>
+            <div class="h-64"><canvas id="perfGpuCanvas"></canvas></div>
+          </div>
+        </div>
+
+        <div class="glass rounded-2xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <p class="text-xs uppercase tracking-[0.3em] text-white/40">Time-series du dernier training</p>
+              <h2 class="text-lg font-semibold">${trainingSeriesEntry?.model_version || '—'} · ${trainingSeriesEntry ? formatDate(trainingSeriesEntry.timestamp) : 'aucun run avec série'}</h2>
+            </div>
+            <div class="flex gap-2">
+              ${throughput.epochs ? `<span class="pill pill-purple">${throughput.epochs} epochs</span>` : ''}
+              ${throughput.duration_seconds ? `<span class="pill pill-cyan">${formatVal(throughput.duration_seconds, 1)}s</span>` : ''}
+              ${throughput.samples_per_second ? `<span class="pill pill-green">${formatVal(throughput.samples_per_second, 1)} samp/s</span>` : ''}
+            </div>
+          </div>
+          <div class="h-72"><canvas id="perfTrainingCanvas"></canvas></div>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-xs text-white/60">
+            <div><span class="text-white/40 uppercase tracking-widest text-[0.65rem]">CPU avg</span><br><span class="mono text-base">${formatVal(perfSummary?.cpu_percent?.avg)}%</span></div>
+            <div><span class="text-white/40 uppercase tracking-widest text-[0.65rem]">CPU max</span><br><span class="mono text-base">${formatVal(perfSummary?.cpu_percent?.max)}%</span></div>
+            <div><span class="text-white/40 uppercase tracking-widest text-[0.65rem]">RAM avg</span><br><span class="mono text-base">${formatVal(perfSummary?.ram_percent?.avg)}%</span></div>
+            <div><span class="text-white/40 uppercase tracking-widest text-[0.65rem]">GPU max</span><br><span class="mono text-base">${formatVal(perfSummary?.gpu_mps_allocated_mb?.max, 0)} MB</span></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="glass rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+              <div>
+                <p class="text-xs uppercase tracking-[0.3em] text-white/40">Latence d'inférence</p>
+                <h2 class="text-lg font-semibold">Générations récentes</h2>
+              </div>
+              <span class="pill pill-pink">${aggLat.count || 0} pts</span>
+            </div>
+            <div class="h-56"><canvas id="perfLatencyCanvas"></canvas></div>
+            <div class="grid grid-cols-3 gap-3 mt-3 text-xs text-white/60">
+              <div><span class="text-white/40">min</span><br><span class="mono">${formatVal(aggLat.min, 1)} ms</span></div>
+              <div><span class="text-white/40">avg</span><br><span class="mono">${formatVal(aggLat.avg, 1)} ms</span></div>
+              <div><span class="text-white/40">max</span><br><span class="mono">${formatVal(aggLat.max, 1)} ms</span></div>
+            </div>
+          </div>
+
+          <div class="glass rounded-2xl p-5">
+            <p class="text-xs uppercase tracking-[0.3em] text-white/40">Snapshot système (dernier event)</p>
+            <h2 class="text-lg font-semibold mb-3">${latest?.model_version || '—'}</h2>
+            <table class="w-full text-sm">
+              <tbody class="divide-y divide-white/5">
+                <tr><td class="py-1.5 text-white/40">Plateforme</td><td class="py-1.5 mono text-right">${sys.platform || '—'} ${sys.platform_release || ''}</td></tr>
+                <tr><td class="py-1.5 text-white/40">CPU cores (log/phys)</td><td class="py-1.5 mono text-right">${sys.cpu_count_logical ?? '—'} / ${sys.cpu_count_physical ?? '—'}</td></tr>
+                <tr><td class="py-1.5 text-white/40">RAM total</td><td class="py-1.5 mono text-right">${formatVal(sys.ram_total_mb, 0)} MB</td></tr>
+                <tr><td class="py-1.5 text-white/40">RAM utilisée</td><td class="py-1.5 mono text-right">${formatVal(sys.ram_used_mb, 0)} MB (${formatVal(sys.ram_percent)} %)</td></tr>
+                <tr><td class="py-1.5 text-white/40">Proc RSS</td><td class="py-1.5 mono text-right">${formatVal(sys.proc_rss_mb, 1)} MB</td></tr>
+                <tr><td class="py-1.5 text-white/40">Disque</td><td class="py-1.5 mono text-right">${formatVal(sys.disk_free_mb, 0)} / ${formatVal(sys.disk_total_mb, 0)} MB libres</td></tr>
+                <tr><td class="py-1.5 text-white/40">Load avg (1m/5m/15m)</td><td class="py-1.5 mono text-right">${formatVal(sys.load_avg_1m, 2)} / ${formatVal(sys.load_avg_5m, 2)} / ${formatVal(sys.load_avg_15m, 2)}</td></tr>
+                <tr><td class="py-1.5 text-white/40">GPU MPS allocated</td><td class="py-1.5 mono text-right">${formatVal(gpu.allocated_mb, 1)} MB</td></tr>
+                <tr><td class="py-1.5 text-white/40">GPU MPS driver</td><td class="py-1.5 mono text-right">${formatVal(gpu.driver_allocated_mb, 1)} MB</td></tr>
+                <tr><td class="py-1.5 text-white/40">GPU MPS recommended max</td><td class="py-1.5 mono text-right">${formatVal(gpu.recommended_max_mb, 0)} MB</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+
+      if (!entries.length) {
+        section.insertAdjacentHTML('afterbegin', '<p class="text-white/50 glass rounded-2xl p-5">Aucune donnée de performance. Exécute une commande Harmonia puis <span class="mono">make push-metrics</span>.</p>');
+        return;
+      }
+
+      const labels = entries.map(e => {
+        try { return new Date(e.timestamp).toLocaleTimeString(); } catch { return ''; }
+      });
+      const cpuSeries = entries.map(e => (e.system_metrics?.cpu_percent ?? null));
+      const ramSeries = entries.map(e => (e.system_metrics?.ram_percent ?? null));
+      const gpuSeries = entries.map(e => (e.system_metrics?.gpu_mps?.allocated_mb ?? null));
+
+      const baseLineOpts = {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: CHART_COLORS.tick } },
+          tooltip: { backgroundColor: CHART_COLORS.tooltipBg, borderColor: CHART_COLORS.tooltipBorder, borderWidth: 1 },
+        },
+        scales: {
+          x: { ticks: { color: CHART_COLORS.tick, maxTicksLimit: 8 }, grid: { color: CHART_COLORS.grid } },
+          y: { ticks: { color: CHART_COLORS.tick }, grid: { color: CHART_COLORS.grid } },
+        },
+      };
+
+      const cpuRamCanvas = document.getElementById('perfCpuRamCanvas');
+      if (cpuRamCanvas) {
+        charts.perfCpuRam = new Chart(cpuRamCanvas, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'CPU %', data: cpuSeries, borderColor: CHART_COLORS.primary, backgroundColor: withAlpha(CHART_COLORS.primary, 0.18), tension: 0.3, fill: true, pointRadius: 0 },
+              { label: 'RAM %', data: ramSeries, borderColor: CHART_COLORS.secondary, backgroundColor: withAlpha(CHART_COLORS.secondary, 0.12), tension: 0.3, fill: true, pointRadius: 0 },
+            ],
+          },
+          options: { ...baseLineOpts, scales: { ...baseLineOpts.scales, y: { ...baseLineOpts.scales.y, min: 0, max: 100 } } },
+        });
+      }
+
+      const gpuCanvas = document.getElementById('perfGpuCanvas');
+      if (gpuCanvas) {
+        charts.perfGpu = new Chart(gpuCanvas, {
+          type: 'line',
+          data: {
+            labels,
+            datasets: [
+              { label: 'GPU MPS (MB)', data: gpuSeries, borderColor: CHART_COLORS.tertiary, backgroundColor: withAlpha(CHART_COLORS.tertiary, 0.15), tension: 0.3, fill: true, pointRadius: 0 },
+            ],
+          },
+          options: baseLineOpts,
+        });
+      }
+
+      const trainingCanvas = document.getElementById('perfTrainingCanvas');
+      if (trainingCanvas && trainingSeriesEntry) {
+        const series = trainingSeriesEntry.perf_series || [];
+        const tLabels = series.map(s => `${s.elapsed_s ?? 0}s`);
+        charts.perfTraining = new Chart(trainingCanvas, {
+          type: 'line',
+          data: {
+            labels: tLabels,
+            datasets: [
+              { label: 'CPU %', data: series.map(s => s.cpu_percent ?? null), borderColor: CHART_COLORS.primary, tension: 0.3, pointRadius: 0, yAxisID: 'y' },
+              { label: 'RAM %', data: series.map(s => s.ram_percent ?? null), borderColor: CHART_COLORS.secondary, tension: 0.3, pointRadius: 0, yAxisID: 'y' },
+              { label: 'GPU MPS (MB)', data: series.map(s => s.gpu_mps?.allocated_mb ?? null), borderColor: CHART_COLORS.tertiary, tension: 0.3, pointRadius: 0, yAxisID: 'y1' },
+            ],
+          },
+          options: {
+            ...baseLineOpts,
+            scales: {
+              x: { ticks: { color: CHART_COLORS.tick, maxTicksLimit: 10 }, grid: { color: CHART_COLORS.grid } },
+              y: { position: 'left', min: 0, max: 100, ticks: { color: CHART_COLORS.tick, callback: v => `${v}%` }, grid: { color: CHART_COLORS.grid } },
+              y1: { position: 'right', ticks: { color: CHART_COLORS.tick, callback: v => `${v} MB` }, grid: { display: false } },
+            },
+          },
+        });
+      } else if (trainingCanvas) {
+        const ctx = trainingCanvas.getContext('2d');
+        ctx.fillStyle = CHART_COLORS.tick;
+        ctx.font = '13px Inter';
+        ctx.fillText('Pas encore de série temporelle de training disponible.', 12, 24);
+      }
+
+      const latencyCanvas = document.getElementById('perfLatencyCanvas');
+      if (latencyCanvas) {
+        const latEntries = entries.filter(e => typeof e.inference_latency_ms === 'number');
+        charts.perfLatency = new Chart(latencyCanvas, {
+          type: 'bar',
+          data: {
+            labels: latEntries.map(e => {
+              try { return new Date(e.timestamp).toLocaleTimeString(); } catch { return ''; }
+            }),
+            datasets: [{
+              label: 'Latence (ms)',
+              data: latEntries.map(e => e.inference_latency_ms),
+              backgroundColor: withAlpha(CHART_COLORS.warm, 0.45),
+              borderColor: CHART_COLORS.warm,
+              borderWidth: 1,
+              borderRadius: 3,
+            }],
+          },
+          options: baseLineOpts,
+        });
+      }
+    }
+
     function renderCharter() {
       const section = document.getElementById('view-charter');
       const charter = STATE.summary?.latest_training_payload?.charter || [];
@@ -1022,6 +1282,7 @@
         case 'training': return renderTraining();
         case 'presets': return renderPresets();
         case 'activity': return renderActivity();
+        case 'performance': return renderPerformance();
         case 'charter': return renderCharter();
       }
     }

@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 import torch
@@ -103,8 +104,10 @@ def generate_preset(prompt, output_filename):
     )
 
     print(f"Dreaming up parameters for: '{prompt}'...")
+    inference_t0 = time.perf_counter()
     with torch.no_grad():
         prediction = model(inputs['input_ids'], inputs['attention_mask'])
+    inference_latency_ms = round((time.perf_counter() - inference_t0) * 1000.0, 3)
 
     param_list = prediction[0].tolist()
     is_charter = list(runtime_param_keys) == list(PARAM_NAMES)
@@ -152,9 +155,11 @@ def generate_preset(prompt, output_filename):
         model_hash=model_hash,
         charter_version="1.0" if is_charter else None,
         source="cli",
+        inference_latency_ms=inference_latency_ms,
+        token_count=token_count,
     )
-    if pub.get("ok"):
-        print(f"[dashboard] generation event pushed (HTTP {pub.get('status')}).")
+    if pub.get("buffered"):
+        print(f"[dashboard] generation event buffered ({pub.get('local_path')}). Run `make push-metrics` to flush.")
     elif pub.get("skipped"):
         print(f"[dashboard] generation event mirrored locally only ({pub.get('reason', 'skipped')}).")
     publish_command(

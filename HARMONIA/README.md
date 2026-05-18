@@ -238,8 +238,7 @@ Run one CLI generation test:
 
 ```bash
 make generate-cli
-# or custom prompt/output:
-make generate-cli PROMPT="Huge dark bass with short release" OUTPUT=data/processed/bass_test.json
+make generate-cli PROMPT="Huge dark bass with short release" OUTPUT=data/processed/presets/bass_test.json
 ```
 
 Estimate expected training duration from your benchmark history:

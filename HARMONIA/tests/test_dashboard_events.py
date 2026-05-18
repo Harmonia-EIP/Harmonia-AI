@@ -34,13 +34,14 @@ def test_publish_event_writes_local_mirror(tmp_path, monkeypatch):
     )
 
     assert result["kind"] == "command"
-    assert result.get("skipped") is True
+    assert result.get("buffered") is True
     local_path = Path(result["local_path"])
     assert local_path.exists()
     payload = json.loads(local_path.read_text(encoding="utf-8"))
     assert payload["event_kind"] == "command"
     assert payload["command"] == "make check"
     assert payload["model_version"] == "demo"
+    assert "system_metrics" in payload
 
 
 def test_publish_event_normalises_unknown_kind(tmp_path, monkeypatch):
