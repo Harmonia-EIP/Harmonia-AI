@@ -6,7 +6,7 @@ SYNTH_PER_PROMPT ?= 50
 OUTPUT ?=
 METRICS_TOKEN ?= metrics_dashboard/.env
 
-.PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve metrics-local metrics-api estimate-train-time push-metrics dashboard-stats dashboard-snapshot dashboard-serve charterize-dataset synthesize-dataset train-synth
+.PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve run-flask metrics-local metrics-api estimate-train-time push-metrics dashboard-stats dashboard-snapshot dashboard-serve charterize-dataset synthesize-dataset train-synth
 
 help:
 	@echo "Targets:"
@@ -23,7 +23,8 @@ help:
 	@echo "  make metrics-local      # Print latest benchmark/report from local files"
 	@echo "  make metrics-api        # Query http://127.0.0.1:5000/metrics/latest"
 	@echo "  make estimate-train-time# Estimate duration from benchmark history"
-	@echo "  make serve              # Run Flask API"
+	@echo "  make serve              # Run Flask API (port 5000)"
+	@echo "  make run-flask          # Alias for serve"
 	@echo "  make push-metrics       # Flush local event buffer to the remote dashboard"
 	@echo "  make dashboard-stats    # Build snapshot + push to harmonia.mcoet.com"
 	@echo "  make dashboard-snapshot # Build local snapshot only (no push)"
@@ -90,6 +91,8 @@ pipeline-local: check train-fast metrics-local generate-cli
 
 serve:
 	$(PYTHON) scripts/server.py
+
+run-flask: serve
 
 metrics-local:
 	$(PYTHON) scripts/metrics_summary.py

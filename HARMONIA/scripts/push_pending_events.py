@@ -1,12 +1,5 @@
 #!/usr/bin/env python3
-"""Flush the local dashboard event buffer to the remote receiver.
 
-All `publish_*` calls in Harmonia write JSON events to
-``metrics_dashboard/events/`` instead of pushing immediately. This script is
-invoked by ``make push-metrics`` and ships everything in one batch:
-events are POSTed one by one, successful uploads are deleted from the buffer,
-and an up-to-date snapshot is pushed at the end.
-"""
 from __future__ import annotations
 
 import argparse

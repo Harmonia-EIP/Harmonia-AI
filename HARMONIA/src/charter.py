@@ -1,13 +1,3 @@
-"""HARMONIA Universal Control Charter (20 parameters).
-
-Single source of truth for the Charte Universelle de Contrôle.
-
-The AI always emits 20 floats strictly in [0.0, 1.0]. The plugin (C++/JUCE)
-applies the curves declared here via NormalisableRange before sending values
-to the DSP engine. Bipolar parameters (only filter_env_amount, P13) follow
-the convention 0.5 = neutral, 0.0 = -1.0, 1.0 = +1.0.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -98,7 +88,6 @@ DISCRETE_STEPS: Dict[int, Tuple[str, ...]] = {
 
 
 def charter_metadata() -> List[Dict[str, object]]:
-    """Charter description, safe to ship in API responses."""
     return [param.to_dict() for param in CHARTER]
 
 
@@ -108,11 +97,6 @@ def discrete_step_count(idx: int) -> int:
 
 
 def snap_discrete(value: float, idx: int) -> float:
-    """Snap a 0..1 value to the nearest discrete step center for a discrete param.
-
-    Mirrors how the JUCE side will quantize on receipt; useful at training time
-    so labels coming from heterogeneous data sources collapse onto a clean grid.
-    """
     n = discrete_step_count(idx)
     if n <= 1:
         return max(0.0, min(1.0, float(value)))
@@ -128,7 +112,6 @@ def clamp_unit(value: float) -> float:
 
 
 def normalise_vector(values: List[float]) -> List[float]:
-    """Force a 20-length [0,1] vector. Pads or truncates if needed."""
     out = [clamp_unit(v) for v in values[:20]]
     if len(out) < 20:
         out.extend([0.0] * (20 - len(out)))

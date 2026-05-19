@@ -1,13 +1,3 @@
-"""HARMONIA TextToParams model.
-
-The legacy default (9 generic params) is preserved when callers explicitly set
-``num_plugin_parameters``. When ``num_plugin_parameters == 20`` the model
-switches to charter mode: a richer head with per-kind activations
-(continuous -> sigmoid, bipolar -> sigmoid centred at 0.5, discrete -> softmax
-projected back to 0..1 step centres), so the output respects the Charte
-Universelle without needing the C++ side to second-guess the regressor.
-"""
-
 from __future__ import annotations
 
 import os
@@ -41,7 +31,6 @@ def _masked_mean_pool(last_hidden_state: torch.Tensor, attention_mask: torch.Ten
 
 
 class _CharterHead(nn.Module):
-    """Specialised head for the 20-parameter charter."""
 
     def __init__(self, hidden_size: int, dropout: float = 0.1):
         super().__init__()

@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""Procedurally generate a charter-shaped training dataset from curated concepts.
 
-Each concept (Soft Piano, Reese Bass, Bell Pluck, etc.) is described by a
-base parameter vector + per-param jitter envelope + a list of prompt phrasings.
-At build time we expand every (concept, prompt) pair into N variations with
-Gaussian noise on continuous params and rare discrete swaps. Prompt modifier
-words ("bright", "dark", "ambient", "lo-fi"...) further perturb the params so
-the language model has a real signal to latch onto for unseen prompts.
-
-Output: data/processed/synthetic_dataset.charter.npy (charter-compliant NPY,
-ready for train.py).
-"""
 from __future__ import annotations
 
 import argparse
