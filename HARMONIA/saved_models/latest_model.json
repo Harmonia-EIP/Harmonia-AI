@@ -1,8 +1,0 @@
-{
-    "model_version": "synthetic_v1",
-    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/synthetic_v1.pth",
-    "metadata_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/synthetic_v1.meta.json",
-    "evaluation_report_path": "/Users/malo/Harmonia-AI/HARMONIA/benchmarks/reports/eval_20260518_163546.json",
-    "model_hash": "0534996197d50d3c2da039c003485f43158427e01cfe28d6ed00f17cd4c63475",
-    "updated_at": "2026-05-18 16:35:46"
-}
