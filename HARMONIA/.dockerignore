@@ -1,0 +1,13 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.idea
+.pytest_cache
+data
+tests
+latex
+docs
+saved_models/archive
+saved_models/train*
