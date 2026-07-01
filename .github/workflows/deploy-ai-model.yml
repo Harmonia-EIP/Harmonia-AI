@@ -1,0 +1,37 @@
+name: Deploy AI model to VPS
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "HARMONIA/saved_models/model_*.pth"
+      - "HARMONIA/saved_models/model_*.meta.json"
+
+jobs:
+  deploy-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Copy model weights to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "HARMONIA/saved_models/model_*.pth,HARMONIA/saved_models/model_*.meta.json"
+          target: "/home/ubuntu/harmonia/ai-models/saved_models/"
+          strip_components: 2
+
+      - name: Restart AI service to reload the model
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu/harmonia
+            docker compose restart ai
