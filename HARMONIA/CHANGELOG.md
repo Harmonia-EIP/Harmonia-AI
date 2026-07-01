@@ -1,4 +1,4 @@
-# CHANGELOG.md 📜
+# CHANGELOG.md 📜 - 18/01/2026
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
