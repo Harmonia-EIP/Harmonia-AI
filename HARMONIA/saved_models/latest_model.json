@@ -1,7 +1,7 @@
 {
     "model_version": "model_synthetic_v1",
-    "model_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/model_synthetic_v1.pth",
-    "metadata_path": "/Users/malo/Harmonia-AI/HARMONIA/saved_models/model_synthetic_v1.meta.json",
+    "model_path": "model_synthetic_v1.pth",
+    "metadata_path": "model_synthetic_v1.meta.json",
     "model_hash": "0534996197d50d3c2da039c003485f43158427e01cfe28d6ed00f17cd4c63475",
     "updated_at": "2026-07-06 00:00:00"
 }

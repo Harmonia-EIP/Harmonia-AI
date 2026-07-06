@@ -116,8 +116,11 @@ def resolve_latest_model(saved_models_dir: Path, legacy_model_path: Optional[Pat
     model_version = payload.get("model_version")
 
     if model_path_value:
-        model_path = Path(model_path_value)
-        metadata_path = Path(metadata_path_value) if metadata_path_value else None
+        # Re-anchor to saved_models_dir using just the filename: the pointer
+        # may have been written from a different machine/environment (e.g.
+        # a local dev path), so the stored absolute path is not portable.
+        model_path = saved_models_dir / Path(model_path_value).name
+        metadata_path = saved_models_dir / Path(metadata_path_value).name if metadata_path_value else None
         if model_path.exists():
             resolved = {
                 "model_version": model_version or model_path.parent.name,
