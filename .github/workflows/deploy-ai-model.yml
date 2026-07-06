@@ -7,6 +7,7 @@ on:
     paths:
       - "HARMONIA/saved_models/model_*.pth"
       - "HARMONIA/saved_models/model_*.meta.json"
+      - "HARMONIA/saved_models/latest_model.json"
 
 jobs:
   deploy-model:
@@ -21,7 +22,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "HARMONIA/saved_models/model_*.pth,HARMONIA/saved_models/model_*.meta.json"
+          source: "HARMONIA/saved_models/model_*.pth,HARMONIA/saved_models/model_*.meta.json,HARMONIA/saved_models/latest_model.json"
           target: "/home/ubuntu/harmonia/ai-models/saved_models/"
           strip_components: 2
 

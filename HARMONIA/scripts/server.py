@@ -33,6 +33,34 @@ TOKENIZER_MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 PARAM_KEYS = list(PARAM_NAMES)
 PLUGIN_PARAM_COUNT = len(PARAM_KEYS)
 
+DEFAULT_MODEL_KEY = "default"
+
+# Named models selectable from the app's model switcher, in addition to the
+# default model resolved via resolve_latest_model().
+EXPLICIT_MODELS = {
+    "charter_v1": {
+        "model_path": SAVED_MODELS_DIR / "model_charter_v1.pth",
+        "metadata_path": SAVED_MODELS_DIR / "model_charter_v1.meta.json",
+    },
+}
+
+# Maps the model_id/model_name/model values the app can send to a key in
+# EXPLICIT_MODELS, or DEFAULT_MODEL_KEY.
+MODEL_KEY_ALIASES = {
+    "model-1": DEFAULT_MODEL_KEY,
+    "1": DEFAULT_MODEL_KEY,
+    "model-2": "charter_v1",
+    "charter_v1": "charter_v1",
+    "2": "charter_v1",
+}
+
+
+def _resolve_model_key(data: dict) -> str:
+    raw = data.get("model_name") or data.get("model") or data.get("model_id")
+    if raw is None:
+        return DEFAULT_MODEL_KEY
+    return MODEL_KEY_ALIASES.get(str(raw).strip().lower(), DEFAULT_MODEL_KEY)
+
 @dataclass
 class InferenceRuntime:
     model: Optional[TextToParams]
@@ -61,12 +89,15 @@ def _load_json_file(path):
     return {}
 
 
-def _build_runtime() -> InferenceRuntime:
-    artifact = resolve_latest_model(
-        SAVED_MODELS_DIR,
-        legacy_model_path=LEGACY_MODEL_PATH,
-        legacy_metadata_path=LEGACY_METADATA_PATH,
-    )
+def _build_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
+    if model_key == DEFAULT_MODEL_KEY:
+        artifact = resolve_latest_model(
+            SAVED_MODELS_DIR,
+            legacy_model_path=LEGACY_MODEL_PATH,
+            legacy_metadata_path=LEGACY_METADATA_PATH,
+        )
+    else:
+        artifact = EXPLICIT_MODELS[model_key]
 
     model_path = artifact.get("model_path")
     metadata_path = artifact.get("metadata_path")
@@ -144,9 +175,9 @@ def _build_runtime() -> InferenceRuntime:
     )
 
 
-@lru_cache(maxsize=1)
-def _get_runtime() -> InferenceRuntime:
-    return _build_runtime()
+@lru_cache(maxsize=None)
+def _get_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
+    return _build_runtime(model_key)
 
 
 def _validate_prompt(payload: dict) -> Tuple[Optional[str], Optional[str]]:
@@ -213,6 +244,7 @@ def latest_metrics():
     )
 
 @app.route('/generate', methods=['POST'])
+@app.route('/ai/generate-preset', methods=['POST'], endpoint='generate_preset_alias')
 def generate():
     data = request.get_json(silent=True)
     if data is None:
@@ -224,7 +256,7 @@ def generate():
     if validation_error:
         return jsonify({"error": validation_error}), 400
 
-    runtime = _get_runtime()
+    runtime = _get_runtime(_resolve_model_key(data))
     if not runtime.ready:
         return jsonify({"error": "Model unavailable. Train and save model first."}), 503
 
