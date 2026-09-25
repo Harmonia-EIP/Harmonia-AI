@@ -22,4 +22,5 @@ jobs:
             git reset --hard origin/dev
             cd /home/ubuntu/harmonia
             docker compose build ai
+            docker ps -aq --filter "name=_harmonia_ai$" | xargs -r docker rm -f
             docker compose up -d ai

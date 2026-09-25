@@ -1199,7 +1199,7 @@ def main() -> int:
     parser.add_argument("--mix-anchors", action="store_true", help="Also include anchor_presets entries verbatim (no jitter), oversampled 100x.")
     args = parser.parse_args()
 
-    rng = random.Random(args.seed)
+    rng = random.Random(args.seed)  # nosec B311 - seeded RNG for reproducible synthetic data, not security-sensitive
 
     records = []
     family_counts = {}

@@ -24,6 +24,7 @@ def _stub_push_disabled(monkeypatch):
     monkeypatch.setenv("HARMONIA_PUSH_METRICS", "0")
 
 
+# Publishing an event should write a local JSON mirror with system metrics attached.
 def test_publish_event_writes_local_mirror(tmp_path, monkeypatch):
     _stub_push_disabled(monkeypatch)
 
@@ -44,12 +45,14 @@ def test_publish_event_writes_local_mirror(tmp_path, monkeypatch):
     assert "system_metrics" in payload
 
 
+# Unknown event kinds should fall back to the default kind.
 def test_publish_event_normalises_unknown_kind(tmp_path, monkeypatch):
     _stub_push_disabled(monkeypatch)
     result = publish_event("???", {"foo": "bar"}, base_dir=tmp_path)
     assert result["kind"] == dashboard_events.DEFAULT_KIND
 
 
+# Training payload should retain metrics and the latest loss history value.
 def test_training_payload_keeps_metrics():
     payload = training_payload({
         "timestamp": "2026-04-30T10:00:00Z",
@@ -64,6 +67,7 @@ def test_training_payload_keeps_metrics():
     assert payload["loss_history"][-1] == 0.12
 
 
+# Generation payload should include the prompt, values and parameter mapping.
 def test_generation_payload_includes_values():
     payload = generation_payload(
         "Hard Electro Lead",
@@ -80,6 +84,7 @@ def test_generation_payload_includes_values():
     assert payload["charter_version"] == "1.0"
 
 
+# Command payload should round-trip status, duration and detail metadata.
 def test_command_payload_round_trips_metadata():
     payload = command_payload("make check", status="ok", duration_seconds=12.4, detail={"hash": "x"})
     assert payload["command"] == "make check"
@@ -88,6 +93,7 @@ def test_command_payload_round_trips_metadata():
     assert payload["detail"] == {"hash": "x"}
 
 
+# Publishing a command event should mirror it under the given base directory.
 def test_publish_command_uses_base_dir(tmp_path, monkeypatch):
     _stub_push_disabled(monkeypatch)
     publish_command("make dashboard-stats", status="ok", base_dir=tmp_path)
@@ -99,6 +105,7 @@ def test_publish_command_uses_base_dir(tmp_path, monkeypatch):
     assert payload["command"] == "make dashboard-stats"
 
 
+# Publishing a generation event should mirror the prompt and event kind to disk.
 def test_publish_generation_round_trips(tmp_path, monkeypatch):
     _stub_push_disabled(monkeypatch)
     publish_generation(
@@ -115,6 +122,7 @@ def test_publish_generation_round_trips(tmp_path, monkeypatch):
     assert payload["prompt"] == "Acid Bass"
 
 
+# Publishing a training event should delegate to publish_event and mirror metrics.
 def test_publish_training_invokes_publish_event(tmp_path, monkeypatch):
     _stub_push_disabled(monkeypatch)
     publish_training(
