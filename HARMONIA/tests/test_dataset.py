@@ -21,6 +21,7 @@ class DummyTokenizer:
         }
 
 
+# Loading an .npy dataset should expose the union of parameter keys across records.
 def test_preset_dataset_loads_npy_and_exposes_param_keys(tmp_path):
     payload = [
         {
@@ -58,6 +59,7 @@ def test_preset_dataset_loads_npy_and_exposes_param_keys(tmp_path):
     assert item["labels"].shape[0] == 4
 
 
+# Categorical values should be normalized to [0, 1] when normalize_categorical is set.
 def test_preset_dataset_normalizes_categorical_values(tmp_path):
     payload = [
         {

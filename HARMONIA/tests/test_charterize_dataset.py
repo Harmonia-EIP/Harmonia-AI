@@ -48,6 +48,7 @@ def _sample_sylenth_record() -> dict:
     }
 
 
+# Flattening should merge continuous/binary/categorical groups into one dict.
 def test_flatten_merges_three_groups():
     flat = _flatten_sylenth_parameters(_sample_sylenth_record()["parameters"])
     assert "AmpEnv A Attack" in flat
@@ -55,16 +56,19 @@ def test_flatten_merges_three_groups():
     assert "Sw DistOnOff" in flat
 
 
+# Already-flat parameter dicts should pass through unchanged.
 def test_flatten_accepts_already_flat():
     flat = _flatten_sylenth_parameters({"Filter A Cutoff": 0.4, "AmpEnv A Attack": 0.0})
     assert flat == {"Filter A Cutoff": 0.4, "AmpEnv A Attack": 0.0}
 
 
+# Description extraction should drop the .fxp extension and underscores.
 def test_extract_description_strips_fxp_and_underscores():
     desc = _extract_description({"name": "Acid_Bass.fxp"})
     assert desc == "Acid Bass"
 
 
+# Charterizing an .npy dataset should preserve record count and produce valid parameter vectors.
 def test_charterize_npy_round_trip(tmp_path):
     src = tmp_path / "src.npy"
     out = tmp_path / "out.npy"
@@ -89,6 +93,7 @@ def test_charterize_npy_round_trip(tmp_path):
     assert all(0.0 <= v <= 1.0 for v in flat.values())
 
 
+# Charterize should be able to write output as JSON instead of .npy.
 def test_charterize_json_output_format(tmp_path):
     src = tmp_path / "src.npy"
     out = tmp_path / "out.json"
@@ -101,6 +106,7 @@ def test_charterize_json_output_format(tmp_path):
     assert "parameters" in payload[0]
 
 
+# Anchor presets should be appended to the output when an anchor file is given.
 def test_charterize_appends_anchors(tmp_path):
     src = tmp_path / "src.npy"
     out = tmp_path / "out.npy"

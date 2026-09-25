@@ -124,7 +124,7 @@ def charterize(
     anchor_path: Optional[Path] = ANCHOR_PRESETS_PATH,
     limit: Optional[int] = None,
     verbose: bool = True,
-    profile: Optional[str] = "sylenth1",
+    profile: Optional[str] = None,
 ) -> Dict[str, int]:
     if not input_path.exists():
         raise FileNotFoundError(input_path)
@@ -206,7 +206,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=BASE_DIR / "data" / "processed" / "cleaned_dataset.charter.npy", help="Output file (NPY recommended for large datasets).")
     parser.add_argument("--no-anchors", action="store_true", help="Skip injection of anchor presets.")
     parser.add_argument("--limit", type=int, default=None, help="Convert at most N input records (for tests).")
-    parser.add_argument("--profile", default="sylenth1", help='Profile name in src/profiles/, "auto" to detect, "legacy" to use the hardcoded Sylenth1 mapping.')
+    parser.add_argument("--profile", default="legacy", help='Profile name in src/profiles/, "auto" to detect, "legacy" to use the hardcoded Sylenth1 mapping.')
     parser.add_argument("--list-profiles", action="store_true", help="Print available profiles and exit.")
     args = parser.parse_args()
 
