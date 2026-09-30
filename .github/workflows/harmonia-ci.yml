@@ -1,16 +1,40 @@
-name: Harmonia CI
+name: CI
 
 on:
-  push:
-    branches:
-      - main
-      - dev
   pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
-  quality:
+  branch-guard:
+    name: Branch guard
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    steps:
+      - name: Vérifier la branche source
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$BASE_REF" = "main" ] && [ "$HEAD_REF" != "dev" ]; then
+            echo "::error::Vers main, seules les PR depuis dev sont autorisées (reçu : $HEAD_REF)."
+            exit 1
+          fi
+          echo "OK : $HEAD_REF -> $BASE_REF"
 
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    env:
+      METRICS_TOKEN: ${{ secrets.METRICS_PUSH_TOKEN }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -43,10 +67,9 @@ jobs:
         run: python -m compileall scripts src tests
 
       - name: Publish metrics dashboard payload
-        if: github.event_name == 'push' && secrets.METRICS_PUSH_TOKEN != ''
+        if: github.event_name == 'push' && env.METRICS_TOKEN != ''
         working-directory: HARMONIA
         env:
-          METRICS_TOKEN: ${{ secrets.METRICS_PUSH_TOKEN }}
           HARMONIA_METRICS_URL: https://harmonia.mcoet.com/receiver.php
         run: |
           mkdir -p benchmarks/reports
@@ -78,4 +101,3 @@ jobs:
           print(f"Wrote {out}")
           PY
           python scripts/push_latest_metrics.py --report benchmarks/reports/ci_push_metrics.json
-
