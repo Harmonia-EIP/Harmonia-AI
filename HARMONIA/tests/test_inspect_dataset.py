@@ -46,11 +46,13 @@ def _fake_sylenth_dataset(tmp_path: Path) -> Path:
     return path
 
 
+# Tokenizing a param name should lowercase words and strip punctuation.
 def test_tokens_strips_punctuation():
     assert inspect_dataset._tokens("Osc A1 Waveform") == ["osc", "a1", "waveform"]
     assert inspect_dataset._tokens("Distort Dry/Wet!") == ["distort", "dry", "wet"]
 
 
+# A key sharing more tokens with the target should score higher than an irrelevant one.
 def test_score_rewards_token_overlap():
     direct = inspect_dataset._score("AmpEnv A Attack", "ampenv attack")
     irrelevant = inspect_dataset._score("Phaser CenterFreq", "ampenv attack")
@@ -58,6 +60,7 @@ def test_score_rewards_token_overlap():
     assert direct > 0.55
 
 
+# Collecting keys from a dataset file should find the native parameter names it contains.
 def test_collect_keys_discovers_native_keys(tmp_path):
     path = _fake_sylenth_dataset(tmp_path)
     counts = inspect_dataset.collect_keys(path, sample_limit=5)
@@ -65,6 +68,7 @@ def test_collect_keys_discovers_native_keys(tmp_path):
     assert "Osc A1 Waveform" in counts
 
 
+# Suggesting matches for a charter param should return the best candidates, capped by top.
 def test_suggest_for_param_returns_top_candidates():
     keys = ["Filter A Cutoff", "Filter B Cutoff", "Phaser CenterFreq", "Junk"]
     suggestions = inspect_dataset.suggest_for_param("filter_cutoff", keys, top=2)
@@ -73,6 +77,7 @@ def test_suggest_for_param_returns_top_candidates():
     assert len(suggestions) <= 2
 
 
+# A built profile skeleton should cover every charter param and detect gated switches.
 def test_build_profile_skeleton_covers_all_charter_params():
     keys = Counter({
         "Osc A1 Waveform": 1,
@@ -103,6 +108,7 @@ def test_build_profile_skeleton_covers_all_charter_params():
     assert profile["params"]["reverb_mix"]["strategy"] == "gated"
 
 
+# Running main() with --suggest-profile should write a new profile JSON file to disk.
 def test_inspect_writes_profile_when_requested(tmp_path, monkeypatch):
     path = _fake_sylenth_dataset(tmp_path)
     profiles_dir = tmp_path / "profiles"
@@ -125,6 +131,7 @@ def test_inspect_writes_profile_when_requested(tmp_path, monkeypatch):
     assert set(payload["params"]) == set(PARAM_NAMES)
 
 
+# main() should refuse to overwrite an existing profile unless an overwrite flag is passed.
 def test_inspect_refuses_overwrite_without_flag(tmp_path, monkeypatch):
     path = _fake_sylenth_dataset(tmp_path)
     profiles_dir = tmp_path / "profiles"

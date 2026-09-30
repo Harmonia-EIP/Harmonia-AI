@@ -9,6 +9,7 @@ if str(BASE_DIR) not in sys.path:
 from scripts import dashboard_stats
 
 
+# The dashboard snapshot should contain all expected sections, including all 20 charter params.
 def test_build_snapshot_has_expected_sections():
     snapshot = dashboard_stats.build_snapshot()
     assert "timestamp" in snapshot
@@ -20,6 +21,7 @@ def test_build_snapshot_has_expected_sections():
     assert len(snapshot["charter"]) == 20
 
 
+# Running main() with --output should write a snapshot JSON file and skip pushing metrics.
 def test_main_writes_snapshot(tmp_path, monkeypatch):
     out = tmp_path / "snapshot.json"
     monkeypatch.setenv("HARMONIA_PUSH_METRICS", "0")

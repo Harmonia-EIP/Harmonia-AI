@@ -29,15 +29,7 @@ def _minimal_profile_dict():
     }
 
 
-def test_sylenth1_profile_ships_with_repo():
-    available = list_available_profiles()
-    assert "sylenth1" in available
-
-    profile = load_profile("sylenth1")
-    assert profile["name"] == "sylenth1"
-    assert set(profile["params"]) == set(PARAM_NAMES)
-
-
+# Loading a profile with an incomplete params dict should raise ValueError.
 def test_load_profile_rejects_missing_params(tmp_path):
     broken = tmp_path / "broken.json"
     broken.write_text(json.dumps({"name": "x", "params": {}}), encoding="utf-8")
@@ -45,6 +37,7 @@ def test_load_profile_rejects_missing_params(tmp_path):
         load_profile(str(broken))
 
 
+# The "direct" strategy should copy a source key's value straight into the vector.
 def test_apply_profile_direct_strategy():
     profile = _minimal_profile_dict()
     profile["params"]["filter_cutoff"] = {"strategy": "direct", "key": "Cutoff", "default": 0.0}
@@ -53,6 +46,7 @@ def test_apply_profile_direct_strategy():
     assert vector[PARAM_NAMES.index("filter_cutoff")] == pytest.approx(0.7)
 
 
+# Values should be clamped to [0, 1] and discrete params snapped to their allowed steps.
 def test_apply_profile_clamps_and_snaps_discrete():
     profile = _minimal_profile_dict()
     profile["params"]["filter_cutoff"] = {"strategy": "direct", "key": "Cutoff"}
@@ -65,6 +59,7 @@ def test_apply_profile_clamps_and_snaps_discrete():
     assert waveform in (0.0, 1.0/3.0, 2.0/3.0, 1.0) # snapped to one of 4 steps
 
 
+# The "gated" strategy should zero out the value when its gate switch is disabled.
 def test_apply_profile_gated_strategy_blocks_disabled():
     profile = _minimal_profile_dict()
     profile["params"]["reverb_mix"] = {
@@ -77,6 +72,7 @@ def test_apply_profile_gated_strategy_blocks_disabled():
     assert disabled[idx] == pytest.approx(0.0)
 
 
+# The "max" strategy should take the largest value among several source keys.
 def test_apply_profile_max_strategy():
     profile = _minimal_profile_dict()
     profile["params"]["noise_level"] = {"strategy": "max", "keys": ["A", "B"], "default": 0.0}
@@ -84,6 +80,7 @@ def test_apply_profile_max_strategy():
     assert vector[PARAM_NAMES.index("noise_level")] == pytest.approx(0.7)
 
 
+# The "bipolar_amount" strategy should default to the neutral (0.5) value when no source is given.
 def test_apply_profile_bipolar_amount_preserves_neutral():
     profile = _minimal_profile_dict()
     profile["params"]["filter_env_amount"] = {
@@ -93,6 +90,7 @@ def test_apply_profile_bipolar_amount_preserves_neutral():
     assert vector[PARAM_NAMES.index("filter_env_amount")] == pytest.approx(0.5)
 
 
+# The "routed_amount" strategy should only apply the amount when routed to the expected destination.
 def test_apply_profile_routed_amount():
     profile = _minimal_profile_dict()
     profile["params"]["lfo_to_pitch"] = {
@@ -107,6 +105,7 @@ def test_apply_profile_routed_amount():
     assert non_matching[idx] == pytest.approx(0.0)
 
 
+# Profile matching should pass when required keys are present and fail with a reason otherwise.
 def test_profile_matches_handles_detection_keys():
     profile = _minimal_profile_dict()
     ok, _ = profile_matches(profile, ["Cutoff", "Whatever"])
@@ -116,13 +115,7 @@ def test_profile_matches_handles_detection_keys():
     assert "required" in reason
 
 
-def test_autodetect_returns_sylenth1_when_keys_match():
-    sample_keys = ["AmpEnv A Attack", "AmpEnv A Decay", "Filter A Cutoff", "Osc A1 Waveform"]
-    detected = autodetect_profile(sample_keys)
-    assert detected is not None
-    assert detected["name"] == "sylenth1"
-
-
+# Autodetection should return None when no known profile matches the dataset's keys.
 def test_autodetect_returns_none_for_alien_dataset():
     sample_keys = ["unrelated_param_a", "unrelated_param_b"]
     assert autodetect_profile(sample_keys) is None

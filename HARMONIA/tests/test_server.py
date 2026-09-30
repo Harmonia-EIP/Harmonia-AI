@@ -42,8 +42,9 @@ class LongTokenizer:
         }
 
 
+# /health should report status "ok" and model info when the runtime is ready.
 def test_health_ok(monkeypatch):
-    monkeypatch.setattr(server_module, "_get_runtime", lambda: FakeRuntime(ready=True))
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
     client = server_module.app.test_client()
 
     response = client.get("/health")
@@ -57,11 +58,12 @@ def test_health_ok(monkeypatch):
     assert body["model_hash"] == "abc123"
 
 
+# /health should report status "degraded" when the runtime failed to load the model.
 def test_health_degraded(monkeypatch):
     monkeypatch.setattr(
         server_module,
         "_get_runtime",
-        lambda: FakeRuntime(ready=False, error="Model file not found."),
+        lambda model_key=None: FakeRuntime(ready=False, error="Model file not found."),
     )
     client = server_module.app.test_client()
 
@@ -73,8 +75,9 @@ def test_health_degraded(monkeypatch):
     assert body["model_ready"] is False
 
 
+# /generate should return 200 with parameters and metadata for a valid prompt.
 def test_generate_success(monkeypatch):
-    monkeypatch.setattr(server_module, "_get_runtime", lambda: FakeRuntime(ready=True))
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
     client = server_module.app.test_client()
 
     response = client.post("/generate", json={"prompt": "Warm synth pad"})
@@ -87,8 +90,9 @@ def test_generate_success(monkeypatch):
     assert len(body["parameters"]) == len(server_module.PARAM_KEYS)
 
 
+# /generate should return 400 for a body that is not valid JSON.
 def test_generate_rejects_invalid_json(monkeypatch):
-    monkeypatch.setattr(server_module, "_get_runtime", lambda: FakeRuntime(ready=True))
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
     client = server_module.app.test_client()
 
     response = client.post("/generate", data="{", content_type="application/json")
@@ -97,8 +101,9 @@ def test_generate_rejects_invalid_json(monkeypatch):
     assert "Invalid or missing JSON" in response.get_json()["error"]
 
 
+# /generate should return 400 when "prompt" is not a string.
 def test_generate_rejects_non_string_prompt(monkeypatch):
-    monkeypatch.setattr(server_module, "_get_runtime", lambda: FakeRuntime(ready=True))
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
     client = server_module.app.test_client()
 
     response = client.post("/generate", json={"prompt": 123})
@@ -107,8 +112,9 @@ def test_generate_rejects_non_string_prompt(monkeypatch):
     assert "must be a string" in response.get_json()["error"]
 
 
+# /generate should return 400 when the prompt exceeds MAX_PROMPT_LENGTH characters.
 def test_generate_rejects_too_long_prompt(monkeypatch):
-    monkeypatch.setattr(server_module, "_get_runtime", lambda: FakeRuntime(ready=True))
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
     client = server_module.app.test_client()
 
     oversized_prompt = "x" * (server_module.MAX_PROMPT_LENGTH + 1)
@@ -118,8 +124,9 @@ def test_generate_rejects_too_long_prompt(monkeypatch):
     assert "too long" in response.get_json()["error"]
 
 
+# /generate should return 503 when the runtime's model is not ready.
 def test_generate_returns_503_when_model_unavailable(monkeypatch):
-    monkeypatch.setattr(server_module, "_get_runtime", lambda: FakeRuntime(ready=False))
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=False))
     client = server_module.app.test_client()
 
     response = client.post("/generate", json={"prompt": "Deep bass"})
@@ -127,11 +134,12 @@ def test_generate_returns_503_when_model_unavailable(monkeypatch):
     assert response.status_code == 503
 
 
+# /generate should return 400 when the tokenized prompt exceeds the model's token context.
 def test_generate_rejects_prompt_that_exceeds_token_context(monkeypatch):
     runtime = FakeRuntime(ready=True)
     runtime.tokenizer = LongTokenizer()
     runtime.tokenizer_max_length = 32
-    monkeypatch.setattr(server_module, "_get_runtime", lambda: runtime)
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: runtime)
     client = server_module.app.test_client()
 
     response = client.post("/generate", json={"prompt": "A" * 100})
@@ -140,11 +148,12 @@ def test_generate_rejects_prompt_that_exceeds_token_context(monkeypatch):
     assert "token context" in response.get_json()["error"]
 
 
+# /generate should label output values using the runtime's own param_keys, not a fixed list.
 def test_generate_uses_runtime_parameter_keys(monkeypatch):
     runtime = FakeRuntime(ready=True)
     runtime.param_keys = ("cutoff", "attack")
     runtime.model = lambda input_ids, attention_mask: torch.tensor([[0.2, 0.9]])
-    monkeypatch.setattr(server_module, "_get_runtime", lambda: runtime)
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: runtime)
     client = server_module.app.test_client()
 
     response = client.post("/generate", json={"prompt": "short"})
@@ -153,6 +162,7 @@ def test_generate_uses_runtime_parameter_keys(monkeypatch):
     assert response.get_json()["parameters"] == {"cutoff": 0.2, "attack": 0.9}
 
 
+# /metrics/latest should return the most recent benchmark entry and its evaluation report.
 def test_metrics_latest_returns_latest_benchmark(tmp_path, monkeypatch):
     benchmark_file = tmp_path / "history.json"
     report_file = tmp_path / "eval.json"
@@ -181,6 +191,7 @@ def test_metrics_latest_returns_latest_benchmark(tmp_path, monkeypatch):
     assert body["latest_evaluation_report"]["metrics"]["mse"] == 0.12
 
 
+# /metrics/latest should return 404 when the benchmark history file does not exist.
 def test_metrics_latest_returns_404_when_missing(monkeypatch, tmp_path):
     missing_history = tmp_path / "missing-history.json"
     monkeypatch.setattr(server_module, "BENCHMARK_FILE", missing_history)

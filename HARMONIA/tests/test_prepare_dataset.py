@@ -9,6 +9,7 @@ from scripts.prepare_dataset import (
 from src.charter import PARAM_NAMES
 
 
+# Cleaning raw dump content should fix unbalanced parentheses and trailing commas.
 def test_clean_content_balances_parentheses_and_trailing_comma():
     raw = "'Preset', {'description': 'Soft_Pad.fxp'},"
     cleaned = clean_content(raw)
@@ -16,10 +17,12 @@ def test_clean_content_balances_parentheses_and_trailing_comma():
     assert cleaned.endswith(")")
 
 
+# The script's target params should stay in sync with the charter's canonical param order.
 def test_target_params_match_charter():
     assert tuple(TARGET_PARAMS) == PARAM_NAMES
 
 
+# Converting an FXP dump should produce a valid charter record with a cleaned description.
 def test_convert_fxp_dump_to_json_creates_charter_record(tmp_path):
     input_file = tmp_path / "raw.txt"
     output_file = tmp_path / "presets.json"
@@ -47,6 +50,7 @@ def test_convert_fxp_dump_to_json_creates_charter_record(tmp_path):
     assert all(isinstance(v, float) and 0.0 <= v <= 1.0 for v in flat.values())
 
 
+# Conversion should inject anchor presets by default unless anchor_path is disabled.
 def test_convert_fxp_dump_injects_anchors_by_default(tmp_path):
     input_file = tmp_path / "raw.txt"
     output_file = tmp_path / "presets.json"
@@ -63,6 +67,7 @@ def test_convert_fxp_dump_injects_anchors_by_default(tmp_path):
     assert "Hard Electro Lead" in descriptions
 
 
+# Conversion should handle a missing input file gracefully, writing nothing.
 def test_convert_fxp_dump_to_json_handles_missing_file(tmp_path):
     missing_input = tmp_path / "missing.txt"
     output_file = tmp_path / "presets.json"

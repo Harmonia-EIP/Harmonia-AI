@@ -33,6 +33,7 @@ class FakeRuntime:
         self.tokenizer_max_length = 32
 
 
+# Smoke test: convert an FXP dump to JSON, then call /generate end-to-end with a fake runtime.
 def test_prepare_and_generate_smoke(tmp_path, monkeypatch):
     raw_dump = tmp_path / "my_raw_dump.txt"
     processed = tmp_path / "presets.json"
@@ -46,7 +47,7 @@ def test_prepare_and_generate_smoke(tmp_path, monkeypatch):
     payload = json.loads(processed.read_text(encoding="utf-8"))
     assert payload and payload[0]["description"] == "Smoke Preset"
 
-    monkeypatch.setattr(server_module, "_get_runtime", lambda: FakeRuntime(ready=True))
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
     client = server_module.app.test_client()
     response = client.post("/generate", json={"prompt": "smoke test"})
 
