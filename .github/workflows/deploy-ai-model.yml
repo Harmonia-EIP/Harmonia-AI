@@ -26,3 +26,13 @@ jobs:
             cd /home/ubuntu/harmonia
             docker compose build ai
             docker compose up -d ai
+            # Fail the deploy if the model can't be served (/health reports model_ready).
+            for i in $(seq 1 30); do
+              if docker compose exec -T ai python -c "import json, sys, urllib.request; d = json.load(urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=60)); sys.exit(0 if d.get('model_ready') else 1)"; then
+                echo "AI service is healthy"
+                exit 0
+              fi
+              sleep 5
+            done
+            docker compose logs ai --tail 80
+            exit 1

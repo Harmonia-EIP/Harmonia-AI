@@ -6,7 +6,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel
+from transformers import AutoConfig, AutoModel, AutoTokenizer, BertConfig, PretrainedConfig
 
 from src.charter import (
     BIPOLAR_INDICES,
@@ -21,6 +21,20 @@ MODEL_ID = os.environ.get("HARMONIA_MODEL_ID", "prajjwal1/bert-tiny")
 MODEL_REVISION = os.environ.get("HARMONIA_MODEL_REVISION", "main")
 
 CHARTER_PARAM_COUNT = len(CHARTER)
+
+
+def load_encoder_config(model_id: str = MODEL_ID, revision: str = MODEL_REVISION) -> PretrainedConfig:
+    try:
+        return AutoConfig.from_pretrained(model_id, revision=revision)  # nosec B615
+    except ValueError:
+        # Legacy checkpoints such as prajjwal1/bert-tiny ship a config.json without
+        # `model_type`; transformers>=5 no longer infers it from the repo name.
+        return BertConfig.from_pretrained(model_id, revision=revision)  # nosec B615
+
+
+def load_tokenizer(model_id: str = MODEL_ID, revision: str = MODEL_REVISION):
+    config = load_encoder_config(model_id, revision)
+    return AutoTokenizer.from_pretrained(model_id, revision=revision, config=config)  # nosec B615
 
 
 def _masked_mean_pool(last_hidden_state: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
@@ -103,12 +117,19 @@ class _LegacyHead(nn.Module):
 
 
 class TextToParams(nn.Module):
-    def __init__(self, num_plugin_parameters: int = CHARTER_PARAM_COUNT, output_activation: str = "sigmoid"):
+    def __init__(
+        self,
+        num_plugin_parameters: int = CHARTER_PARAM_COUNT,
+        output_activation: str = "sigmoid",
+        encoder_id: str = MODEL_ID,
+        encoder_revision: str = MODEL_REVISION,
+    ):
         super().__init__()
         if int(num_plugin_parameters) <= 0:
             raise ValueError("num_plugin_parameters must be > 0")
 
-        self.bert = AutoModel.from_pretrained(MODEL_ID, revision=MODEL_REVISION)  # nosec B615
+        config = load_encoder_config(encoder_id, encoder_revision)
+        self.bert = AutoModel.from_pretrained(encoder_id, revision=encoder_revision, config=config)  # nosec B615
         hidden_size = int(getattr(self.bert.config, "hidden_size", 128))
         self.num_plugin_parameters = int(num_plugin_parameters)
 

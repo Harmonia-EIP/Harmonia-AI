@@ -2,6 +2,21 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.20] - Preset Generation Outage Fix (transformers v5)
+### Fixed
+- **AI service returned HTTP 500 on every request since 2026-09-25**: the dependency bump to `transformers==5.10.0` broke encoder loading, because transformers v5 no longer infers the model type from the repo name and `prajjwal1/bert-tiny` ships a `config.json` without `model_type`. Preset generation in the app failed as a result.
+  - `src/model.py` now resolves the encoder config through `load_encoder_config()` (falls back to `BertConfig` for legacy checkpoints) and exposes `load_tokenizer()`, used by `server.py`, `generate.py`, and `train.py`.
+  - Generated presets are unchanged: outputs match the pre-incident stack (`torch 2.2.2` / `transformers 4.38.2`) within 1e-6 on both served models.
+- **Dockerfile installed two torch versions**: it installed the CPU wheel of `torch 2.11.0`, then `requirement.txt` (`torch==2.6.0`) replaced it with the CUDA build from PyPI (several GB of `nvidia-*` packages). The CPU wheel now uses the version pinned in `requirement.txt`.
+
+### Changed
+- `transformers` pinned to `5.17.0` (`5.10.0` was yanked from PyPI) and `torch` to `2.13.0` (fixes GHSA-rrmf-rvhw-rf47).
+- The Docker image now bakes the encoder and tokenizer at build time and runs with `HF_HUB_OFFLINE=1`, so the service no longer depends on the Hugging Face Hub at runtime.
+- `deploy-ai-model.yml` fails the deploy when `/health` does not report `model_ready` within 150 seconds, and prints the container logs.
+
+### Tests
+- Added `tests/test_model_loading.py`: builds the model and tokenizer from a local BERT checkpoint whose `config.json` has no `model_type`, so CI catches this regression without network access.
+
 ## [0.0.19] - Dataset Profiles, Auto-Scaffolder, and Live Dashboard Pipeline
 ### Added
 - **Pluggable Dataset Profiles (`src/dataset_profiles.py` + `src/profiles/`)**:
