@@ -8,7 +8,6 @@ import json
 
 import torch
 from flask import Flask, jsonify, request
-from transformers import AutoTokenizer
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
@@ -16,7 +15,7 @@ if str(BASE_DIR) not in sys.path:
 
 from src.charter import PARAM_NAMES, charter_metadata, normalise_vector
 from src.dashboard_events import publish_generation
-from src.model import TextToParams
+from src.model import TextToParams, load_tokenizer
 from src.artifact_registry import resolve_latest_model
 
 app = Flask(__name__)
@@ -161,7 +160,7 @@ def _build_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
             tokenizer_max_length=tokenizer_max_length,
         )
 
-    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, revision=TOKENIZER_MODEL_REVISION)  # nosec B615
+    tokenizer = load_tokenizer(TOKENIZER_MODEL_ID, TOKENIZER_MODEL_REVISION)
     return InferenceRuntime(
         model=model,
         tokenizer=tokenizer,

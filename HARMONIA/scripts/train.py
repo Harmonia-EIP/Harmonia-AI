@@ -10,7 +10,6 @@ import re
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
-from transformers import AutoTokenizer
 
 try:
     import numpy as np
@@ -26,7 +25,7 @@ from src.charter import CHARTER, DISCRETE_INDICES, PARAM_NAMES
 from src.dashboard_events import publish_command, publish_training
 from src.dataset import PresetDataset
 from src.metrics_publisher import push_metrics_report
-from src.model import TextToParams
+from src.model import TextToParams, load_tokenizer
 from src.perf_metrics import PerfSampler
 
 
@@ -325,7 +324,7 @@ def train():
     if hasattr(torch, "set_float32_matmul_precision"):
         torch.set_float32_matmul_precision("high")
 
-    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, revision=TOKENIZER_MODEL_REVISION)  # nosec B615
+    tokenizer = load_tokenizer(TOKENIZER_MODEL_ID, TOKENIZER_MODEL_REVISION)
     dataset_path = resolve_dataset_path()
     if not dataset_path.exists():
         print(f"Error: {dataset_path} not found. Run prepare_dataset.py first.")
