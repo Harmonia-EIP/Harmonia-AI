@@ -6,7 +6,6 @@ import time
 from pathlib import Path
 
 import torch
-from transformers import AutoTokenizer
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
@@ -19,7 +18,7 @@ from src.charter import (
     normalise_vector,
 )
 from src.dashboard_events import publish_command, publish_generation
-from src.model import TextToParams
+from src.model import TextToParams, load_tokenizer
 
 # --- CONFIG ---
 SAVED_MODELS_DIR = BASE_DIR / "saved_models"
@@ -85,7 +84,7 @@ def generate_preset(prompt, output_filename):
 
     model.eval()
 
-    tokenizer = AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, revision=TOKENIZER_MODEL_REVISION)  # nosec B615
+    tokenizer = load_tokenizer(TOKENIZER_MODEL_ID, TOKENIZER_MODEL_REVISION)
     tokens = tokenizer(prompt, return_tensors="pt", padding=False, truncation=False)
     token_count = int(tokens["input_ids"].shape[1])
     if token_count > tokenizer_max_length:
