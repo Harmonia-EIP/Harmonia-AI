@@ -13,6 +13,7 @@ All notable changes to the **Harmonia** project will be documented in this file.
 - `transformers` pinned to `5.17.0` (`5.10.0` was yanked from PyPI) and `torch` to `2.13.0` (fixes GHSA-rrmf-rvhw-rf47).
 - The Docker image now bakes the encoder and tokenizer at build time and runs with `HF_HUB_OFFLINE=1`, so the service no longer depends on the Hugging Face Hub at runtime.
 - `deploy-ai-model.yml` fails the deploy when `/health` does not report `model_ready` within 150 seconds, and prints the container logs.
+- Removed `deploy-ai.yml`: pushes to `dev` no longer deploy to production. Only merges to `main` deploy, as the release PR workflow states.
 
 ### Tests
 - Added `tests/test_model_loading.py`: builds the model and tokenizer from a local BERT checkpoint whose `config.json` has no `model_type`, so CI catches this regression without network access.
