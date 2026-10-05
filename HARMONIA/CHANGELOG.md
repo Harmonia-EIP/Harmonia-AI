@@ -2,6 +2,34 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.1.0] - Harmonia v2: Listened Presets and French Prompts
+### Added
+- **Offline synth renderer (`src/synth/`)**: numba port of the app's `Synth.cpp`, reverb settings and JUCE parameter conversions, validated sample by sample against the real C++ compiled with JUCE (relative RMS error: median 4e-4). `ENGINE_APP_1_0` reproduces the current app, `ENGINE_APP_1_1` the fixed engine (Harmonia-App#40). ~1000 notes/s on 14 cores.
+- **v2 training pipeline (`scripts/v2/`, `make v2-train`)**:
+  - preset bank: 200,000 presets (concepts, envelope/timbre archetypes, uniform) rendered at A2 and A4 and embedded with CLAP (`laion/larger_clap_general`);
+  - FSD50K (51,197 real recordings) embedded with CLAP, used to train and to tune;
+  - 66,000-sentence English corpus (FSD50K titles/tags/labels, concepts, compositional templates) translated to French with `opus-mt-en-fr` plus a sound-design glossary;
+  - multilingual text encoder (`paraphrase-multilingual-MiniLM-L12-v2`) distilled into the CLAP text space: cosine to teacher 0.84 (EN) / 0.80 (FR);
+  - parameter predictor trained on text -> closest-sounding bank preset pairs;
+  - retrieval priors: near-inaudible presets excluded, CSLS hub penalty tuned on FSD50K eval;
+  - ONNX export with per-channel int8 quantization (160 MB total, encoder cosine to fp32 ≥ 0.999).
+- **`harmonia_v2` model served by `scripts/server.py`** (`model_name` `harmonia_v2`, aliases `model-3`, `v2`, `3`) with ONNX Runtime only: 0.4 s load, ~8 ms per request on CPU. Modes `retrieval` (default), `hybrid`, `neural`; `variation` for alternative presets. Same response format as v1 plus `generation`.
+- **Release distribution**: `scripts/v2/package_release.py` and `scripts/v2/fetch_model.py` (GitHub release asset pinned by tag + sha256 in `models/release.json`); the Dockerfile fetches it at build time.
+- **Benchmark with an independent judge** (`scripts/v2/benchmark_*.py`): 70 prompts in English and hand-written French, held out of all training data, scored by Microsoft CLAP 2023 against the text and against real FSD50K eval recordings. Listening page generator (`scripts/v2/listening_page.py`).
+
+### Results
+| System | Text EN | Text FR | Real EN | Real FR |
+|---|---|---|---|---|
+| v2 retrieval (default) | 0.234 | 0.225 | 0.387 | 0.370 |
+| v2 hybrid | 0.214 | 0.216 | 0.376 | 0.374 |
+| v1 synthetic, current app | 0.058 | -0.006 | 0.236 | 0.191 |
+| random preset | 0.014 | 0.025 | 0.193 | 0.200 |
+
+v2 beats today's v1 by +0.18 (EN) and +0.23 (FR) on the text score (95% CI excludes 0) and wins on 91-93% of the prompts. See [V2.md](V2.md).
+
+### Changed
+- Requirements: `onnxruntime==1.30.0` and `tokenizers==0.23.2` for serving; `onnx` and `numba` for CI; new `requirements-train.txt`.
+
 ## [0.0.20] - Preset Generation Outage Fix (transformers v5)
 ### Fixed
 - **AI service returned HTTP 500 on every request since 2026-09-25**: the dependency bump to `transformers==5.10.0` broke encoder loading, because transformers v5 no longer infers the model type from the repo name and `prajjwal1/bert-tiny` ships a `config.json` without `model_type`. Preset generation in the app failed as a result.
