@@ -36,7 +36,7 @@ PLUGIN_PARAM_COUNT = len(PARAM_KEYS)
 DEFAULT_MODEL_KEY = "default"
 V2_MODEL_KEY = "harmonia_v2"
 V2_MODEL_DIR = Path(os.environ.get("HARMONIA_V2_MODEL_DIR", str(BASE_DIR / "models" / V2_MODEL_KEY)))
-V2_MODES = ("hybrid", "retrieval", "neural")
+V2_MODES = ("retrieval", "hybrid", "neural")
 
 # Named models selectable from the app's model switcher, in addition to the
 # default model resolved via resolve_latest_model().
@@ -314,9 +314,9 @@ def generate():
 
     generation_info = None
     if getattr(runtime, "v2", None) is not None:
-        mode = data.get("mode", V2_MODES[0])
+        mode = data.get("mode")
         variation = data.get("variation")
-        if mode not in V2_MODES:
+        if mode is not None and mode not in V2_MODES:
             return jsonify({"error": f"'mode' must be one of {', '.join(V2_MODES)}."}), 400
         if variation is not None and (not isinstance(variation, int) or isinstance(variation, bool)):
             return jsonify({"error": "'variation' must be an integer."}), 400

@@ -1,5 +1,8 @@
 """Harmonia v2 runtime: prompt -> charter preset with ONNX Runtime (no torch / transformers).
 
+Modes: retrieval (best bank preset, the default chosen by the benchmark), hybrid (bank candidates
+re-ranked by agreement with the predictor) and neural (predictor output).
+
 Model directory layout (written by scripts/v2/export_v2.py):
     manifest.json        versions, sizes, sha256 of every file, retrieval settings
     tokenizer.json       multilingual tokenizer (Hugging Face `tokenizers` format)
@@ -19,8 +22,7 @@ import numpy as np
 
 from src.charter import PARAM_NAMES, normalise_vector
 
-MODES = ("hybrid", "retrieval", "neural")
-DEFAULT_MODE = "hybrid"
+MODES = ("retrieval", "hybrid", "neural")
 
 
 @dataclass
@@ -60,6 +62,7 @@ class HarmoniaV2:
         self.temperature = float(retrieval.get("temperature", 0.02))
         self.hybrid_weight = float(retrieval.get("hybrid_weight", 0.15))
         self.csls_weight = float(retrieval.get("csls_weight", 0.0))
+        self.default_mode = str(retrieval.get("default_mode", "retrieval"))
         weights = retrieval.get("param_weights", {})
         self.param_weights = np.array([float(weights.get(n, 1.0)) for n in PARAM_NAMES], dtype=np.float32)
 
@@ -77,7 +80,8 @@ class HarmoniaV2:
         top = top[np.argsort(-scores[top])]
         return top, sims[top], scores[top]
 
-    def generate(self, prompt: str, mode: str = DEFAULT_MODE, variation: Optional[int] = None) -> Generation:
+    def generate(self, prompt: str, mode: Optional[str] = None, variation: Optional[int] = None) -> Generation:
+        mode = mode or self.default_mode
         if mode not in MODES:
             raise ValueError(f"mode must be one of {MODES}")
         emb = self.embed(prompt).astype(np.float32)

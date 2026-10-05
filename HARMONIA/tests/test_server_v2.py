@@ -40,6 +40,12 @@ def test_v2_accepts_long_prompts(v2_client):
     assert response.status_code == 200
 
 
+# Without `mode`, the model's default mode (from its manifest) is used.
+def test_v2_default_mode(v2_client):
+    body = v2_client.post("/generate", json={"prompt": "door slam", "model_name": "harmonia_v2"}).get_json()
+    assert body["generation"]["mode"] == "retrieval"
+
+
 # Invalid v2 options are rejected with 400.
 @pytest.mark.parametrize("extra", [{"mode": "magic"}, {"variation": "abc"}, {"variation": True}])
 def test_v2_rejects_invalid_options(v2_client, extra):
