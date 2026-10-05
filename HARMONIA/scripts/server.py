@@ -1,3 +1,4 @@
+import hashlib
 import sys
 from dataclasses import dataclass
 from functools import lru_cache
@@ -33,6 +34,9 @@ PARAM_KEYS = list(PARAM_NAMES)
 PLUGIN_PARAM_COUNT = len(PARAM_KEYS)
 
 DEFAULT_MODEL_KEY = "default"
+V2_MODEL_KEY = "harmonia_v2"
+V2_MODEL_DIR = Path(os.environ.get("HARMONIA_V2_MODEL_DIR", str(BASE_DIR / "models" / V2_MODEL_KEY)))
+V2_MODES = ("hybrid", "retrieval", "neural")
 
 # Named models selectable from the app's model switcher, in addition to the
 # default model resolved via resolve_latest_model().
@@ -51,6 +55,10 @@ MODEL_KEY_ALIASES = {
     "model-2": "charter_v1",
     "charter_v1": "charter_v1",
     "2": "charter_v1",
+    "model-3": V2_MODEL_KEY,
+    "harmonia_v2": V2_MODEL_KEY,
+    "v2": V2_MODEL_KEY,
+    "3": V2_MODEL_KEY,
 }
 
 
@@ -72,6 +80,7 @@ class InferenceRuntime:
     model_metadata_path: str = ""
     param_keys: Tuple[str, ...] = tuple(PARAM_KEYS)
     tokenizer_max_length: int = TOKENIZER_MAX_LENGTH
+    v2: Optional[object] = None
 
 
 def _load_json_file(path):
@@ -88,7 +97,49 @@ def _load_json_file(path):
     return {}
 
 
+def _build_v2_runtime() -> InferenceRuntime:
+    manifest_path = V2_MODEL_DIR / "manifest.json"
+    manifest = _load_json_file(manifest_path)
+    if not manifest:
+        return InferenceRuntime(
+            model=None,
+            tokenizer=None,
+            ready=False,
+            error="v2 model files not found. Run scripts/v2/fetch_model.py.",
+            model_version=V2_MODEL_KEY,
+            model_path=str(V2_MODEL_DIR),
+        )
+    model_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    try:
+        from src.v2.inference import HarmoniaV2
+
+        engine = HarmoniaV2(V2_MODEL_DIR)
+    except Exception as exc:  # missing runtime dependency or corrupt files
+        return InferenceRuntime(
+            model=None,
+            tokenizer=None,
+            ready=False,
+            error=f"Invalid v2 model: {exc}",
+            model_version=str(manifest.get("model_version", V2_MODEL_KEY)),
+            model_hash=model_hash,
+            model_path=str(V2_MODEL_DIR),
+        )
+    return InferenceRuntime(
+        model=None,
+        tokenizer=None,
+        ready=True,
+        model_version=str(manifest.get("model_version", V2_MODEL_KEY)),
+        model_hash=model_hash,
+        model_path=str(V2_MODEL_DIR),
+        model_metadata_path=str(manifest_path),
+        tokenizer_max_length=engine.max_tokens,
+        v2=engine,
+    )
+
+
 def _build_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
+    if model_key == V2_MODEL_KEY:
+        return _build_v2_runtime()
     if model_key == DEFAULT_MODEL_KEY:
         artifact = resolve_latest_model(
             SAVED_MODELS_DIR,
@@ -261,33 +312,22 @@ def generate():
 
     print(f"Received request for: '{prompt}'")
 
-    # 1. Prepare text
-    tokenized = runtime.tokenizer(prompt, return_tensors="pt", padding=False, truncation=False)
-    token_count = int(tokenized["input_ids"].shape[1])
-    if token_count > runtime.tokenizer_max_length:
-        return jsonify(
-            {
-                "error": (
-                    "Prompt exceeds model token context. "
-                    f"Got {token_count} tokens, max {runtime.tokenizer_max_length}."
-                )
-            }
-        ), 400
+    generation_info = None
+    if getattr(runtime, "v2", None) is not None:
+        mode = data.get("mode", V2_MODES[0])
+        variation = data.get("variation")
+        if mode not in V2_MODES:
+            return jsonify({"error": f"'mode' must be one of {', '.join(V2_MODES)}."}), 400
+        if variation is not None and (not isinstance(variation, int) or isinstance(variation, bool)):
+            return jsonify({"error": "'variation' must be an integer."}), 400
+        result = runtime.v2.generate(prompt, mode=mode, variation=variation)
+        param_list = result.values
+        generation_info = {"mode": result.mode, "bank_index": result.bank_index, "similarity": result.similarity}
+    else:
+        param_list, error_response = _predict_v1(runtime, prompt)
+        if error_response is not None:
+            return error_response
 
-    inputs = runtime.tokenizer(
-        prompt,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=runtime.tokenizer_max_length,
-    )
-
-    # 2. Predict
-    with torch.no_grad():
-        prediction = runtime.model(inputs['input_ids'], inputs['attention_mask'])
-
-    # 3. Formatd output
-    param_list = prediction[0].tolist()
     is_charter = tuple(runtime.param_keys) == tuple(PARAM_NAMES)
     if is_charter:
         param_list = normalise_vector(param_list)
@@ -312,6 +352,8 @@ def generate():
     if is_charter:
         response["values"] = [named_parameters[name] for name in PARAM_NAMES]
         response["charter"] = charter_metadata()
+    if generation_info is not None:
+        response["generation"] = generation_info
 
     try:
         publish_generation(
@@ -327,6 +369,36 @@ def generate():
         app.logger.warning("dashboard publish failed: %s", exc)
 
     return jsonify(response)
+
+
+def _predict_v1(runtime: InferenceRuntime, prompt: str):
+    """Returns (parameter list, None) or (None, error response) for the torch v1 models."""
+    tokenized = runtime.tokenizer(prompt, return_tensors="pt", padding=False, truncation=False)
+    token_count = int(tokenized["input_ids"].shape[1])
+    if token_count > runtime.tokenizer_max_length:
+        return None, (
+            jsonify(
+                {
+                    "error": (
+                        "Prompt exceeds model token context. "
+                        f"Got {token_count} tokens, max {runtime.tokenizer_max_length}."
+                    )
+                }
+            ),
+            400,
+        )
+
+    inputs = runtime.tokenizer(
+        prompt,
+        return_tensors="pt",
+        padding=True,
+        truncation=True,
+        max_length=runtime.tokenizer_max_length,
+    )
+
+    with torch.no_grad():
+        prediction = runtime.model(inputs["input_ids"], inputs["attention_mask"])
+    return prediction[0].tolist(), None
 
 
 @app.route("/charter", methods=["GET"])
