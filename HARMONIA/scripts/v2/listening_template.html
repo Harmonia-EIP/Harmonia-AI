@@ -1,0 +1,117 @@
+<title>Banc d'écoute Harmonia v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600&family=Barlow:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one strip per prompt, three takes side by side like mixer channels; the plugin's own dark panel look. */
+  :root {
+    --bg: #1e2226;
+    --panel: #262a30;
+    --panel-hi: #2c3137;
+    --screen: #0a0d11;
+    --line: #15181c;
+    --text: #e0e5ea;
+    --text-2: #a0a5ab;
+    --muted: #6b7178;
+    --accent: #00d4ff;
+    --today: #fbbf24;
+    --cat-instrument: #e38202;
+    --cat-sfx: #eb6f92;
+    --cat-compositional: #a78bfa;
+    --cat-mood: #34d399;
+    --font-display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+    --font-body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+    --font-data: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    color-scheme: dark;
+  }
+  body { background: var(--bg); color: var(--text); font: 16px/1.55 var(--font-body); }
+  .wrap { max-width: 72rem; margin: 0 auto; padding-inline: 16px; padding-block: 2.5rem 4rem; display: grid; gap: 2.5rem; }
+  h1, h2, h3 { font-family: var(--font-display); font-weight: 600; text-wrap: balance; margin: 0; letter-spacing: 0.01em; }
+  h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.05; }
+  .lede { max-width: 65ch; color: var(--text-2); margin: 0.75rem 0 0; }
+  .eyebrow { font: 500 0.75rem/1 var(--font-data); text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); margin: 0 0 0.75rem; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin: 1.25rem 0 0; padding: 0; list-style: none; color: var(--text-2); font-size: 0.95rem; }
+  .legend li { display: flex; align-items: center; gap: 0.5rem; }
+  .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot--today { background: var(--today); }
+  .dot--new { background: var(--accent); }
+
+  .bench { background: var(--screen); border: 1px solid var(--line); border-radius: 6px; padding: 1.25rem; display: grid; gap: 0.75rem; }
+  .bench h2 { font-size: 1.4rem; }
+  .bench p { margin: 0; color: var(--text-2); max-width: 65ch; font-size: 0.95rem; }
+  .table-scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 36rem; font-size: 0.9rem; }
+  th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--panel); }
+  thead th { font: 500 0.7rem/1.2 var(--font-data); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  tbody th { font-weight: 500; color: var(--text); white-space: nowrap; }
+  td.num { font-family: var(--font-data); font-variant-numeric: tabular-nums; position: relative; color: var(--text-2); }
+  .bar { position: absolute; left: 0.75rem; bottom: 0.25rem; height: 2px; width: calc((100% - 1.5rem) * var(--w) / 100); background: var(--muted); }
+  .row--v2 th, .row--v2 td.num { color: var(--accent); }
+  .row--v2 .bar { background: var(--accent); }
+
+  .prompts { display: grid; gap: 1.5rem; }
+  .prompt { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 1.25rem; display: grid; gap: 1rem; }
+  .prompt__head { display: grid; gap: 0.35rem; }
+  .prompt__fr { font-size: 1.6rem; line-height: 1.15; }
+  .prompt__en { margin: 0; font: 0.8rem/1.4 var(--font-data); color: var(--muted); }
+  .chip { justify-self: start; font: 500 0.7rem/1 var(--font-data); text-transform: uppercase; letter-spacing: 0.1em; padding: 0.3rem 0.5rem; border-radius: 3px; color: var(--bg); background: var(--muted); }
+  .chip--instrument { background: var(--cat-instrument); }
+  .chip--sfx { background: var(--cat-sfx); }
+  .chip--compositional { background: var(--cat-compositional); }
+  .chip--mood { background: var(--cat-mood); }
+
+  .takes { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.75rem; }
+  .take { min-width: 0; background: var(--panel-hi); border: 1px solid var(--line); border-top: 2px solid var(--today); border-radius: 4px; padding: 0.85rem; display: grid; gap: 0.5rem; align-content: start; }
+  .take:nth-child(2) { border-top-color: var(--muted); }
+  .take--new { border-top-color: var(--accent); background: color-mix(in srgb, var(--panel-hi) 88%, var(--accent)); }
+  .take__head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.5rem; }
+  .take__name { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; }
+  .take__score { font: 500 0.85rem/1 var(--font-data); font-variant-numeric: tabular-nums; color: var(--text-2); }
+  .take--new .take__score { color: var(--accent); }
+  .take__desc { margin: 0; font-size: 0.85rem; color: var(--text-2); }
+  .take__params { margin: 0; font: 0.72rem/1.5 var(--font-data); color: var(--muted); overflow-wrap: anywhere; }
+  audio { width: 100%; height: 2.25rem; }
+  audio:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .method { color: var(--text-2); font-size: 0.9rem; max-width: 65ch; display: grid; gap: 0.5rem; }
+  .method h2 { font-size: 1.2rem; color: var(--text); }
+  .method p { margin: 0; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<main class="wrap">
+  <header>
+    <p class="eyebrow">Harmonia · banc d'écoute</p>
+    <h1>Mêmes prompts, trois IA&nbsp;: écoutez la différence</h1>
+    <p class="lede">Chaque son est le preset généré pour le prompt, joué sur un La3 (220&nbsp;Hz) pendant 1,5&nbsp;s puis relâché, avec le moteur exact de l'app. Le chiffre à côté de chaque prise est la note d'un juge indépendant (Microsoft CLAP) entre le son et la description&nbsp;: plus il est haut, plus le son correspond au texte.</p>
+    <ul class="legend">
+      <li><span class="dot dot--today"></span>Ce que l'app produit aujourd'hui avec un prompt français</li>
+      <li><span class="dot"></span>La même IA v1 avec le prompt en anglais (son meilleur cas)</li>
+      <li><span class="dot dot--new"></span>Harmonia v2 avec le prompt français, sur l'app corrigée</li>
+    </ul>
+  </header>
+
+  <section class="bench" aria-labelledby="bench-title">
+    <h2 id="bench-title">Benchmark sur {{N_PROMPTS}} prompts</h2>
+    <p>Moyennes du juge indépendant. « Texte » compare le son à la description&nbsp;; « Réel » le compare à de vrais enregistrements FSD50K de la même catégorie (jeu d'évaluation, jamais vu à l'entraînement).</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Système</th><th scope="col">Texte · EN</th><th scope="col">Texte · FR</th><th scope="col">Réel · EN</th><th scope="col">Réel · FR</th></tr></thead>
+        <tbody>
+{{TABLE}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="prompts" aria-label="Prompts">
+{{ROWS}}
+  </section>
+
+  <section class="method">
+    <h2>Comment ces sons ont été produits</h2>
+    <p>Le moteur de rendu est un portage Python du code C++ de l'app (oscillateurs, filtre, enveloppes, distorsion, reverb), vérifié échantillon par échantillon contre le vrai Synth.cpp compilé avec JUCE. La v1 est jouée sur l'app actuelle&nbsp;; la v2 sur l'app avec les deux corrections du filtre et des enveloppes.</p>
+    <p>Les prompts de ce banc d'écoute ont été retirés de toutes les données d'entraînement. Le juge n'a servi ni à entraîner ni à régler le modèle.</p>
+  </section>
+</main>
