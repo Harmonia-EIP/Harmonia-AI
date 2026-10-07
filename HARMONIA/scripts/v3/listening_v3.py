@@ -62,8 +62,16 @@ def matched_items(source: str, audio_dir: Path, limit: int):
     rows = [json.loads(line) for line in open(MATCHED_DIR / f"{source}.jsonl", encoding="utf-8")]
     meta = {json.loads(line)["id"]: json.loads(line) for line in open(PRESET_DIR / f"{source}.jsonl", encoding="utf-8")}
     rows = [r for r in rows if r.get("status") == "ok" and r.get("audio")]
-    rows.sort(key=lambda r: (r["category"].lower(), r["name"].lower()))
-    for r in rows[:limit]:
+    by_category = {}
+    for r in sorted(rows, key=lambda r: r["name"].lower()):
+        by_category.setdefault(r["category"], []).append(r)
+    picked = []  # round-robin over categories so every kind of sound is heard
+    while len(picked) < min(limit, len(rows)):
+        for group in by_category.values():
+            if group and len(picked) < limit:
+                picked.append(group.pop(0))
+    picked.sort(key=lambda r: (r["category"].lower(), r["name"].lower()))
+    for r in picked:
         stem = r["id"].replace(":", "_")
         data = np.load(MATCHED_DIR / f"{source}_audio" / f"{stem}.npz")
         clips = {}
@@ -75,6 +83,17 @@ def matched_items(source: str, audio_dir: Path, limit: int):
         yield {"id": r["id"].replace(":", "-"), "source": SOURCE_LABELS[source], "name": r["name"],
                "category": r["category"], "author": rec.get("author", ""), "license": rec.get("license", ""),
                "start_distance": r["start_distance"], "distance": r["distance"], "clips": clips}
+
+
+def dx7_origin(paths) -> str:
+    """Where a DX7 voice comes from: Yamaha's own cartridges first, else the first collection."""
+    for path in paths:
+        if "Original Yamaha" in path:
+            return "Yamaha, cartouche d'origine (" + Path(path.split("#")[0]).stem + ")"
+    parts = Path(paths[0].split("#")[0]).parts
+    if parts[0] == "dexed_builtin":
+        return "Dexed, programmes intégrés"
+    return "collection " + (parts[2] if len(parts) > 3 else parts[-1]).lstrip("!")
 
 
 def dx7_items(audio_dir: Path):
@@ -93,9 +112,8 @@ def dx7_items(audio_dir: Path):
                                    total_seconds=M.TOTAL_SECONDS) for n in M.NOTES]
         stem = rec["id"].replace(":", "_")
         write_mp3(audio_dir / f"{stem}.mp3", clip(notes))
-        cart = rec.get("cartridge", "")
-        yield {"id": rec["id"].replace(":", "-"), "source": "DX7", "name": wanted.strip(), "category": "Mode DX7",
-               "author": f"{rec['author']} · {cart}", "license": "", "copies": len(rec["paths"]),
+        yield {"id": rec["id"].replace(":", "-"), "source": "DX7", "name": wanted.strip(), "category": "",
+               "author": dx7_origin(rec["paths"]), "license": "", "copies": len(rec["paths"]),
                "clips": {"dx7": f"audio/{stem}.mp3"}}
 
 
