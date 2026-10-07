@@ -91,10 +91,13 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=max(1, mp.cpu_count() - 4))
     parser.add_argument("--budget", type=int, default=320)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--bank", default=None, help="Surge only: factory or 3rdparty")
     parser.add_argument("--listen", type=int, default=60, help="presets that keep their audio for listening")
     args = parser.parse_args()
 
     records = [json.loads(line) for line in open(PRESET_DIR / f"{args.source}.jsonl", encoding="utf-8")]
+    if args.bank:
+        records = [r for r in records if r.get("bank") == args.bank]
     if args.limit:
         records = records[:args.limit]
     out = OUT_DIR / f"{args.source}.jsonl"
