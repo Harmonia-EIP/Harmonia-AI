@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -34,6 +35,7 @@ NOTE_SECONDS = 2.4
 FADE_SECONDS = 0.05
 TARGET_DBFS = -20.0
 SOURCE_LABELS = {"obxf": "OB-Xf", "surge": "Surge XT"}
+NOT_SOUNDS = re.compile(r"tutorial|template|init", re.I)  # Surge teaching patches, not sounds
 DX7_FAMOUS = ["SUPERTRAMP", "WURLITZER", "E.PIANO 1", "TOTO HMND1", "HAMMOND2", "AFRICA  1", "JUMP", "Axel F",
               "BILLIEJEAN", "BLADERUNNR", "VANGELIS 2", "Zawinul.1", "STEVIE COL", "QueenBel1", "BRASS   1",
               "STRINGS 1", "MINIMOOG", "TUB BELLS", "MARIMBA", "HARPSICH 1", "FLUTE   1", "MELLOTRON"]
@@ -61,7 +63,7 @@ def write_mp3(path: Path, audio: np.ndarray) -> None:
 def matched_items(source: str, audio_dir: Path, limit: int):
     rows = [json.loads(line) for line in open(MATCHED_DIR / f"{source}.jsonl", encoding="utf-8")]
     meta = {json.loads(line)["id"]: json.loads(line) for line in open(PRESET_DIR / f"{source}.jsonl", encoding="utf-8")}
-    rows = [r for r in rows if r.get("status") == "ok" and r.get("audio")]
+    rows = [r for r in rows if r.get("status") == "ok" and r.get("audio") and not NOT_SOUNDS.search(r["category"])]
     by_category = {}
     for r in sorted(rows, key=lambda r: r["name"].lower()):
         by_category.setdefault(r["category"], []).append(r)
