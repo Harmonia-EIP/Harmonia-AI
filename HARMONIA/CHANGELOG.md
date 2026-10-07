@@ -61,7 +61,8 @@ optimizer may no longer add absent modules.
   round-2 ratings: 3.6/5 kept vs 2.4/5 dropped).
 - **Human-only text corpus** (`scripts/v3/build_text_corpus_v3.py`): FSD50K titles/tags/labels and the
   presets' own names and categories (54,192 sentences, French by `opus-mt` except preset proper names);
-  v2's template sentences are gone. The multilingual encoder is retrained on it.
+  v2's template sentences are gone. The multilingual encoder retrained on it reaches a cosine to the CLAP
+  teacher of 0.82 (EN) / 0.79 (FR) on held-out sentences (v2, with templates: 0.84 / 0.80).
 - **Generators** (`src/v3/`, `scripts/v3/train_generator_v3.py`): diffusion models that draw DX7 voices or
   analog presets for a CLAP sound embedding, and a text -> sound prior trained on 97,883 human pairs
   (validation: cosine to the true sound 0.62 vs 0.23 for the raw text embedding, right sound in the top 10
