@@ -55,6 +55,20 @@ optimizer may no longer add absent modules.
 - Pitch envelope is exponential; OB-Xf pitch envelopes on sustained filter envelopes no longer detune.
 - Matching weighs attack/impact more and tries the whole preset an octave up/down.
 
+### Step 4 in progress: generating presets from text
+- **v3 bank** (`scripts/v3/build_bank_v3.py`): 29,531 real presets heard by CLAP (27,414 DX7 voices,
+  425 OB-Xf and 1,692 Surge presets whose Harmonia version scored <= 13, the threshold that separated
+  round-2 ratings: 3.6/5 kept vs 2.4/5 dropped).
+- **Human-only text corpus** (`scripts/v3/build_text_corpus_v3.py`): FSD50K titles/tags/labels and the
+  presets' own names and categories (54,192 sentences, French by `opus-mt` except preset proper names);
+  v2's template sentences are gone. The multilingual encoder is retrained on it.
+- **Generators** (`src/v3/`, `scripts/v3/train_generator_v3.py`): diffusion models that draw DX7 voices or
+  analog presets for a CLAP sound embedding, and a text -> sound prior trained on 97,883 human pairs
+  (validation: cosine to the true sound 0.62 vs 0.23 for the raw text embedding, right sound in the top 10
+  of 2,000 for 63 %). `scripts/v3/generate_v3.py` draws 8 candidates per engine, plays them, keeps the one
+  CLAP hears closest; 1-2 s per prompt including rendering. `scripts/v3/listening_prompts.py` builds a blind
+  A/B page (generated vs selected from the bank) for Malo's prompts.
+
 ## [0.1.0] - Harmonia v2: Listened Presets and French Prompts
 ### Added
 - **Offline synth renderer (`src/synth/`)**: numba port of the app's `Synth.cpp`, reverb settings and JUCE parameter conversions, validated sample by sample against the real C++ compiled with JUCE (relative RMS error: median 4e-4). `ENGINE_APP_1_0` reproduces the current app, `ENGINE_APP_1_1` the fixed engine (Harmonia-App#40). ~1000 notes/s on 14 cores.
