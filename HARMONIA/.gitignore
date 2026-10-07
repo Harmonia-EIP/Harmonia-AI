@@ -38,6 +38,7 @@ benchmarks/reports/
 # curated cold-start anchors are explicitly allowed below.
 data/processed/
 data/v2/
+data/v3/
 data/cleaned_dataset.npy
 data/cleaned_dataset.charter.npy
 data/raw/drop_zone/
