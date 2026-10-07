@@ -47,6 +47,24 @@ def to_patch(voice: Dict[str, object]) -> bytes:
 DX_VELOCITY = 0.7874015  # Dexed's "DX7 velocity" option: MIDI velocity scaled to the DX7 keyboard's range
 
 
+def from_patch(patch: bytes) -> Dict[str, object]:
+    """Inverse of to_patch: the 156-byte voice edit buffer -> voice dict."""
+    data = bytes(patch)
+    operators = []
+    for op in range(6):
+        o = data[op * 21:(op + 1) * 21]
+        operators.append({"rates": list(o[0:4]), "levels": list(o[4:8]),
+                          **{field: o[8 + i] for i, field in enumerate(OP_FIELDS)}})
+    operators.reverse()  # op6 first in the buffer
+    g = data[126:156]
+    keys = ("algorithm", "feedback", "osc_key_sync", "lfo_speed", "lfo_delay", "lfo_pitch_mod_depth",
+            "lfo_amp_mod_depth", "lfo_key_sync", "lfo_wave", "pitch_mod_sens", "transpose")
+    voice = {"operators": operators, "pitch_eg_rates": list(g[0:4]), "pitch_eg_levels": list(g[4:8]),
+             **{k: g[8 + i] for i, k in enumerate(keys)}}
+    voice["name"] = g[19:29].decode("ascii", "replace").strip()
+    return voice
+
+
 def render(voice: Dict[str, object], note: int = 60, velocity: int = 100, hold_seconds: float = 1.5,
            total_seconds: float = 4.0, sample_rate: int = 48000, dx_velocity: bool = True) -> np.ndarray:
     """Mono float32 audio of one key press, as Dexed plays it (before its output volume).
