@@ -93,6 +93,8 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--bank", default=None, help="Surge only: factory or 3rdparty")
     parser.add_argument("--listen", type=int, default=60, help="presets that keep their audio for listening")
+    parser.add_argument("--listen-from", type=Path, default=None,
+                        help="an earlier matched_* folder: keep audio for the same presets (listening rounds)")
     args = parser.parse_args()
 
     records = [json.loads(line) for line in open(PRESET_DIR / f"{args.source}.jsonl", encoding="utf-8")]
@@ -109,8 +111,12 @@ def main() -> int:
     done = set()
     if out.exists():
         done = {json.loads(line)["id"] for line in open(out, encoding="utf-8")}
-    rng = np.random.default_rng(0)
-    listen = set(rng.choice(len(records), size=min(args.listen, len(records)), replace=False).tolist())
+    if args.listen_from:
+        earlier = {f.stem.split("_")[1] for f in (args.listen_from / f"{args.source}_audio").glob("*.npz")}
+        listen = {i for i, rec in enumerate(records) if rec["id"].split(":")[1] in earlier}
+    else:
+        rng = np.random.default_rng(0)
+        listen = set(rng.choice(len(records), size=min(args.listen, len(records)), replace=False).tolist())
     tasks = [(rec, i in listen) for i, rec in enumerate(records) if rec["id"] not in done]
     print(f"{args.source}: {len(tasks)} presets to match ({len(done)} already done), {args.workers} workers")
     ctx = mp.get_context("spawn")
