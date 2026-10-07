@@ -1,0 +1,197 @@
+<title>Banc d'écoute Harmonia v3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #f6f4f0; --surface: #fffdf9; --ink: #1d1b18; --muted: #6b665d; --line: #e3ded4;
+  --accent: #c2410c; --accent-soft: #fbe6d7; --good: #2f7d4f; --good-soft: #dcefe2; --chip: #efebe3;
+  --focus: #c2410c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151412; --surface: #1e1c19; --ink: #efe9df; --muted: #a39b8e; --line: #33302b;
+    --accent: #ff8a4c; --accent-soft: #3a2518; --good: #6fcf97; --good-soft: #1d3326; --chip: #2a2723;
+    --focus: #ff8a4c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151412; --surface: #1e1c19; --ink: #efe9df; --muted: #a39b8e; --line: #33302b;
+  --accent: #ff8a4c; --accent-soft: #3a2518; --good: #6fcf97; --good-soft: #1d3326; --chip: #2a2723;
+  --focus: #ff8a4c; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 "IBM Plex Sans", system-ui, -apple-system, sans-serif; }
+.wrap { max-width: 1040px; margin: 0 auto; padding-inline: 16px; padding-block: 32px 64px; }
+h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 8px; font-weight: 600; text-wrap: balance; }
+h2 { font-size: 1.15rem; margin: 40px 0 4px; font-weight: 600; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--muted); }
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 20px 0 8px; }
+.legend div { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 0.88rem; color: var(--muted); }
+.legend b { color: var(--ink); font-weight: 600; display: block; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2; background: var(--bg); border-bottom: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding-block: 10px; margin-top: 16px; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.filters button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 0.85rem; cursor: pointer; }
+.filters button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.progress { font-size: 0.85rem; color: var(--muted); margin-left: auto; }
+.status { font-size: 0.85rem; color: var(--muted); }
+.items { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 10px; }
+.item.rated { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }
+.head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.name { font-weight: 600; font-size: 1.02rem; }
+.meta { color: var(--muted); font-size: 0.85rem; min-width: 0; overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.chip { background: var(--chip); border-radius: 6px; padding: 1px 8px; font-size: 0.8rem; }
+.chip.good { background: var(--good-soft); color: var(--good); }
+.players { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 12px; }
+.player { display: grid; gap: 4px; min-width: 0; }
+.player span { font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.player.target span { color: var(--accent); }
+audio { width: 100%; height: 36px; }
+.rate { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.rate label { font-size: 0.85rem; color: var(--muted); }
+.stars { display: flex; gap: 4px; }
+.stars button { width: 34px; height: 30px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); font: 500 0.9rem "IBM Plex Mono", monospace; cursor: pointer; }
+.stars button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.note { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); padding: 5px 8px; font: inherit; font-size: 0.88rem; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.empty { color: var(--muted); padding: 12px 0; }
+</style>
+
+<div class="wrap">
+  <h1>Banc d'écoute Harmonia v3</h1>
+  <p class="lede">De vrais presets (OB-Xf, Surge XT, DX7) joués sur trois notes (do2, do3, do4). Tous les extraits sont au même volume. Pour chaque preset, note de 1 à 5 à quel point la version Harmonia ressemble à l'original ; pour le mode DX7, note si le son est réussi. Tes notes sont enregistrées et servent à choisir les presets gardés pour l'IA.</p>
+  <div class="legend">
+    <div><b>Original</b>Le preset dans son synthé d'origine.</div>
+    <div><b>Conversion directe</b>Les paramètres traduits un à un vers Harmonia.</div>
+    <div><b>Harmonia ajusté</b>La conversion corrigée à l'oreille du modèle : ce qu'Harmonia jouerait.</div>
+    <div><b>Écart</b>Différence moyenne de spectre en dB : plus c'est bas, plus c'est proche.</div>
+  </div>
+  <div class="bar">
+    <div class="filters" role="group" aria-label="Filtrer">
+      <button data-f="all" aria-pressed="true">Tous</button>
+      <button data-f="OB-Xf" aria-pressed="false">OB-Xf</button>
+      <button data-f="Surge XT" aria-pressed="false">Surge XT</button>
+      <button data-f="DX7" aria-pressed="false">Mode DX7</button>
+      <button data-f="todo" aria-pressed="false">À noter</button>
+    </div>
+    <span class="status" id="status">Connexion à l'enregistrement des notes…</span>
+    <span class="progress mono" id="progress"></span>
+  </div>
+  <div id="list"></div>
+</div>
+
+<script>
+const ITEMS = /*ITEMS*/[];
+const ratings = {};
+let db = null, filter = "all";
+
+const $ = (tag, cls, text) => { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
+
+function player(label, src, target) {
+  const box = $("div", "player" + (target ? " target" : ""));
+  box.append($("span", null, label));
+  const audio = document.createElement("audio");
+  audio.controls = true; audio.preload = "none"; audio.src = src;
+  audio.addEventListener("play", () => document.querySelectorAll("audio").forEach(a => { if (a !== audio) a.pause(); }));
+  box.append(audio);
+  return box;
+}
+
+async function save(item, patch) {
+  const next = Object.assign({}, ratings[item.id] || {}, patch, { source: item.source, name: item.name, updatedAt: new Date().toISOString() });
+  ratings[item.id] = next;
+  render();
+  if (!db) return;
+  try { await db.collection("ratings").doc(item.id).set(next); }
+  catch (e) { document.getElementById("status").textContent = "Note non enregistrée (" + (e && e.code || "erreur") + ")."; }
+}
+
+function card(item) {
+  const r = ratings[item.id] || {};
+  const el = $("article", "item" + (r.score ? " rated" : ""));
+  const head = $("div", "head");
+  head.append($("span", "name", item.name));
+  const meta = [item.category, item.author, item.license].filter(Boolean).join(" · ");
+  head.append($("span", "meta", item.source + (meta ? " · " + meta : "")));
+  const chips = $("div", "chips");
+  if (item.distance != null) {
+    chips.append($("span", "chip mono", "conversion " + item.start_distance.toFixed(1) + " dB"));
+    chips.append($("span", "chip good mono", "ajusté " + item.distance.toFixed(1) + " dB"));
+  } else if (item.copies) {
+    chips.append($("span", "chip mono", item.copies + (item.copies > 1 ? " cartouches" : " cartouche")));
+  }
+  head.append(chips);
+  el.append(head);
+
+  const players = $("div", "players");
+  if (item.clips.dx7) players.append(player("Mode DX7 (Harmonia)", item.clips.dx7, true));
+  else {
+    players.append(player("Original", item.clips.original));
+    players.append(player("Conversion directe", item.clips.converted));
+    players.append(player("Harmonia ajusté", item.clips.harmonia, true));
+  }
+  el.append(players);
+
+  const rate = $("div", "rate");
+  rate.append($("label", null, item.clips.dx7 ? "Son réussi ?" : "Ressemblance"));
+  const stars = $("div", "stars");
+  stars.setAttribute("role", "group");
+  stars.setAttribute("aria-label", "Note de 1 à 5 pour " + item.name);
+  for (let s = 1; s <= 5; s++) {
+    const b = $("button", null, String(s));
+    b.type = "button";
+    b.setAttribute("aria-pressed", r.score === s ? "true" : "false");
+    b.addEventListener("click", () => save(item, { score: s }));
+    stars.append(b);
+  }
+  rate.append(stars);
+  const note = document.createElement("input");
+  note.className = "note"; note.placeholder = "Remarque (facultatif)"; note.value = r.note || "";
+  note.setAttribute("aria-label", "Remarque sur " + item.name);
+  note.addEventListener("change", () => save(item, { note: note.value.trim() }));
+  rate.append(note);
+  el.append(rate);
+  return el;
+}
+
+function render() {
+  const list = document.getElementById("list");
+  const focused = document.activeElement && document.activeElement.classList.contains("note") ? document.activeElement : null;
+  if (focused) return;  // keep the remark being typed
+  list.replaceChildren();
+  const visible = ITEMS.filter(i => filter === "all" || (filter === "todo" ? !(ratings[i.id] && ratings[i.id].score) : i.source === filter));
+  const groups = {};
+  visible.forEach(i => { const g = i.source === "DX7" ? "Mode DX7 · sons célèbres" : i.source; (groups[g] = groups[g] || []).push(i); });
+  Object.entries(groups).forEach(([title, items]) => {
+    list.append($("h2", null, title + " (" + items.length + ")"));
+    const box = $("div", "items");
+    items.forEach(i => box.append(card(i)));
+    list.append(box);
+  });
+  if (!visible.length) list.append($("p", "empty", "Rien à afficher ici."));
+  const done = ITEMS.filter(i => ratings[i.id] && ratings[i.id].score).length;
+  document.getElementById("progress").textContent = done + " / " + ITEMS.length + " notés";
+}
+
+document.querySelectorAll(".filters button").forEach(b => b.addEventListener("click", () => {
+  filter = b.dataset.f;
+  document.querySelectorAll(".filters button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+  render();
+}));
+
+render();
+(async () => {
+  try { db = window.claude && await window.claude.use("db"); } catch (e) { db = null; }
+  const status = document.getElementById("status");
+  if (!db) { status.textContent = "Notes non enregistrées sur cet affichage."; return; }
+  status.textContent = "Notes enregistrées automatiquement.";
+  db.collection("ratings").onSnapshot(snap => {
+    snap.docs.forEach(d => { if (d.exists) ratings[d.id] = d.data(); });
+    render();
+  }, () => { status.textContent = "Lecture des notes indisponible."; });
+})();
+</script>

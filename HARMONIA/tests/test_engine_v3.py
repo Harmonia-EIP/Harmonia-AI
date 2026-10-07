@@ -21,9 +21,11 @@ def _spectrum(mono, start=4800, size=32768):
 
 
 def test_v2_preset_sounds_the_same_in_v3_for_alias_free_waveforms():
-    v2 = np.array([0, 1, 0.3, 7, 0, 3000, 0.3, 0, 5, 400, 0.6, 300, 0.4, 300, 5, 0.3, 0.2, 0.5, 0.2, 0.4])
-    old = np.mean(render_v2(v2, 60, 100 / 127, 1.5, 4.0, SR, ENGINE_APP_1_1, 1), axis=0)
-    new = render(P.from_v2_physical(v2)).mean(axis=0)
+    # sustain 1 and no filter envelope: v2's linear and v3's exponential segments do not come into play
+    v2 = np.array([0, 1, 0.3, 7, 0, 3000, 0.3, 0, 5, 400, 1.0, 300, 0.0, 300, 5, 0.3, 0.2, 0.5, 0.2, 0.4])
+    hold = int(1.4 * SR)
+    old = np.mean(render_v2(v2, 60, 100 / 127, 1.5, 4.0, SR, ENGINE_APP_1_1, 1), axis=0)[:hold]
+    new = render(P.from_v2_physical(v2)).mean(axis=0)[:hold]
     assert np.sqrt(((old - new) ** 2).mean()) / np.sqrt((old ** 2).mean()) < 0.01
 
 

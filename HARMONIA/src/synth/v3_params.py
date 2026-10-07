@@ -2,8 +2,8 @@
 
 The first 20 keep their v2 names. New parameters were chosen from what real presets use
 (scripts/v3/analyze_presets.py on OB-Xf and Surge XT banks). Every new parameter has a neutral
-default, so a v2 preset (see from_v2_physical) keeps its sound apart from engine quality fixes
-(band-limited oscillators).
+default, so a v2 preset (see from_v2_physical) keeps its sound apart from engine quality fixes:
+band-limited oscillators and exponential decay/release (v2 ramps linearly, like juce::ADSR).
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ class V3Param:
 
 
 SPECS = (
-    # --- v2 parameters (same names; lfo_to_pitch and lfo_to_cutoff are now in cents / octaves) ---
+    # --- v2 parameters (same names; lfo_to_pitch, lfo_to_cutoff, filter_env_amount now in cents / octaves) ---
     V3Param("osc_1_waveform", 0, 3, 0, 1, choices=4, unit="sine|triangle|saw|pulse"),
     V3Param("osc_2_waveform", 0, 3, 0, 1, choices=4, unit="sine|triangle|saw|pulse"),
     V3Param("osc_mix", 0, 1, 0, unit="osc1..osc2"),
@@ -44,12 +44,12 @@ SPECS = (
     V3Param("filter_resonance", 0, 0.95, 0),
     V3Param("filter_type", 0, 2, 0, 1, choices=3, unit="lowpass|bandpass|highpass"),
     V3Param("amp_attack", 1, 5000, 1, midpoint=100, unit="ms"),
-    V3Param("amp_decay", 10, 5000, 300, midpoint=300, unit="ms"),
+    V3Param("amp_decay", 10, 20000, 300, midpoint=500, unit="ms"),
     V3Param("amp_sustain", 0, 1, 1),
-    V3Param("amp_release", 10, 10000, 300, midpoint=500, unit="ms"),
-    V3Param("filter_env_amount", -1, 1, 0, unit="x4 octaves"),
-    V3Param("filter_env_decay", 10, 5000, 300, midpoint=300, unit="ms"),
-    V3Param("lfo_rate", 0.1, 20, 5, midpoint=2, unit="Hz"),
+    V3Param("amp_release", 10, 20000, 300, midpoint=500, unit="ms"),
+    V3Param("filter_env_amount", -10, 10, 0, unit="octaves"),
+    V3Param("filter_env_decay", 10, 20000, 300, midpoint=500, unit="ms"),
+    V3Param("lfo_rate", 0.05, 40, 5, midpoint=2, unit="Hz"),
     V3Param("lfo_to_pitch", 0, 1200, 0, midpoint=50, unit="cents"),
     V3Param("lfo_to_cutoff", 0, 4, 0, midpoint=1, unit="octaves"),
     V3Param("velocity_to_filter", 0, 1, 0),
@@ -69,7 +69,7 @@ SPECS = (
     V3Param("filter_keytrack", 0, 1, 0),
     V3Param("filter_env_attack", 1, 5000, 1, midpoint=100, unit="ms"),
     V3Param("filter_env_sustain", 0, 1, 0),
-    V3Param("filter_env_release", 10, 10000, 50, midpoint=500, unit="ms"),
+    V3Param("filter_env_release", 10, 20000, 50, midpoint=500, unit="ms"),
     # --- amp / pitch ---
     V3Param("velocity_to_amp", 0, 1, 0.6),
     V3Param("pitch_env_amount", -24, 24, 0, unit="semitones"),
@@ -133,6 +133,7 @@ def from_v2_physical(v2: Sequence[float]) -> np.ndarray:
     """A v2 preset (20 physical values, src/synth/params.py order) in the v3 engine."""
     v2 = list(v2)
     values = dict(zip(NAMES[:20], v2))
+    values["filter_env_amount"] = v2[12] * 4.0
     values["lfo_to_pitch"] = v2[15] * 50.0
     values["lfo_to_cutoff"] = v2[16] * 2.0
     values["reverb_size"] = 0.55 + 0.35 * v2[19]

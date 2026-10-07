@@ -55,37 +55,45 @@ def _osc(wave, phase, dt, pw):
     return value - _poly_blep(phase, dt) + _poly_blep(shifted, dt)
 
 
+FLOOR = 1e-4  # -80 dB: an exponential segment reaches its target within this distance at its time
+
+
 @numba.njit(cache=True)
-def _adsr_step(state, value, a_rate, d_rate, sustain, r_rate):
+def _adsr_step(state, value, a_rate, d_coef, sustain, r_coef):
+    """Linear attack, exponential decay (to the sustain level) and release, like analog envelopes."""
     if state == _ATTACK:
         value += a_rate
         if value >= 1.0:
             value = 1.0
-            state = _DECAY if d_rate > 0.0 else _SUSTAIN
+            state = _DECAY
     elif state == _DECAY:
-        value -= d_rate
-        if value <= sustain:
+        value = sustain + (value - sustain) * d_coef
+        if value - sustain <= FLOOR:
             value = sustain
             state = _SUSTAIN
     elif state == _SUSTAIN:
         value = sustain
     elif state == _RELEASE:
-        value -= r_rate
-        if value <= 0.0:
+        value *= r_coef
+        if value <= FLOOR:
             value = 0.0
             state = _IDLE
     return state, value
 
 
 @numba.njit(cache=True)
+def _exp_coef(seconds, sr):
+    """Per-sample factor that shrinks a distance to FLOOR in `seconds`."""
+    return math.exp(math.log(FLOOR) / (seconds * sr)) if seconds > 0.0 else 0.0
+
+
+@numba.njit(cache=True)
 def _adsr_start(attack_s, decay_s, sustain, sr):
     a_rate = 1.0 / (attack_s * sr) if attack_s > 0.0 else -1.0
-    d_rate = (1.0 - sustain) / (decay_s * sr) if decay_s > 0.0 else -1.0
+    d_coef = _exp_coef(decay_s, sr)
     if a_rate > 0.0:
-        return _ATTACK, 0.0, a_rate, d_rate
-    if d_rate > 0.0:
-        return _DECAY, 1.0, a_rate, d_rate
-    return _SUSTAIN, sustain, a_rate, d_rate
+        return _ATTACK, 0.0, a_rate, d_coef
+    return _DECAY, 1.0, a_rate, d_coef
 
 
 @numba.njit(cache=True)
@@ -146,10 +154,10 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
     gain = (1.0 - vel_amp) + vel_amp * vel
     key_oct = keytrack * (note - 60) / 12.0 + vel_filter * (vel - 0.5) * 4.0
 
-    a_state, a_val, a_rate, d_rate = _adsr_start(attack, decay, sustain, sr)
-    f_state, f_val, fa_rate, fd_rate = _adsr_start(fenv_attack, fenv_decay, fenv_sustain, sr)
-    a_rel = 0.0
-    f_rel = 0.0
+    a_state, a_val, a_rate, d_coef = _adsr_start(attack, decay, sustain, sr)
+    f_state, f_val, fa_rate, fd_coef = _adsr_start(fenv_attack, fenv_decay, fenv_sustain, sr)
+    a_rel = _exp_coef(release, sr)
+    f_rel = _exp_coef(fenv_release, sr)
 
     # unison voices: detune spread, stereo position and start phase (a single voice starts at 0)
     uni_off = np.zeros(n_uni)
@@ -174,10 +182,8 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
     for i in range(total):
         if i == hold:
             if a_state != _IDLE:
-                a_rel = a_val / (release * sr) if release > 0.0 else a_val
                 a_state = _RELEASE
             if f_state != _IDLE:
-                f_rel = f_val / (fenv_release * sr) if fenv_release > 0.0 else f_val
                 f_state = _RELEASE
         if a_state == _IDLE and i >= hold:
             break
@@ -232,12 +238,12 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
             left = left * (1.0 - noise) + n * noise
             right = right * (1.0 - noise) + n * noise
 
-        f_state, f_val = _adsr_step(f_state, f_val, fa_rate, fd_rate, fenv_sustain, f_rel)
-        octaves = fenv_amount * f_val * 4.0 + lfo * lfo_cutoff_oct + key_oct
+        f_state, f_val = _adsr_step(f_state, f_val, fa_rate, fd_coef, fenv_sustain, f_rel)
+        octaves = fenv_amount * f_val + lfo * lfo_cutoff_oct + key_oct
         cutoff = min(20000.0, max(20.0, base_cutoff * 2.0 ** octaves))
         g = math.tan(math.pi * min(cutoff, 0.49 * sr) / sr)
 
-        a_state, a_val = _adsr_step(a_state, a_val, a_rate, d_rate, sustain, a_rel)
+        a_state, a_val = _adsr_step(a_state, a_val, a_rate, d_coef, sustain, a_rel)
         amp = a_val * gain
         if lfo_amp > 0.0:
             amp *= 1.0 - lfo_amp * 0.5 * (1.0 - lfo)
