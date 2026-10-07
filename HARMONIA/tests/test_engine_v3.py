@@ -20,13 +20,18 @@ def _spectrum(mono, start=4800, size=32768):
     return np.abs(np.fft.rfft(mono[start:start + size] * np.hanning(size))), np.fft.rfftfreq(size, 1 / SR)
 
 
-def test_v2_preset_sounds_the_same_in_v3_for_alias_free_waveforms():
-    # sustain 1 and no filter envelope: v2's linear and v3's exponential segments do not come into play
-    v2 = np.array([0, 1, 0.3, 7, 0, 3000, 0.3, 0, 5, 400, 1.0, 300, 0.0, 300, 5, 0.3, 0.2, 0.5, 0.2, 0.4])
+def test_v2_preset_keeps_its_timbre_in_v3():
+    # sustain 1, no filter envelope, no reverb: what differs is only v3's analog drift, oversampling
+    # (sub-millisecond latency) and band-limited waveforms, so compare band levels, not samples
+    from src.presets import perceptual
+
+    v2 = np.array([0, 1, 0.3, 7, 0, 3000, 0.3, 0, 5, 400, 1.0, 300, 0.0, 300, 5, 0.3, 0.2, 0.5, 0.2, 0.0])
     hold = int(1.4 * SR)
     old = np.mean(render_v2(v2, 60, 100 / 127, 1.5, 4.0, SR, ENGINE_APP_1_1, 1), axis=0)[:hold]
     new = render(P.from_v2_physical(v2)).mean(axis=0)[:hold]
-    assert np.sqrt(((old - new) ** 2).mean()) / np.sqrt((old ** 2).mean()) < 0.01
+    parts = perceptual.components(perceptual.describe([old]), perceptual.describe([new]))
+    # ~1.3 dB: the empty bands between partials lose v2's aliasing junk, the 12-16 kHz bands gain real harmonics
+    assert parts["timbre"] < 1.5 and parts["envelope"] < 1.0
 
 
 def test_band_limited_saw_has_less_aliasing_than_v2():
@@ -83,3 +88,32 @@ def test_normalized_mapping_round_trips_and_midpoints():
     np.testing.assert_allclose(back, physical, rtol=1e-6, atol=1e-6)
     assert abs(P.to_normalized(P.BY_NAME["filter_cutoff"], 1000) - 0.5) < 1e-6
     assert len(P.NAMES) == 46 and len(set(P.NAMES)) == 46
+
+
+def test_cross_mod_with_sync_stays_harmonic():
+    audio = render(_v3(osc_2_waveform=2, osc_mix=0.7, osc_sync=1, osc_2_coarse=7, fm_amount=12), note=60)
+    spec, freqs = _spectrum(audio.mean(axis=0), size=65536)
+    f0 = 440 * 2 ** ((60 - 69) / 12)
+    band = (freqs > 200) & (freqs < 12000)
+    off = np.abs(freqs / f0 - np.round(freqs / f0)) * f0 > 10
+    assert spec[band & off].sum() / spec[band].sum() < 0.1
+
+
+def test_fdn_reverb_is_smoother_than_freeverb():
+    from src.synth.engine import _reverb_stereo
+    from src.synth.engine_v3 import _reverb_fdn
+
+    x = np.zeros(int(3 * SR))
+    x[:2400] = np.random.default_rng(0).standard_normal(2400)
+
+    def ripple(tail):
+        seg = tail[int(0.4 * SR):int(2.4 * SR)]
+        db = 20 * np.log10(np.abs(np.fft.rfft(seg * np.hanning(seg.size))) + 1e-12)
+        freqs = np.fft.rfftfreq(seg.size, 1 / SR)
+        idx = np.flatnonzero((freqs > 200) & (freqs < 8000))[::50]
+        smooth = [db[(freqs > f * 2 ** (-1 / 6)) & (freqs < f * 2 ** (1 / 6))].mean() for f in freqs[idx]]
+        return np.std(db[idx] - smooth)
+
+    left, _ = _reverb_stereo(x.copy(), x.copy(), 1.0, SR, False)
+    fdn = _reverb_fdn(np.stack([x, x]), 1.0, 0.9, SR)[0]
+    assert ripple(fdn - 0.6 * x) < ripple(left - 0.6 * x) - 4.0

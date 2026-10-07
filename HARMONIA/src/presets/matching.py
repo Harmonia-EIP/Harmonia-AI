@@ -157,11 +157,21 @@ DISCRETE_CHOICES = {
 }
 
 
-def discrete_search(start: np.ndarray, target: List[np.ndarray], names=tuple(DISCRETE_CHOICES)) -> Tuple[np.ndarray, float, int]:
-    """One pass of coordinate descent over the discrete parameters (each tried at every value)."""
+def discrete_search(start: np.ndarray, target: Dict[str, np.ndarray],
+                    names=tuple(DISCRETE_CHOICES)) -> Tuple[np.ndarray, float, int]:
+    """One pass of coordinate descent over the discrete parameters (each tried at every value), after
+    trying the whole preset an octave up and down (catches octave settings the conversion missed)."""
     best = np.asarray(start, dtype=np.float64).copy()
     best_d = preset_distance(best, target)
     evals = 1
+    for shift in (-12, 12):
+        trial = best.copy()
+        for name in ("osc_1_coarse", "osc_2_coarse"):
+            trial[P.INDEX[name]] = P.snap(P.BY_NAME[name], trial[P.INDEX[name]] + shift)
+        d = preset_distance(trial, target)
+        evals += 1
+        if d < best_d - 0.5:  # clearly better only: an octave is a big change
+            best, best_d = trial, d
     for name in names:
         i = P.INDEX[name]
         for value in DISCRETE_CHOICES[name]:

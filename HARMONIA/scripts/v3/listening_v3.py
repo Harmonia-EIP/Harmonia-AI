@@ -26,6 +26,7 @@ if str(BASE_DIR) not in sys.path:
 
 from src.presets import dx7_render  # noqa: E402
 from src.presets import matching as M  # noqa: E402
+from src.presets.filters import playable  # noqa: E402
 
 MATCHED_DIR = BASE_DIR / "data" / "v3" / "matched"
 PRESET_DIR = BASE_DIR / "data" / "v3" / "presets"
@@ -35,7 +36,6 @@ NOTE_SECONDS = 2.4
 FADE_SECONDS = 0.05
 TARGET_DBFS = -20.0
 SOURCE_LABELS = {"obxf": "OB-Xf", "surge": "Surge XT"}
-NOT_SOUNDS = re.compile(r"tutorial|template|init", re.I)  # Surge teaching patches, not sounds
 ROUND_NOTES = {
     2: "2e écoute, après tes remarques : extraits en stéréo ; l'ajustement n'ajoute plus de bruit, de LFO, de "
        "distorsion ni d'effets absents de l'original ; unisson jusqu'à 16 voix et réglage de largeur stéréo ; "
@@ -71,7 +71,7 @@ def write_mp3(path: Path, audio: np.ndarray) -> None:
 def matched_items(source: str, audio_dir: Path, limit: int, round_: int = 1):
     rows = [json.loads(line) for line in open(MATCHED_DIR / f"{source}.jsonl", encoding="utf-8")]
     meta = {json.loads(line)["id"]: json.loads(line) for line in open(PRESET_DIR / f"{source}.jsonl", encoding="utf-8")}
-    rows = [r for r in rows if r.get("status") == "ok" and r.get("audio") and not NOT_SOUNDS.search(r["category"])]
+    rows = [r for r in rows if r.get("status") == "ok" and r.get("audio") and playable(meta[r["id"]])]
     by_category = {}
     for r in sorted(rows, key=lambda r: r["name"].lower()):
         by_category.setdefault(r["category"], []).append(r)

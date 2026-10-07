@@ -1,10 +1,11 @@
 """Harmonia v3 analog engine (reference implementation for the app's C++ port).
 
 One note per call, stereo out. Signal flow per voice:
-  2 oscillators (sine/triangle/band-limited saw and pulse, coarse tuning, osc2 -> osc1 phase modulation,
-  osc2 hard-synced to osc1, ring modulation) x unison (1..16 detuned voices) spread in stereo + noise
+  2 oscillators (sine/triangle/band-limited saw and pulse, coarse tuning, OB-X style cross-modulation of
+  osc2's pitch by osc1, osc2 hard-synced to osc1, ring modulation, slight analog drift) x unison (1..16 detuned voices) spread in stereo + noise
   -> state-variable filter (12 or 24 dB, envelope/LFO/velocity/keyboard tracking) -> distortion
-  -> amp ADSR (velocity, tremolo); then chorus -> delay -> reverb (Freeverb, as in v2).
+  -> amp ADSR (velocity, tremolo), all at twice the sample rate against aliasing (sync, cross-mod and
+  distortion would otherwise fold back as grit); then chorus -> delay -> reverb (feedback delay network).
 Parameters: src/synth/v3_params.py.
 """
 
@@ -16,11 +17,14 @@ import numba
 import numpy as np
 
 from src.synth import v3_params as P
-from src.synth.engine import _reverb_stereo
 
 SAMPLE_RATE = 48000
 _IDLE, _ATTACK, _DECAY, _SUSTAIN, _RELEASE = 0, 1, 2, 3, 4
 MAX_UNISON = 16
+DRIFT_CENTS = 2.0  # analog-style pitch wander per oscillator
+DRIFT_EVERY = 64  # samples between drift updates
+PITCH_ENV_SHAPE = 5.0
+OVERSAMPLE = 2  # the voice runs at twice the sample rate, then a half-band filter brings it back
 OSC_SPLIT = 0.5  # at full width, osc1 sits this far left of its voice and osc2 this far right
 CHORUS_RATE, CHORUS_CENTER_MS, CHORUS_DEPTH_MS = 0.5, 3.5, 1.75
 DELAY_DAMP_HZ = 6000.0
@@ -178,6 +182,11 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
             ph1[u] = np.random.random()
             ph2[u] = np.random.random()
     uni_norm = 1.0 / math.sqrt(n_uni)
+    # analog drift: each oscillator of each voice wanders by a couple of cents (two slow sines,
+    # random rates and phases), updated at control rate
+    drift_rate = np.random.uniform(0.07, 0.35, (n_uni, 2, 2))
+    drift_phase = np.random.uniform(0.0, 2.0 * math.pi, (n_uni, 2, 2))
+    drift = np.zeros((n_uni, 2))
 
     filt = np.zeros((4, 2))  # (channel x stage, state)
     lfo_phase = 0.0
@@ -202,23 +211,27 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
             lfo_held = np.random.uniform(-1.0, 1.0)
 
         semis = lfo * lfo_pitch_cents / 100.0
-        if penv_amount != 0.0 and penv_decay > 0.0 and t < penv_decay:
-            semis += penv_amount * (1.0 - t / penv_decay)
+        if penv_amount != 0.0 and penv_decay > 0.0:
+            semis += penv_amount * math.exp(-PITCH_ENV_SHAPE * t / penv_decay)  # ~0.7 % left at the decay time
+        if i % DRIFT_EVERY == 0:
+            for u in range(n_uni):
+                for k in range(2):
+                    drift[u, k] = DRIFT_CENTS / 150.0 * (
+                        math.sin(2.0 * math.pi * drift_rate[u, k, 0] * t + drift_phase[u, k, 0])
+                        + 0.5 * math.sin(2.0 * math.pi * drift_rate[u, k, 1] * t + drift_phase[u, k, 1]))
         pw = min(0.95, max(0.05, pw0 + lfo * lfo_pw * 0.45))
 
         left = 0.0
         right = 0.0
         for u in range(n_uni):
             st = semis + uni_off[u]
-            dt1 = base_freq * 2.0 ** ((coarse1 + st) / 12.0) / sr
-            dt2 = base_freq * 2.0 ** ((coarse2 + st) / 12.0 + detune / 1200.0) / sr
+            dt1 = base_freq * 2.0 ** ((coarse1 + st + drift[u, 0]) / 12.0) / sr
+            o1 = _osc(w1, ph1[u], dt1, pw)
+            # cross-modulation as on the OB-X: osc1 bends osc2's pitch (fm semitones per unit of osc1);
+            # with osc2 synced to osc1 the result stays harmonic
+            dt2 = base_freq * 2.0 ** ((coarse2 + st + drift[u, 1] + fm * o1) / 12.0 + detune / 1200.0) / sr
+            dt2 = min(dt2, 0.45)
             o2 = _osc(w2, ph2[u], dt2, pw)
-            if fm > 0.0:
-                pm = ph1[u] + fm * o2 / (2.0 * math.pi)
-                pm -= math.floor(pm)
-                o1 = _osc(w1, pm, dt1, pw)
-            else:
-                o1 = _osc(w1, ph1[u], dt1, pw)
             a1 = o1 * (1.0 - mix)
             a2 = o2 * mix
             if ring > 0.0:
@@ -317,87 +330,121 @@ def _delay(stereo, time_ms, feedback, mix, sr):
     return out
 
 
+def _half_band(taps: int = 39, cutoff_hz: float = 21000.0, rate: float = 96000.0) -> np.ndarray:
+    """Kaiser-windowed sinc low-pass for the 2x -> 1x decimation (flat to ~19 kHz, ~60 dB above 28 kHz)."""
+    n = np.arange(taps) - (taps - 1) / 2
+    h = np.sinc(2.0 * cutoff_hz / rate * n) * np.kaiser(taps, 8.0)
+    return h / h.sum()
+
+
+DECIMATOR = _half_band()
+
+
 @numba.njit(cache=True)
-def render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed):
-    """One note from a physical v3 vector (v3_params order); returns a (2, samples) float64 array."""
-    total = int(total_seconds * sr)
-    stereo = _render_voice(p, note, velocity, int(hold_seconds * sr), total, sr, seed)
-    if p[40] > 0.0:
-        stereo = _chorus(stereo, p[40], sr)
-    if p[43] > 0.0:
-        stereo = _delay(stereo, p[41], p[42], p[43], sr)
-    left, right = _reverb_size(stereo, p[19], p[44], sr)
-    out = np.empty((2, total))
-    out[0] = left
-    out[1] = right
+def _decimate(x, h):
+    n_out = x.shape[1] // OVERSAMPLE
+    half = h.shape[0] // 2
+    out = np.zeros((x.shape[0], n_out))
+    for ch in range(x.shape[0]):
+        for i in range(n_out):
+            centre = i * OVERSAMPLE
+            acc = 0.0
+            for k in range(h.shape[0]):
+                j = centre + k - half
+                if 0 <= j < x.shape[1]:
+                    acc += h[k] * x[ch, j]
+            out[ch, i] = acc
+    return out
+
+
+# Feedback-delay-network reverb: 8 modulated delay lines mixed by a Householder matrix after 4 diffusing
+# all-passes. Smoother than Freeverb's combs, whose fixed resonances sound metallic on sustained notes.
+FDN_MS = np.array([31.7, 37.3, 41.9, 47.3, 53.9, 59.1, 67.3, 73.1])
+FDN_MOD_HZ = np.array([0.11, 0.17, 0.23, 0.29, 0.13, 0.19, 0.31, 0.37])
+FDN_MOD_MS = 0.4
+DIFFUSER_MS = np.array([4.7, 3.6, 12.7, 9.3])
+DIFFUSER_GAIN = 0.6
+REVERB_PREDELAY_MS = 12.0
+REVERB_DAMP_HZ = 7000.0
+REVERB_WET_GAIN = 2.4  # median wet level of the v2 (Freeverb) reverb at the same mix (saw notes, 3 pitches)
+# Tail spectral ripple (std of dB around a 1/3-octave average, white noise in): Freeverb 19.0, this 11.8.
+
+
+@numba.njit(cache=True)
+def _reverb_fdn(stereo, wet, size, sr):
+    n = stereo.shape[1]
+    dry_gain = (1.0 - wet * 0.7) * 2.0  # v2 dry law (juce::Reverb's dry level x 2)
+    if wet <= 0.0:
+        return stereo * dry_gain
+    t60 = 0.3 + 11.7 * size * size  # seconds
+    scale = 0.6 + 0.6 * size
+    lengths = FDN_MS * 1e-3 * sr * scale
+    fb = np.empty(8)
+    for j in range(8):
+        fb[j] = 10.0 ** (-3.0 * lengths[j] / (t60 * sr))
+    damp = math.exp(-2.0 * math.pi * REVERB_DAMP_HZ / sr)
+    # energy-normalized input: the impulse response carries about the same energy whatever the decay time
+    in_gain = math.sqrt(1.0 - np.mean(fb) ** 2)
+    size_buf = int(lengths.max() + FDN_MOD_MS * 1e-3 * sr) + 4
+    lines = np.zeros((8, size_buf))
+    lp = np.zeros(8)
+    diff_len = np.empty(4, dtype=np.int64)
+    for d in range(4):
+        diff_len[d] = int(DIFFUSER_MS[d] * 1e-3 * sr)
+    diff = np.zeros((4, diff_len.max() + 1))
+    diff_pos = np.zeros(4, dtype=np.int64)
+    pre_len = int(REVERB_PREDELAY_MS * 1e-3 * sr) + 1
+    pre = np.zeros(pre_len)
+    out = np.empty_like(stereo)
+    taps = np.zeros(8)
+    mods = np.zeros(8)
+    for i in range(n):
+        x = 0.5 * (stereo[0, i] + stereo[1, i]) * in_gain
+        delayed = pre[i % pre_len]
+        pre[i % pre_len] = x
+        for d in range(4):  # Schroeder all-pass diffusers
+            k = diff_pos[d]
+            buf = diff[d, k]
+            v = delayed + DIFFUSER_GAIN * buf
+            diff[d, k] = v
+            delayed = buf - DIFFUSER_GAIN * v
+            diff_pos[d] = (k + 1) % diff_len[d]
+        total = 0.0
+        if i % 16 == 0:  # slow modulation: control rate is enough
+            for j in range(8):
+                mods[j] = FDN_MOD_MS * 1e-3 * sr * math.sin(2.0 * math.pi * FDN_MOD_HZ[j] * i / sr)
+        for j in range(8):
+            y = _read_delay(lines[j], i % size_buf, lengths[j] + mods[j])
+            lp[j] = y * (1.0 - damp) + lp[j] * damp
+            taps[j] = lp[j] * fb[j]
+            total += taps[j]
+        total *= 2.0 / 8.0
+        for j in range(8):  # Householder feedback matrix: I - 2/N
+            lines[j, i % size_buf] = taps[j] - total + delayed
+        left = taps[0] - taps[1] + taps[2] - taps[3] + taps[4] - taps[5] + taps[6] - taps[7]
+        right = taps[0] + taps[1] - taps[2] - taps[3] + taps[4] + taps[5] - taps[6] - taps[7]
+        out[0, i] = stereo[0, i] * dry_gain + left * wet * REVERB_WET_GAIN / 2.0
+        out[1, i] = stereo[1, i] * dry_gain + right * wet * REVERB_WET_GAIN / 2.0
     return out
 
 
 @numba.njit(cache=True)
-def _reverb_size(stereo, wet, size, sr):
-    # v2 reverb with the room size as its own parameter (v2 tied it to the mix: 0.55 + 0.35 * mix)
-    return _reverb_stereo_room(stereo[0], stereo[1], wet, size, sr)
+def _render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed, decimator):
+    total = int(total_seconds * sr)
+    fast = sr * OVERSAMPLE
+    voice = _render_voice(p, note, velocity, int(hold_seconds * fast), total * OVERSAMPLE, fast, seed)
+    stereo = _decimate(voice, decimator)
+    if p[40] > 0.0:
+        stereo = _chorus(stereo, p[40], sr)
+    if p[43] > 0.0:
+        stereo = _delay(stereo, p[41], p[42], p[43], sr)
+    return _reverb_fdn(stereo, p[19], p[44], sr)
 
 
-@numba.njit(cache=True)
-def _reverb_stereo_room(left, right, wet_level, room, sr):
-    if wet_level <= 0.0:  # juce::Reverb dry gain is dryLevel * 2 (v2 always runs through it)
-        return left * 2.0, right * 2.0
-    return _freeverb(left, right, wet_level, room, sr)
-
-
-@numba.njit(cache=True)
-def _freeverb(left, right, wet_level, room, sr):
-    n = left.shape[0]
-    comb_tunings = np.array([1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617])
-    allpass_tunings = np.array([556, 441, 341, 225])
-    spread = 23
-    isr = int(sr)
-    comb_sizes = np.empty((2, 8), dtype=np.int64)
-    for i in range(8):
-        comb_sizes[0, i] = (isr * comb_tunings[i]) // 44100
-        comb_sizes[1, i] = (isr * (comb_tunings[i] + spread)) // 44100
-    ap_sizes = np.empty((2, 4), dtype=np.int64)
-    for i in range(4):
-        ap_sizes[0, i] = (isr * allpass_tunings[i]) // 44100
-        ap_sizes[1, i] = (isr * (allpass_tunings[i] + spread)) // 44100
-    comb_buf = np.zeros((2, 8, comb_sizes.max()))
-    comb_idx = np.zeros((2, 8), dtype=np.int64)
-    comb_last = np.zeros((2, 8))
-    ap_buf = np.zeros((2, 4, ap_sizes.max()))
-    ap_idx = np.zeros((2, 4), dtype=np.int64)
-    damp = 0.4 * 0.4
-    fb = room * 0.28 + 0.7
-    dry = (1.0 - wet_level * 0.7) * 2.0
-    wet1 = 0.5 * (wet_level * 3.0) * 2.0
-    out_l = np.empty(n)
-    out_r = np.empty(n)
-    for i in range(n):
-        inp = (left[i] + right[i]) * 0.015
-        acc_l = 0.0
-        acc_r = 0.0
-        for ch in range(2):
-            acc = 0.0
-            for j in range(8):
-                idx = comb_idx[ch, j]
-                output = comb_buf[ch, j, idx]
-                comb_last[ch, j] = output * (1.0 - damp) + comb_last[ch, j] * damp
-                comb_buf[ch, j, idx] = inp + comb_last[ch, j] * fb
-                comb_idx[ch, j] = (idx + 1) % comb_sizes[ch, j]
-                acc += output
-            for j in range(4):
-                idx = ap_idx[ch, j]
-                buffered = ap_buf[ch, j, idx]
-                ap_buf[ch, j, idx] = acc + buffered * 0.5
-                ap_idx[ch, j] = (idx + 1) % ap_sizes[ch, j]
-                acc = buffered - acc
-            if ch == 0:
-                acc_l = acc
-            else:
-                acc_r = acc
-        out_l[i] = acc_l * wet1 + left[i] * dry
-        out_r[i] = acc_r * wet1 + right[i] * dry
-    return out_l, out_r
+def render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed):
+    """One note from a physical v3 vector (v3_params order); returns a (2, samples) float64 array."""
+    return _render_physical(np.asarray(p, dtype=np.float64), note, velocity, hold_seconds, total_seconds, sr,
+                            seed, DECIMATOR)
 
 
 def render(physical, note: int = 60, velocity: float = 100 / 127, hold_seconds: float = 1.5,
@@ -409,15 +456,20 @@ def render(physical, note: int = 60, velocity: float = 100 / 127, hold_seconds: 
     return render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed).astype(np.float32)
 
 
-@numba.njit(cache=True, parallel=True)
 def render_batch(params, notes, velocity, hold_seconds, total_seconds, sr, seed):
     """Mono float32 (n_presets, n_notes, samples) for many physical vectors."""
+    return _render_batch(np.asarray(params, dtype=np.float64), np.asarray(notes), velocity, hold_seconds,
+                         total_seconds, sr, seed, DECIMATOR)
+
+
+@numba.njit(cache=True, parallel=True)
+def _render_batch(params, notes, velocity, hold_seconds, total_seconds, sr, seed, decimator):
     n, m = params.shape[0], notes.shape[0]
     total = int(total_seconds * sr)
     out = np.zeros((n, m, total), dtype=np.float32)
     for k in numba.prange(n * m):
         i, j = k // m, k % m
-        stereo = render_physical(params[i], notes[j], velocity, hold_seconds, total_seconds, sr, seed + k)
+        stereo = _render_physical(params[i], notes[j], velocity, hold_seconds, total_seconds, sr, seed + k, decimator)
         for t in range(total):
             out[i, j, t] = 0.5 * (stereo[0, t] + stereo[1, t])
     return out

@@ -47,3 +47,15 @@ def test_dx7_single_sine_operator_is_in_tune(tmp_path):
     audio = dx7_render.render(voice, note=69, total_seconds=1.0)
     spectrum = np.abs(np.fft.rfft(audio[4800:4800 + 32768] * np.hanning(32768)))
     assert abs(np.fft.rfftfreq(32768, 1 / 48000)[spectrum.argmax()] - 440.0) < 2.0
+
+
+@pytest.mark.skipif(not dx7_render.LIBRARY.exists(), reason="run scripts/v3/build_dx7.py first")
+def test_dx7_velocity_follows_the_dx7_keyboard_range(tmp_path):
+    path = tmp_path / "cart.syx"
+    path.write_bytes(_bulk([_packed_voice()] * 32))
+    from src.presets import dx7
+
+    voice = next(dx7.read_file(path))
+    scaled = dx7_render.render(voice, velocity=127, total_seconds=0.5)
+    raw = dx7_render.render(voice, velocity=int(127 * dx7_render.DX_VELOCITY), total_seconds=0.5, dx_velocity=False)
+    np.testing.assert_array_equal(scaled, raw)

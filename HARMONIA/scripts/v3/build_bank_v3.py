@@ -14,7 +14,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import sys
 import time
 from pathlib import Path
@@ -26,6 +25,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
 from src.presets import dx7_render  # noqa: E402
+from src.presets.filters import playable  # noqa: E402
 from src.synth import v3_params as P  # noqa: E402
 from src.synth.engine_v3 import SAMPLE_RATE, render_batch  # noqa: E402
 
@@ -35,7 +35,6 @@ NOTES = np.array([45, 69])  # A2, A4 (as in the v2 bank)
 VELOCITY = 100
 HOLD_S, TOTAL_S = 1.5, 4.0
 SILENCE_RMS = 1e-4
-NOT_SOUNDS = re.compile(r"tutorial|template|init", re.I)  # Surge teaching patches, not sounds
 
 
 def load_entries(max_distance: float):
@@ -56,7 +55,7 @@ def load_entries(max_distance: float):
         for line in open(path, encoding="utf-8"):
             row = json.loads(line)
             rec = meta[row["id"]]
-            if row.get("status") != "ok" or row["distance"] > max_distance or NOT_SOUNDS.search(rec["category"]):
+            if row.get("status") != "ok" or row["distance"] > max_distance or not playable(rec):
                 continue
             entries.append({"id": row["id"], "kind": "analog", "source": source, "name": rec["name"],
                             "aliases": rec["aliases"], "category": rec["category"], "author": rec["author"],

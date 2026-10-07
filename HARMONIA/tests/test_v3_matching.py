@@ -71,3 +71,20 @@ def test_width_counts_only_for_stereo_audio():
     wide = M.features([np.stack([tone, np.roll(tone, 37)])])
     parts = M.perceptual.components(mono, wide)
     assert parts["width"] > 10.0 and M.perceptual.components(mono, mono)["width"] == 0.0
+
+
+def test_global_transpose_and_scene_octave_are_converted():
+    ob = obxf_to_v3({"Transpose": 0.25, "Osc1Pitch": 0.5, "Osc2Pitch": 0.75, "Osc1Mix": 1.0})
+    assert _value(ob, "osc_1_coarse") == -12 and _value(ob, "osc_2_coarse") == 0
+    sg = surge_to_v3({"a_octave": -1, "a_osc1_type": 0, "a_level_o1": 1.0, "a_mute_o1": 0}, [])
+    assert _value(sg, "osc_1_coarse") == -12
+
+
+def test_arpeggios_sequences_and_templates_are_not_playable():
+    from src.presets.filters import playable
+
+    assert not playable({"name": "Evolution Arp", "category": "Keys"})
+    assert not playable({"name": "Init Saw", "category": "Templates"})
+    seq = {"source": "surge", "name": "Pulse", "category": "Bass", "params": {"a_lfo0_shape": 7},
+           "modulation": [{"target": "a_osc1_pitch", "source": 17, "index": 0, "depth": 12.0}]}
+    assert not playable(seq) and playable({**seq, "params": {"a_lfo0_shape": 0}})

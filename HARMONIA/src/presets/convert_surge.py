@@ -50,11 +50,16 @@ def surge_to_v3(p: Dict[str, float], modulation: List[dict]) -> np.ndarray:
             active.append((level, i))
     active.sort(reverse=True)
     picked = [i for _, i in active[:2]] or [1]
+    fm_on = p.get(f"{s}_fm_switch", 0) and len(picked) == 2
+    if fm_on and picked[0] < picked[1]:
+        # Surge FM 2>1: the higher oscillator modulates the lower one; Harmonia's osc1 is the modulator
+        picked = [picked[1], picked[0]]
+    scene_semis = 12.0 * p.get(f"{s}_octave", 0) + p.get(f"{s}_pitch", 0.0)  # scene octave, used by 31 %
     levels = []
     for slot, i in enumerate(picked):
         prefix = f"{s}_osc{i}"
         osc_type = int(p.get(f"{prefix}_type", 0))
-        semis = 12.0 * p.get(f"{prefix}_octave", 0) + p.get(f"{prefix}_pitch", 0.0)
+        semis = scene_semis + 12.0 * p.get(f"{prefix}_octave", 0) + p.get(f"{prefix}_pitch", 0.0)
         v[f"osc_{slot + 1}_waveform"] = _osc_wave(osc_type, p, prefix)
         v[f"osc_{slot + 1}_coarse"] = round(min(24.0, max(-24.0, semis)))
         levels.append(p.get(f"{s}_level_o{i}", 1.0))
@@ -66,13 +71,12 @@ def surge_to_v3(p: Dict[str, float], modulation: List[dict]) -> np.ndarray:
                 v["unison_voices"] = min(16, int(p.get(f"{prefix}_param6", 1)))
                 v["unison_detune"] = min(50.0, abs(p.get(f"{prefix}_param5", 0.1)) * 100.0)
                 v["stereo_width"] = 0.8  # Surge spreads unison voices across the stereo field
-            if osc_type in (5, 6):
-                v["fm_amount"] = 2.0
     if len(picked) == 2:
         v["osc_mix"] = levels[1] / max(levels[0] + levels[1], 1e-6)
         v["osc_2_detune"] = 0.0
-    if p.get(f"{s}_fm_switch", 0) and len(picked) == 2:
-        v["fm_amount"] = min(10.0, 2.0 * 2.0 ** (p.get(f"{s}_fm_depth", -24.0) / 12.0) * 4.0)
+    if fm_on:
+        v["fm_amount"] = min(48.0, 12.0 * 2.0 ** (p.get(f"{s}_fm_depth", -24.0) / 12.0))
+        v["osc_mix"] = 0.8  # mostly the carrier
     if p.get(f"{s}_mute_noise", 1) == 0:
         v["noise_level"] = min(1.0, 0.5 * p.get(f"{s}_level_noise", 0.0))
     if p.get(f"{s}_mute_ring12", 1) == 0:

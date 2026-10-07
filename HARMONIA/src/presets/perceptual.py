@@ -26,7 +26,8 @@ RANGE_DB = 60.0
 ENV_HOP = 240  # 5 ms
 # Checked against 60 listening ratings (Spearman with the score): timbre alone -0.49, + envelope -0.52,
 # + movement -0.52 (kept: it is what keeps LFO wobble honest); the noisiness term did not help (-0.46).
-WEIGHTS = {"timbre": 1.0, "envelope": 0.5, "movement": 1.0, "noise": 0.0, "width": 0.15}
+# Round 2 ratings asked for more attack/impact: envelope weight 0.5 -> 1.0 (Spearman -0.53 on round 1).
+WEIGHTS = {"timbre": 1.0, "envelope": 1.0, "movement": 1.0, "noise": 0.0, "width": 0.15}
 WIDTH_FLOOR_DB = -40.0  # side/mid ratio of a mono sound
 
 

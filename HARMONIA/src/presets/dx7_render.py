@@ -44,9 +44,17 @@ def to_patch(voice: Dict[str, object]) -> bytes:
     return bytes(data)
 
 
+DX_VELOCITY = 0.7874015  # Dexed's "DX7 velocity" option: MIDI velocity scaled to the DX7 keyboard's range
+
+
 def render(voice: Dict[str, object], note: int = 60, velocity: int = 100, hold_seconds: float = 1.5,
-           total_seconds: float = 4.0, sample_rate: int = 48000) -> np.ndarray:
-    """Mono float32 audio of one key press, as Dexed plays it (before its output volume)."""
+           total_seconds: float = 4.0, sample_rate: int = 48000, dx_velocity: bool = True) -> np.ndarray:
+    """Mono float32 audio of one key press, as Dexed plays it (before its output volume).
+
+    With dx_velocity the MIDI velocity is scaled like a real DX7 keyboard (Dexed's option): at full MIDI
+    velocity the voices otherwise sound harsher than on the instrument (E.PIANO 1's bell attack)."""
+    if dx_velocity:
+        velocity = int(velocity * DX_VELOCITY)
     total = int(round(total_seconds * sample_rate))
     out = np.zeros(total, dtype=np.float32)
     status = _library().dx7_render(to_patch(voice), note, velocity, int(round(hold_seconds * sample_rate)), total,

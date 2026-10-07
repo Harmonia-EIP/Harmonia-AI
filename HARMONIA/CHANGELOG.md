@@ -2,6 +2,59 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [Unreleased] - Harmonia v3 research (branch `research/ai-v3-presets`, not to be merged)
+Goal: generate presets from text with an AI trained only on real, human-made presets and human-written
+text (no generated training data), on a richer engine. Progress is checked by ear on a listening page
+where Malo rates each sound. Details: [V3.md](V3.md).
+
+### Added
+- **Real preset banks** (`scripts/v3/fetch_presets.py`, `presets_to_json.py`): DX7 (27,471 unique voices
+  from Dexed's cartridge collection and built-in programs), Surge XT factory + third-party (3,555, GPL-3),
+  OB-Xf (492, CC0). Fetched from their sources (pinned commit / sha256), never redistributed.
+- **Feature-usage analysis** (`scripts/v3/analyze_presets.py`): which synthesis features real presets use;
+  it chose the new engine parameters (e.g. 72 % of OB-Xf presets set an oscillator interval, 63 % use
+  unison, 94 % of DX7 voices use 5-6 operators).
+- **v3 analog engine** (`src/synth/engine_v3.py`, `v3_params.py`), 46 parameters: the 20 of v2 plus
+  coarse tuning per oscillator, pulse width, sync, OB-X style cross-modulation, ring mod, unison (1-16
+  voices), stereo width, 12/24 dB filter, keyboard tracking, full filter envelope, pitch envelope,
+  velocity to amp, LFO shape/delay/amp/PWM, chorus, delay, reverb size. Band-limited saw/pulse,
+  exponential decays, 2x oversampling, analog drift, feedback-delay-network reverb.
+- **DX7 mode** (`native/dx7`, `scripts/v3/build_dx7.py`, `src/presets/dx7_render.py`): Dexed's msfa FM
+  core (Apache-2.0, embeddable in the app) plays DX7 voices as they are, ~2 ms per note.
+- **Original-synth rendering** (`src/presets/originals.py`): OB-Xf and Surge XT presets played by the
+  official plugins through pedalboard, to compare every conversion with its original.
+- **Converters** (`src/presets/convert_obxf.py`, `convert_surge.py`) using each synth's real scalings, and
+  **sound matching** (`src/presets/matching.py`, `perceptual.py`, `scripts/v3/match_presets.py`): CMA-ES
+  refines the conversion so it sounds like the original.
+- **Listening page with ratings** (`scripts/v3/listening_v3.py`): original / conversion / Harmonia side by
+  side, 1-5 ratings and remarks stored in the page's database and read back.
+- **v3 bank builder** (`scripts/v3/build_bank_v3.py`) and readable preset text from names/categories
+  (`src/presets/labels.py`); `src/presets/filters.py` leaves out arpeggios, step sequences and templates.
+
+### Listening rounds (Malo's ratings, 1-5)
+| Round | What changed | OB-Xf | Surge XT | DX7 |
+|---|---|---|---|---|
+| 1 | first conversions, log-mel matching | 2.5 | 1.9 | 2.8 |
+| 2 | perceptual metric, no added modules, stereo, 16-voice unison | 3.3 (17 better, 1 worse) | 3.1 (23 better, 0 worse) | — |
+
+Round 1 showed the first optimizer "cheated": it lowered its log-mel distance by adding distortion (69 %
+of presets), noise (50 %), LFO and effects the originals do not have. The perceptual metric (1/3-octave
+timbre, envelope, movement, stereo width) follows the ratings better (Spearman -0.52 vs -0.32) and the
+optimizer may no longer add absent modules.
+
+### Fixed after round 2
+- Surge scene octave (`a_octave`, 31 % of presets) and OB-Xf global transpose (33 %) were ignored:
+  "one octave too high".
+- Cross-modulation now works like OB-Xf's (osc1 bends osc2's pitch, harmonic with sync) instead of the
+  reverse phase modulation, which turned synced presets inharmonic ("metallic").
+- Grit/"metallic" character: 2x oversampling against aliasing of sync, cross-mod and distortion; the
+  Freeverb reverb replaced by a modulated feedback delay network (tail spectral ripple 11.8 dB vs 19.0);
+  slight analog pitch drift per oscillator.
+- DX7 velocity follows the DX7 keyboard range (Dexed's option): E.PIANO 1 was played too hard.
+- DX7 voices no longer depend on uninitialized memory (bit-exact repeat renders).
+- Pitch envelope is exponential; OB-Xf pitch envelopes on sustained filter envelopes no longer detune.
+- Matching weighs attack/impact more and tries the whole preset an octave up/down.
+
 ## [0.1.0] - Harmonia v2: Listened Presets and French Prompts
 ### Added
 - **Offline synth renderer (`src/synth/`)**: numba port of the app's `Synth.cpp`, reverb settings and JUCE parameter conversions, validated sample by sample against the real C++ compiled with JUCE (relative RMS error: median 4e-4). `ENGINE_APP_1_0` reproduces the current app, `ENGINE_APP_1_1` the fixed engine (Harmonia-App#40). ~1000 notes/s on 14 cores.

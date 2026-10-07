@@ -49,13 +49,13 @@ def obxf_to_v3(p: Dict[str, float]) -> np.ndarray:
     v["osc_mix"] = m2 / osc if osc > 0 else 0.0
     v["ring_mod"] = mr / (osc + mr) if osc + mr > 0 else 0.0
     v["noise_level"] = min(1.0, mn / (osc + mr + mn)) if osc + mr + mn > 0 else 0.0
-    v["osc_1_coarse"] = round((g("Osc1Pitch", 0.5) - 0.5) * 48.0)
-    v["osc_2_coarse"] = round((g("Osc2Pitch", 0.5) - 0.5) * 48.0)
+    transpose = round((g("Transpose", 0.5) * 2.0 - 1.0) * 24.0)  # global transpose, used by a third of the bank
+    v["osc_1_coarse"] = max(-24, min(24, transpose + round((g("Osc1Pitch", 0.5) - 0.5) * 48.0)))
+    v["osc_2_coarse"] = max(-24, min(24, transpose + round((g("Osc2Pitch", 0.5) - 0.5) * 48.0)))
     v["osc_2_detune"] = 100.0 * logsc(g("Osc2Detune"), 0.001, 0.6) if g("Osc2Detune") > 0 else 0.0
     v["pulse_width"] = 0.5 + 0.5 * 0.95 * g("OscPW")
     v["osc_sync"] = 1.0 if g("OscSync") >= 0.5 else 0.0
-    # OB-Xf: osc1 bends osc2's pitch by 48 * v semitones per unit; Harmonia: osc2 phase-modulates osc1
-    v["fm_amount"] = min(10.0, g("OscCrossmod") * 6.0)
+    v["fm_amount"] = min(48.0, 48.0 * g("OscCrossmod"))  # same cross-mod as the OB-X: osc1 bends osc2's pitch
     pans = [g(f"PanVoice{i}", 0.5) for i in range(1, 9)]
     spread = min(1.0, 2.0 * max(abs(x - 0.5) for x in pans))
     if g("Unison") >= 0.5:
@@ -96,6 +96,8 @@ def obxf_to_v3(p: Dict[str, float]) -> np.ndarray:
         sign = -1.0 if g("EnvToPitchInvert") >= 0.5 else 1.0
         v["pitch_env_amount"] = sign * min(24.0, 40.0 * g("EnvToPitchAmount"))
         v["pitch_env_decay"] = min(5000.0, v["filter_env_attack"] + v["filter_env_decay"])
+        if g("FilterEnvSustain") > 0.3:  # a sustained filter envelope would hold the pitch off: keep only the blip
+            v["pitch_env_amount"] *= 1.0 - g("FilterEnvSustain")
 
     # LFO: the first one routed anywhere (Harmonia has one LFO)
     for i in (1, 2):

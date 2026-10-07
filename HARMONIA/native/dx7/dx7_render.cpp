@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <new>
 
 #include "controllers.h"
 #include "dx7note.h"
@@ -70,11 +71,15 @@ extern "C" int dx7_render(const uint8_t *patch, int midinote, int velocity, int 
 
     uint8_t data[156];
     std::memcpy(data, patch, 156);
-    Lfo lfo;
+    Lfo lfo{};  // value-initialized: the sample-and-hold state starts at 0 instead of stack garbage
     lfo.reset(data + 137);
     lfo.keydown();
 
-    Dx7Note note(createStandardTuning(), nullptr);
+    // Dx7Note's constructor leaves the operator feedback buffer uninitialized (Dexed reuses voices);
+    // build it in zeroed storage so a render does not depend on leftover memory.
+    alignas(Dx7Note) unsigned char storage[sizeof(Dx7Note)];
+    std::memset(storage, 0, sizeof(storage));
+    Dx7Note &note = *new (storage) Dx7Note(createStandardTuning(), nullptr);
     note.init(data, midinote, velocity, 1, &controllers);
     if (data[136]) note.oscSync();
 
@@ -99,5 +104,6 @@ extern "C" int dx7_render(const uint8_t *patch, int midinote, int velocity, int 
             out[start + j] = filtered;
         }
     }
+    note.~Dx7Note();
     return 0;
 }

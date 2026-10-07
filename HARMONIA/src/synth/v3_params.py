@@ -60,7 +60,7 @@ SPECS = (
     V3Param("osc_2_coarse", -24, 24, 0, 1, unit="semitones"),
     V3Param("pulse_width", 0.05, 0.95, 0.5),
     V3Param("osc_sync", 0, 1, 0, 1, choices=2, unit="off|osc2 synced to osc1"),
-    V3Param("fm_amount", 0, 10, 0, midpoint=1.5, unit="radians, osc2 -> osc1 phase"),
+    V3Param("fm_amount", 0, 48, 0, midpoint=6, unit="semitones of osc2 pitch per unit of osc1 (cross-mod)"),
     V3Param("ring_mod", 0, 1, 0),
     V3Param("unison_voices", 1, 16, 1, 1, unit="voices"),
     V3Param("unison_detune", 0, 50, 10, midpoint=10, unit="cents"),
