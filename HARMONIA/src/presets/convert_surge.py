@@ -63,8 +63,9 @@ def surge_to_v3(p: Dict[str, float], modulation: List[dict]) -> np.ndarray:
                 v["pulse_width"] = min(0.95, max(0.05, p.get(f"{prefix}_param1", 0.5)))
                 v["osc_sync"] = 1.0 if p.get(f"{prefix}_param4", 0.0) > 0.5 else 0.0
             if osc_type in (0, 1, 2, 7, 8, 11) and p.get(f"{prefix}_param6", 1) > 1:
-                v["unison_voices"] = min(7, int(p.get(f"{prefix}_param6", 1)))
+                v["unison_voices"] = min(16, int(p.get(f"{prefix}_param6", 1)))
                 v["unison_detune"] = min(50.0, abs(p.get(f"{prefix}_param5", 0.1)) * 100.0)
+                v["stereo_width"] = 0.8  # Surge spreads unison voices across the stereo field
             if osc_type in (5, 6):
                 v["fm_amount"] = 2.0
     if len(picked) == 2:

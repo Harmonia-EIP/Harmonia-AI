@@ -56,9 +56,14 @@ def obxf_to_v3(p: Dict[str, float]) -> np.ndarray:
     v["osc_sync"] = 1.0 if g("OscSync") >= 0.5 else 0.0
     # OB-Xf: osc1 bends osc2's pitch by 48 * v semitones per unit; Harmonia: osc2 phase-modulates osc1
     v["fm_amount"] = min(10.0, g("OscCrossmod") * 6.0)
+    pans = [g(f"PanVoice{i}", 0.5) for i in range(1, 9)]
+    spread = min(1.0, 2.0 * max(abs(x - 0.5) for x in pans))
     if g("Unison") >= 0.5:
-        v["unison_voices"] = min(7, 1 + int(g("UnisonVoices") * MAX_VOICES))
+        v["unison_voices"] = min(16, 1 + int(g("UnisonVoices") * MAX_VOICES))
         v["unison_detune"] = min(50.0, 50.0 * logsc(g("UnisonDetune", 0.25), 0.001, 1.0))
+        v["stereo_width"] = spread  # the stacked voices take the per-voice pan positions
+    else:
+        v["stereo_width"] = 0.5 * spread  # one note uses one voice: only its slot's pan, a narrower image
 
     # filter (cutoff pitch index -> Hz at middle C; keyboard tracking pivots on note 53)
     keytrack = g("FilterKeyFollow")

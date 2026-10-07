@@ -42,14 +42,16 @@ DX7_FAMOUS = ["SUPERTRAMP", "WURLITZER", "E.PIANO 1", "TOTO HMND1", "HAMMOND2", 
 
 
 def clip(notes_audio) -> np.ndarray:
+    """Chain the notes (mono (samples,) or stereo (2, samples)) into one (samples, channels) clip."""
     n = int(NOTE_SECONDS * M.SR)
     fade = np.linspace(1.0, 0.0, int(FADE_SECONDS * M.SR))
     parts = []
     for audio in notes_audio:
-        part = np.asarray(audio[:n], dtype=np.float64).copy()
-        part[-fade.size:] *= fade
+        audio = np.asarray(audio, dtype=np.float64)
+        part = (audio[None, :n] if audio.ndim == 1 else audio[:, :n]).copy()
+        part[:, -fade.size:] *= fade
         parts.append(part)
-    out = np.nan_to_num(np.concatenate(parts))
+    out = np.nan_to_num(np.concatenate(parts, axis=1)).T
     rms = np.sqrt(np.mean(out ** 2))
     if rms > 1e-7:
         out *= 10 ** (TARGET_DBFS / 20) / rms
@@ -108,8 +110,9 @@ def dx7_items(audio_dir: Path):
         candidates = by_name.get(wanted.strip(), [])
         if not candidates:
             continue
-        # prefer Yamaha's own cartridges, then the most copied version
-        rec = max(candidates, key=lambda r: (any("Original Yamaha" in p for p in r["paths"]), len(r["paths"])))
+        # prefer the DX7's factory ROM cartridges, then Yamaha's other cartridges, then the most copied version
+        rec = max(candidates, key=lambda r: (any("/DX7 ROM" in p for p in r["paths"]),
+                                             any("Original Yamaha" in p for p in r["paths"]), len(r["paths"])))
         notes = [dx7_render.render(rec["params"], note=n, velocity=M.VELOCITY, hold_seconds=M.HOLD_SECONDS,
                                    total_seconds=M.TOTAL_SECONDS) for n in M.NOTES]
         stem = rec["id"].replace(":", "_")

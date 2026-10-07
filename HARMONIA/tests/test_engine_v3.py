@@ -50,11 +50,13 @@ def test_coarse_tuning_moves_the_pitch_by_semitones():
     assert abs(freqs[spec.argmax()] - 440.0) < 2.0
 
 
-def test_unison_spreads_voices_in_stereo_and_single_voice_is_mono():
-    mono = render(_v3())
-    wide = render(_v3(unison_voices=5, unison_detune=20))
+def test_stereo_width_spreads_unison_voices_and_zero_width_stays_mono():
+    mono = render(_v3(unison_voices=5, unison_detune=20))
+    wide = render(_v3(unison_voices=16, unison_detune=20, stereo_width=0.8))
+    two_osc = render(_v3(osc_2_waveform=2, osc_mix=0.5, osc_2_detune=10, stereo_width=1.0))
     assert np.abs(mono[0] - mono[1]).max() < 1e-9
     assert np.abs(wide[0] - wide[1]).mean() > 0.01
+    assert np.abs(two_osc[0] - two_osc[1]).mean() > 0.01  # one voice: osc1 left, osc2 right
 
 
 def test_24db_slope_removes_more_highs_than_12db():
@@ -80,4 +82,4 @@ def test_normalized_mapping_round_trips_and_midpoints():
     back = P.denormalize(P.normalize(physical))
     np.testing.assert_allclose(back, physical, rtol=1e-6, atol=1e-6)
     assert abs(P.to_normalized(P.BY_NAME["filter_cutoff"], 1000) - 0.5) < 1e-6
-    assert len(P.NAMES) == 45 and len(set(P.NAMES)) == 45
+    assert len(P.NAMES) == 46 and len(set(P.NAMES)) == 46

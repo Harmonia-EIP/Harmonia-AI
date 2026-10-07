@@ -1,4 +1,4 @@
-"""Harmonia v3 analog engine: the 45 parameters, their physical ranges and the 0..1 mapping.
+"""Harmonia v3 analog engine: the 46 parameters, their physical ranges and the 0..1 mapping.
 
 The first 20 keep their v2 names. New parameters were chosen from what real presets use
 (scripts/v3/analyze_presets.py on OB-Xf and Surge XT banks). Every new parameter has a neutral
@@ -62,7 +62,7 @@ SPECS = (
     V3Param("osc_sync", 0, 1, 0, 1, choices=2, unit="off|osc2 synced to osc1"),
     V3Param("fm_amount", 0, 10, 0, midpoint=1.5, unit="radians, osc2 -> osc1 phase"),
     V3Param("ring_mod", 0, 1, 0),
-    V3Param("unison_voices", 1, 7, 1, 1, unit="voices"),
+    V3Param("unison_voices", 1, 16, 1, 1, unit="voices"),
     V3Param("unison_detune", 0, 50, 10, midpoint=10, unit="cents"),
     # --- filter ---
     V3Param("filter_slope", 0, 1, 0, 1, choices=2, unit="12 dB|24 dB"),
@@ -85,6 +85,8 @@ SPECS = (
     V3Param("delay_feedback", 0, 0.9, 0.3),
     V3Param("delay_mix", 0, 1, 0),
     V3Param("reverb_size", 0, 1, 0.7),
+    # --- added after listening: real presets spread their voices in stereo (66 % of OB-Xf presets) ---
+    V3Param("stereo_width", 0, 1, 0, unit="unison voices and osc1/osc2 spread"),
 )
 
 NAMES = tuple(spec.name for spec in SPECS)

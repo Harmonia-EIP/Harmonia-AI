@@ -51,3 +51,23 @@ def test_cma_es_finds_a_quadratic_minimum():
                               np.random.default_rng(0))
     assert best < 1e-4 and evals <= 600
     np.testing.assert_allclose(x, target, atol=0.02)
+
+
+def test_optimizer_cannot_add_what_the_original_lacks():
+    start = P.physical_from_dict({"osc_1_waveform": 2, "lfo_to_pitch": 30.0, "noise_level": 0.0})
+    free, lower, upper = M.search_space(start)
+    names = [P.NAMES[i] for i in free]
+    assert "noise_level" not in names and "distortion_mix" not in names and "chorus_mix" not in names
+    assert "velocity_to_filter" not in names and "delay_time" not in names  # no delay: its time is moot
+    k = names.index("lfo_to_pitch")
+    x0 = P.normalize(start)[P.INDEX["lfo_to_pitch"]]
+    assert math.isclose(upper[k] - x0, M.NUDGE) and "lfo_rate" in names
+
+
+def test_width_counts_only_for_stereo_audio():
+    t = np.arange(int(0.5 * M.SR)) / M.SR
+    tone = np.sign(np.sin(2 * np.pi * 220 * t))
+    mono = M.features([np.stack([tone, tone])])
+    wide = M.features([np.stack([tone, np.roll(tone, 37)])])
+    parts = M.perceptual.components(mono, wide)
+    assert parts["width"] > 10.0 and M.perceptual.components(mono, mono)["width"] == 0.0

@@ -63,7 +63,7 @@ def _work(task):
     try:
         synth.load(_state["root"] / rec["paths"][0])
         original = [synth.render(note=n, velocity=M.VELOCITY, hold_seconds=M.HOLD_SECONDS,
-                                 total_seconds=M.TOTAL_SECONDS).mean(axis=0) for n in M.NOTES]
+                                 total_seconds=M.TOTAL_SECONDS) for n in M.NOTES]
         loudness = float(np.sqrt(np.mean([np.mean(a ** 2) for a in original])))
         if not np.isfinite(loudness) or loudness < 1e-5:
             return {"id": rec["id"], "status": "silent"}

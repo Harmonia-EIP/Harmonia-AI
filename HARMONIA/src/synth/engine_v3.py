@@ -2,7 +2,7 @@
 
 One note per call, stereo out. Signal flow per voice:
   2 oscillators (sine/triangle/band-limited saw and pulse, coarse tuning, osc2 -> osc1 phase modulation,
-  osc2 hard-synced to osc1, ring modulation) x unison (1..7 detuned voices spread in stereo) + noise
+  osc2 hard-synced to osc1, ring modulation) x unison (1..16 detuned voices) spread in stereo + noise
   -> state-variable filter (12 or 24 dB, envelope/LFO/velocity/keyboard tracking) -> distortion
   -> amp ADSR (velocity, tremolo); then chorus -> delay -> reverb (Freeverb, as in v2).
 Parameters: src/synth/v3_params.py.
@@ -20,8 +20,8 @@ from src.synth.engine import _reverb_stereo
 
 SAMPLE_RATE = 48000
 _IDLE, _ATTACK, _DECAY, _SUSTAIN, _RELEASE = 0, 1, 2, 3, 4
-MAX_UNISON = 7
-UNISON_SPREAD = 0.8  # stereo width of the unison voices (-1..1 pan)
+MAX_UNISON = 16
+OSC_SPLIT = 0.5  # at full width, osc1 sits this far left of its voice and osc2 this far right
 CHORUS_RATE, CHORUS_CENTER_MS, CHORUS_DEPTH_MS = 0.5, 3.5, 1.75
 DELAY_DAMP_HZ = 6000.0
 
@@ -145,6 +145,7 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
     penv_amount, penv_decay = p[34], p[35] * 1e-3
     lfo_wave, lfo_delay = int(p[36]), p[37] * 1e-3
     lfo_amp, lfo_pw = p[38], p[39]
+    width = min(1.0, max(0.0, p[45]))
 
     vel = min(1.0, max(0.0, velocity))
     q = 0.707 * 17.0 ** (min(0.95, max(0.0, resonance)) / 0.95)  # Harmonia-App#40 mapping
@@ -159,19 +160,21 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
     a_rel = _exp_coef(release, sr)
     f_rel = _exp_coef(fenv_release, sr)
 
-    # unison voices: detune spread, stereo position and start phase (a single voice starts at 0)
+    # unison voices: detune spread, stereo position and start phase (a single voice starts at 0);
+    # within each voice osc1 leans left and osc2 right as the width grows
     uni_off = np.zeros(n_uni)
-    uni_l = np.ones(n_uni)
-    uni_r = np.ones(n_uni)
+    gains = np.ones((n_uni, 4))  # osc1 L, osc1 R, osc2 L, osc2 R
     ph1 = np.zeros(n_uni)
     ph2 = np.zeros(n_uni)
-    if n_uni > 1:
-        for u in range(n_uni):
-            pos = 2.0 * u / (n_uni - 1) - 1.0
-            uni_off[u] = pos * uni_cents / 100.0
-            angle = (pos * UNISON_SPREAD + 1.0) * math.pi / 4.0
-            uni_l[u] = math.cos(angle) * math.sqrt(2.0)
-            uni_r[u] = math.sin(angle) * math.sqrt(2.0)
+    for u in range(n_uni):
+        pos = 2.0 * u / (n_uni - 1) - 1.0 if n_uni > 1 else 0.0
+        uni_off[u] = pos * uni_cents / 100.0
+        for k, split in ((0, -OSC_SPLIT), (2, OSC_SPLIT)):
+            pan = min(1.0, max(-1.0, (pos + split) * width))
+            angle = (pan + 1.0) * math.pi / 4.0
+            gains[u, k] = math.cos(angle) * math.sqrt(2.0)
+            gains[u, k + 1] = math.sin(angle) * math.sqrt(2.0)
+        if n_uni > 1:
             ph1[u] = np.random.random()
             ph2[u] = np.random.random()
     uni_norm = 1.0 / math.sqrt(n_uni)
@@ -216,11 +219,16 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
                 o1 = _osc(w1, pm, dt1, pw)
             else:
                 o1 = _osc(w1, ph1[u], dt1, pw)
-            s = o1 * (1.0 - mix) + o2 * mix
+            a1 = o1 * (1.0 - mix)
+            a2 = o2 * mix
             if ring > 0.0:
-                s = s * (1.0 - ring) + o1 * o2 * ring
-            left += s * uni_l[u]
-            right += s * uni_r[u]
+                a1 *= 1.0 - ring
+                a2 *= 1.0 - ring
+                centre = o1 * o2 * ring
+                left += centre
+                right += centre
+            left += a1 * gains[u, 0] + a2 * gains[u, 2]
+            right += a1 * gains[u, 1] + a2 * gains[u, 3]
             ph1[u] += dt1
             wrapped = ph1[u] >= 1.0
             if wrapped:
