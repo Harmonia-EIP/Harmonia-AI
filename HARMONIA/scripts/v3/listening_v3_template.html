@@ -133,7 +133,7 @@ function card(item) {
 
   if (item.previous && ratings[item.previous]) {
     const p = ratings[item.previous];
-    el.append($("p", "previous", "1re écoute : " + (p.score ? p.score + "/5" : "pas de note") + (p.note ? " · « " + p.note + " »" : "")));
+    el.append($("p", "previous", "Écoute précédente : " + (p.score ? p.score + "/5" : "pas de note") + (p.note ? " · « " + p.note + " »" : "")));
   }
   const players = $("div", "players");
   if (item.clips.dx7) players.append(player("Mode DX7 (Harmonia)", item.clips.dx7, true));

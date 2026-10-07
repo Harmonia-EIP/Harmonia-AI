@@ -37,6 +37,10 @@ FADE_SECONDS = 0.05
 TARGET_DBFS = -20.0
 SOURCE_LABELS = {"obxf": "OB-Xf", "surge": "Surge XT"}
 ROUND_NOTES = {
+    3: "3e écoute, après ta 2e écoute : octave de Surge et transposition d'OB-Xf corrigées, cross-modulation "
+       "comme sur l'OB-X (plus de son métallique sur les presets synchronisés), voix suréchantillonnée contre le "
+       "grain, reverb plus douce, légère dérive analogique, DX7 joué avec la vélocité d'un vrai DX7. "
+       "Ta note de la 2e écoute est rappelée sous chaque preset.",
     2: "2e écoute, après tes remarques : extraits en stéréo ; l'ajustement n'ajoute plus de bruit, de LFO, de "
        "distorsion ni d'effets absents de l'original ; unisson jusqu'à 16 voix et réglage de largeur stéréo ; "
        "E.PIANO 1 est maintenant celui de la cartouche d'usine ROM1A. Ta note de la 1re écoute est rappelée "
@@ -91,8 +95,8 @@ def matched_items(source: str, audio_dir: Path, limit: int, round_: int = 1):
             clips[version] = f"audio/{name}"
         rec = meta[r["id"]]
         base_id = r["id"].replace(":", "-")
-        yield {"id": base_id if round_ == 1 else f"{base_id}-r{round_}",
-               "previous": base_id if round_ > 1 else None, "source": SOURCE_LABELS[source], "name": r["name"],
+        previous = None if round_ == 1 else (base_id if round_ == 2 else f"{base_id}-r{round_ - 1}")
+        yield {"id": base_id if round_ == 1 else f"{base_id}-r{round_}", "previous": previous, "source": SOURCE_LABELS[source], "name": r["name"],
                "category": r["category"], "author": rec.get("author", ""), "license": rec.get("license", ""),
                "start_distance": r["start_distance"], "distance": r["distance"], "clips": clips}
 
@@ -114,7 +118,10 @@ def dx7_origin(paths) -> str:
     return "collection " + (parts[2] if len(parts) > 3 else parts[-1]).lstrip("!")
 
 
-def dx7_items(audio_dir: Path):
+DX7_SOUND_CHANGED = 3  # round from which DX7 voices sound different (DX7 keyboard velocity)
+
+
+def dx7_items(audio_dir: Path, round_: int = 1):
     records = [json.loads(line) for line in open(PRESET_DIR / "dx7.jsonl", encoding="utf-8")]
     by_name = {}
     for rec in records:
@@ -130,8 +137,13 @@ def dx7_items(audio_dir: Path):
         notes = [dx7_render.render(rec["params"], note=n, velocity=M.VELOCITY, hold_seconds=M.HOLD_SECONDS,
                                    total_seconds=M.TOTAL_SECONDS) for n in M.NOTES]
         stem = rec["id"].replace(":", "_")
+        base_id = rec["id"].replace(":", "-")
+        changed = round_ >= DX7_SOUND_CHANGED
+        if changed:
+            stem += f"_r{round_}"
         write_mp3(audio_dir / f"{stem}.mp3", clip(notes))
-        yield {"id": rec["id"].replace(":", "-"), "source": "DX7", "name": wanted.strip(), "category": "",
+        yield {"id": f"{base_id}-r{round_}" if changed else base_id, "previous": base_id if changed else None,
+               "source": "DX7", "name": wanted.strip(), "category": "",
                "author": dx7_origin(rec["paths"]), "license": "", "copies": len(rec["paths"]),
                "clips": {"dx7": f"audio/{stem}.mp3"}}
 
@@ -149,7 +161,7 @@ def main() -> int:
     for source in args.sources:
         if (MATCHED_DIR / f"{source}.jsonl").exists():
             items += list(matched_items(source, audio_dir, args.per_source, args.round))
-    items += list(dx7_items(audio_dir))
+    items += list(dx7_items(audio_dir, args.round))
     (args.out / "items.json").write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
     page = TEMPLATE.read_text(encoding="utf-8").replace("/*ITEMS*/[]", json.dumps(items, ensure_ascii=False))
     page = page.replace('/*ROUND*/""', json.dumps(ROUND_NOTES.get(args.round, ""), ensure_ascii=False))
