@@ -36,6 +36,12 @@ FADE_SECONDS = 0.05
 TARGET_DBFS = -20.0
 SOURCE_LABELS = {"obxf": "OB-Xf", "surge": "Surge XT"}
 NOT_SOUNDS = re.compile(r"tutorial|template|init", re.I)  # Surge teaching patches, not sounds
+ROUND_NOTES = {
+    2: "2e écoute, après tes remarques : extraits en stéréo ; l'ajustement n'ajoute plus de bruit, de LFO, de "
+       "distorsion ni d'effets absents de l'original ; unisson jusqu'à 16 voix et réglage de largeur stéréo ; "
+       "E.PIANO 1 est maintenant celui de la cartouche d'usine ROM1A. Ta note de la 1re écoute est rappelée "
+       "sous chaque preset.",
+}
 DX7_FAMOUS = ["SUPERTRAMP", "WURLITZER", "E.PIANO 1", "TOTO HMND1", "HAMMOND2", "AFRICA  1", "JUMP", "Axel F",
               "BILLIEJEAN", "BLADERUNNR", "VANGELIS 2", "Zawinul.1", "STEVIE COL", "QueenBel1", "BRASS   1",
               "STRINGS 1", "MINIMOOG", "TUB BELLS", "MARIMBA", "HARPSICH 1", "FLUTE   1", "MELLOTRON"]
@@ -62,7 +68,7 @@ def write_mp3(path: Path, audio: np.ndarray) -> None:
     sf.write(path, audio, M.SR, format="MP3")
 
 
-def matched_items(source: str, audio_dir: Path, limit: int):
+def matched_items(source: str, audio_dir: Path, limit: int, round_: int = 1):
     rows = [json.loads(line) for line in open(MATCHED_DIR / f"{source}.jsonl", encoding="utf-8")]
     meta = {json.loads(line)["id"]: json.loads(line) for line in open(PRESET_DIR / f"{source}.jsonl", encoding="utf-8")}
     rows = [r for r in rows if r.get("status") == "ok" and r.get("audio") and not NOT_SOUNDS.search(r["category"])]
@@ -80,13 +86,21 @@ def matched_items(source: str, audio_dir: Path, limit: int):
         data = np.load(MATCHED_DIR / f"{source}_audio" / f"{stem}.npz")
         clips = {}
         for version in ("original", "converted", "harmonia"):
-            name = f"{stem}_{version}.mp3"
+            name = f"{stem}_{version}_r{round_}.mp3" if round_ > 1 else f"{stem}_{version}.mp3"
             write_mp3(audio_dir / name, clip(data[version]))
             clips[version] = f"audio/{name}"
         rec = meta[r["id"]]
-        yield {"id": r["id"].replace(":", "-"), "source": SOURCE_LABELS[source], "name": r["name"],
+        base_id = r["id"].replace(":", "-")
+        yield {"id": base_id if round_ == 1 else f"{base_id}-r{round_}",
+               "previous": base_id if round_ > 1 else None, "source": SOURCE_LABELS[source], "name": r["name"],
                "category": r["category"], "author": rec.get("author", ""), "license": rec.get("license", ""),
                "start_distance": r["start_distance"], "distance": r["distance"], "clips": clips}
+
+
+def rom_number(paths) -> int:
+    """1..4 for a voice found on the DX7 factory ROM cartridges (DX7 ROM1..ROM4), else 99."""
+    found = [int(m.group(1)) for p in paths for m in [re.search(r"/DX7 ROM(\d)/", p)] if m]
+    return min(found) if found else 99
 
 
 def dx7_origin(paths) -> str:
@@ -110,9 +124,9 @@ def dx7_items(audio_dir: Path):
         candidates = by_name.get(wanted.strip(), [])
         if not candidates:
             continue
-        # prefer the DX7's factory ROM cartridges, then Yamaha's other cartridges, then the most copied version
-        rec = max(candidates, key=lambda r: (any("/DX7 ROM" in p for p in r["paths"]),
-                                             any("Original Yamaha" in p for p in r["paths"]), len(r["paths"])))
+        # prefer the DX7's factory ROM cartridges (ROM1 first), then Yamaha's other cartridges, then the most copied
+        rec = min(candidates, key=lambda r: (rom_number(r["paths"]),
+                                             not any("Original Yamaha" in p for p in r["paths"]), -len(r["paths"])))
         notes = [dx7_render.render(rec["params"], note=n, velocity=M.VELOCITY, hold_seconds=M.HOLD_SECONDS,
                                    total_seconds=M.TOTAL_SECONDS) for n in M.NOTES]
         stem = rec["id"].replace(":", "_")
@@ -127,16 +141,18 @@ def main() -> int:
     parser.add_argument("--sources", nargs="*", default=["obxf", "surge"])
     parser.add_argument("--per-source", type=int, default=30)
     parser.add_argument("--out", type=Path, default=OUT_DIR)
+    parser.add_argument("--round", type=int, default=1, help="listening round; > 1 keeps earlier ratings apart")
     args = parser.parse_args()
     audio_dir = args.out / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
     items = []
     for source in args.sources:
         if (MATCHED_DIR / f"{source}.jsonl").exists():
-            items += list(matched_items(source, audio_dir, args.per_source))
+            items += list(matched_items(source, audio_dir, args.per_source, args.round))
     items += list(dx7_items(audio_dir))
     (args.out / "items.json").write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
     page = TEMPLATE.read_text(encoding="utf-8").replace("/*ITEMS*/[]", json.dumps(items, ensure_ascii=False))
+    page = page.replace('/*ROUND*/""', json.dumps(ROUND_NOTES.get(args.round, ""), ensure_ascii=False))
     (args.out / "index.html").write_text(page, encoding="utf-8")
     print(f"{len(items)} items -> {args.out / 'index.html'}")
     return 0

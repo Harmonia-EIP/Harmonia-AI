@@ -59,11 +59,14 @@ audio { width: 100%; height: 36px; }
 .note { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); padding: 5px 8px; font: inherit; font-size: 0.88rem; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .empty { color: var(--muted); padding: 12px 0; }
+.previous { font-size: 0.82rem; color: var(--muted); border-left: 3px solid var(--line); padding-left: 8px; }
+.round { background: var(--accent-soft); border-radius: 8px; padding: 10px 12px; margin-top: 16px; font-size: 0.9rem; max-width: 72ch; }
 </style>
 
 <div class="wrap">
   <h1>Banc d'écoute Harmonia v3</h1>
   <p class="lede">De vrais presets (OB-Xf, Surge XT, DX7) joués sur trois notes (do2, do3, do4). Tous les extraits sont au même volume. Pour chaque preset, note de 1 à 5 à quel point la version Harmonia ressemble à l'original ; pour le mode DX7, note si le son est réussi. Tes notes sont enregistrées et servent à choisir les presets gardés pour l'IA.</p>
+  <div class="round" id="round" hidden></div>
   <div class="legend">
     <div><b>Original</b>Le preset dans son synthé d'origine.</div>
     <div><b>Conversion directe</b>Les paramètres traduits un à un vers Harmonia.</div>
@@ -86,6 +89,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); out
 
 <script>
 const ITEMS = /*ITEMS*/[];
+const ROUND_NOTE = /*ROUND*/"";
 const ratings = {};
 let db = null, filter = "all";
 
@@ -127,6 +131,10 @@ function card(item) {
   head.append(chips);
   el.append(head);
 
+  if (item.previous && ratings[item.previous]) {
+    const p = ratings[item.previous];
+    el.append($("p", "previous", "1re écoute : " + (p.score ? p.score + "/5" : "pas de note") + (p.note ? " · « " + p.note + " »" : "")));
+  }
   const players = $("div", "players");
   if (item.clips.dx7) players.append(player("Mode DX7 (Harmonia)", item.clips.dx7, true));
   else {
@@ -173,7 +181,7 @@ function render() {
     list.append(box);
   });
   if (!visible.length) list.append($("p", "empty", "Rien à afficher ici."));
-  const done = ITEMS.filter(i => ratings[i.id] && ratings[i.id].score).length;
+  const done = ITEMS.filter(i => ratings[i.id] && ratings[i.id].score).length;  // this round only
   document.getElementById("progress").textContent = done + " / " + ITEMS.length + " notés";
 }
 
@@ -183,6 +191,7 @@ document.querySelectorAll(".filters button").forEach(b => b.addEventListener("cl
   render();
 }));
 
+if (ROUND_NOTE) { const r = document.getElementById("round"); r.textContent = ROUND_NOTE; r.hidden = false; }
 render();
 (async () => {
   try { db = window.claude && await window.claude.use("db"); } catch (e) { db = null; }
