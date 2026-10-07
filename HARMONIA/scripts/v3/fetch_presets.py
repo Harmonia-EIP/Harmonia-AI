@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download the third-party preset banks used by the v3 research pipeline (data only, nothing is executed).
+"""Download the third-party preset banks used by the v3 research pipeline, and the DX7 FM core sources.
 
 The banks are not redistributed with Harmonia: this script fetches them from their source, pinned by
 git commit or sha256, into a local directory (default ~/Datasets/harmonia-presets).
@@ -33,6 +33,12 @@ SOURCES = {
         "commit": "b08ffb6ab6cfa0f66cb057e855149ab640de0f78",
         "paths": ["assets/installer/Surge Synth Team/OB-Xf/Patches"],
         "license": "GPL-3.0",
+    },
+    "dexed_src": {  # msfa FM core (Apache-2.0) for the DX7 renderer, see native/dx7
+        "git": "https://github.com/asb2m10/dexed.git",
+        "commit": "2e182b3db85c09083ab13c8b9b00565ce7d9ff85",
+        "paths": ["Source/msfa"],
+        "license": "Apache-2.0 (Source/msfa)",
     },
     "dexed_builtin": {
         "url": "https://raw.githubusercontent.com/asb2m10/dexed/2e182b3db85c09083ab13c8b9b00565ce7d9ff85/assets/builtin_pgm.zip",
