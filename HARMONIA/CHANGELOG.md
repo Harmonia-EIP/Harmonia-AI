@@ -100,7 +100,7 @@ optimizer may no longer add absent modules.
   selection 2.8**; generation better on 2 prompts, equal on 2, worse on 9. Remarks: generated glass and
   bongos "wtf", "Soft Piano" "bizarre"; selection's glass (DX7 "Glasscrush") and percussion rated 4, but
   "Soft Pad" got a saw lead and "Melencholic House Pad" a hardstyle lead; nothing sounds like Gorillaz.
-- **Why** (`1,433` OB-Xf/Surge presets whose category names a type: bass, pad, lead, pluck, keys, drums,
+- **Why** (1,433 OB-Xf/Surge presets whose category names a type: bass, pad, lead, pluck, keys, drums,
   brass, strings, fx):
   - CLAP's text side barely knows synth words: "a synthesizer pad sound" etc. finds the right type for
     25 % of presets (chance 18 %). Its audio side groups them better (5-NN type vote 56 %).
@@ -109,6 +109,40 @@ optimizer may no longer add absent modules.
   - The generator is then asked for the wrong sound, and keeping the candidate CLAP scores highest picks
     sounds that fool CLAP (as the first matching optimizer did) rather than good ones.
   - 93 % of the bank is unlabelled DX7 cartridge voices; only 2,117 analog presets.
+
+### v3.1: understanding synth words, fairer choices, variations (after the blind test)
+- **Synth vocabulary** (`src/v3/vocabulary.py`): 14 types (bass, pad, lead, pluck, keys, organ, bell, brass,
+  strings, winds, voice, guitar, drums, fx) read from the presets' own categories and names and from FSD50K
+  class labels; the table only groups their synonyms. 14,050 bank presets get a type (12,303 DX7 voices by
+  name, 1,747 analog presets).
+- **Synth space** (`src/v3/synth_space.py`, `scripts/v3/train_synth_space.py`): two small adapters on CLAP's
+  sound embedding and on the multilingual text encoder, trained so a preset's sound sits next to its own
+  name, category and comment (and their opus-mt French versions), with FSD50K for everyday sounds and a
+  type head on both sides. A sound matches a prompt when it is close to it and of the type the prompt
+  names. Held-out presets (10 %, never trained on):
+
+  | Measure | v3.0 | v3.1 |
+  |---|---|---|
+  | type of the 20 closest presets, one word ("pad") | 56 % | 78 % |
+  | same with an adjective ("soft pad", "dark lead"...) | 47 % | 64 % |
+  | French, one word / with an adjective | 53 % / 47 % | 79 % / 69 % |
+  | a preset's name finds its own sound in the top 10 of 2,972 | 20 % | 37 % |
+
+  "lead" (30 %), "pluck" (40 %) and "fx" (5 %) stay weak: telling them apart from the sound alone is hard
+  even in the training labels (Surge "Keys" are often plucks).
+- **Tried and dropped**: measured attack/decay/sustain/brightness next to CLAP (type recognition 64.6 % ->
+  65.3 %, CLAP already hears them); an engine chooser (trained on sounds, applied to text it was
+  overconfident and contradicted the type).
+- **Generators v3.1** (`scripts/v3/train_generator_v3.py --cond synth`): conditioned on the synth space plus
+  the type, half the time from the preset's sound and half from its own texts, so a prompt is used directly
+  (no text -> sound prior). DX7 voices whose names say what they are come up twice as often.
+- **Variations** (`src/v3/diffusion.py`, `start`/`strength`): the generator starts from the real presets
+  closest to the prompt, noised to 40 % of the schedule, and walks back towards the prompt.
+- **Fairer choice of the candidate** (`scripts/v3/generate_v31.py`): close to the prompt with the right
+  type, plus how typical it is of the generator's draws for that prompt (the best match alone favours
+  sounds that fool the judge); both engines compete with no engine preference.
+- **Blind listening round 2** on the same 13 prompts: generation, variation and selection (now in the synth
+  space) in a hidden order. Ratings to come.
 
 ## [0.1.0] - Harmonia v2: Listened Presets and French Prompts
 ### Added

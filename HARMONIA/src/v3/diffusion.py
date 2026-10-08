@@ -78,13 +78,22 @@ class Diffusion:
 
     @torch.no_grad()
     def sample(self, cond: torch.Tensor, steps: int = 50, guidance: float = 2.0,
-               generator: torch.Generator | None = None) -> torch.Tensor:
-        """DDIM (eta 0) with classifier-free guidance; cond is (n, cond_dim)."""
+               generator: torch.Generator | None = None, start: torch.Tensor | None = None,
+               strength: float = 1.0) -> torch.Tensor:
+        """DDIM (eta 0) with classifier-free guidance; cond is (n, cond_dim).
+
+        With `start` (n, dim) - real presets - the walk begins from them noised to `strength` (0..1) of the
+        schedule instead of from pure noise: a variation that keeps more of the preset the lower it is.
+        """
         device = cond.device
         n = cond.shape[0]
         ac = self.alphas_cumprod.to(device)
         x = torch.randn((n, self.model.dim), device=device, generator=generator)
-        times = torch.linspace(STEPS - 1, 0, steps, device=device).long()
+        top = int(round(strength * (STEPS - 1)))
+        times = torch.linspace(top, 0, max(2, int(round(steps * strength))), device=device).long()
+        steps = len(times)
+        if start is not None:
+            x = ac[times[0]].sqrt() * start.to(device) + (1 - ac[times[0]]).sqrt() * x
         null = self.model.null[None, :].expand_as(cond)
         for k, t in enumerate(times):
             tt = t.repeat(n)

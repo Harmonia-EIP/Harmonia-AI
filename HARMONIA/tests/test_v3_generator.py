@@ -58,3 +58,17 @@ def test_prior_outputs_unit_vectors_and_its_loss_prefers_the_right_pair():
     torch.testing.assert_close(out.norm(dim=-1), torch.ones(5))
     audio = torch.nn.functional.normalize(torch.randn(5, 8), dim=-1)
     assert prior_loss(audio, audio) < prior_loss(audio, audio.roll(1, 0))
+
+
+def test_variation_sampling_starts_from_the_given_presets():
+    torch.manual_seed(0)
+    diffusion = Diffusion.create(dim=6, cond_dim=3, width=32, depth=1)
+    cond = torch.zeros(4, 3)
+    start = torch.full((4, 6), 0.8)
+    near = diffusion.sample(cond, steps=20, start=start, strength=0.05)
+    far = diffusion.sample(cond, steps=20, start=start, strength=1.0)
+    assert (near - start).abs().mean() < 0.15 < (far - start).abs().mean()
+    # strength 1 without a start is the plain sampler
+    g1, g2 = torch.Generator().manual_seed(3), torch.Generator().manual_seed(3)
+    torch.testing.assert_close(diffusion.sample(cond, steps=10, generator=g1),
+                               diffusion.sample(cond, steps=10, generator=g2, strength=1.0))
