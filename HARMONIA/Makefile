@@ -10,7 +10,7 @@ V2_BANK_SIZE ?= 200000
 V2_TAG ?=
 JUDGE_PYTHON ?= .venv-judge/bin/python
 
-.PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve run-flask metrics-local metrics-api estimate-train-time push-metrics dashboard-stats dashboard-snapshot dashboard-serve charterize-dataset synthesize-dataset train-synth setup-train v2-bank v2-fsd50k v2-corpus v2-text v2-analyze v2-tune v2-predictor v2-tune-hybrid v2-export v2-train v2-bench v2-package v2-fetch
+.PHONY: help venv setup check test security compile train train-cleaned train-fast train-good train-and-report generate-cli pipeline-local serve run-flask metrics-local metrics-api estimate-train-time push-metrics dashboard-stats dashboard-snapshot dashboard-serve charterize-dataset synthesize-dataset train-synth setup-train v2-bank v2-fsd50k v2-corpus v2-text v2-analyze v2-tune v2-predictor v2-tune-hybrid v2-export v2-train v2-bench v2-package v2-fetch v3-package v3-fetch
 
 help:
 	@echo "Targets:"
@@ -37,6 +37,8 @@ help:
 	@echo "  make setup-train        # Install the v2 training dependencies"
 	@echo "  make v2-train           # Full v2 pipeline: bank, FSD50K, corpus, text encoder, tuning, predictor, export"
 	@echo "  make v2-bench           # Benchmark v1 vs v2 with the independent judge (needs $(JUDGE_PYTHON))"
+	@echo "  make v3-package V3_TAG=ai-v3.0.0  # Gather the v3 models, build the release asset and pin it"
+	@echo "  make v3-fetch                      # Download and verify the v3 models"
 	@echo "  make v2-package V2_TAG=ai-v2.0.0  # Build the release asset and pin it in models/release.json"
 	@echo "  make v2-fetch           # Download the pinned v2 model into models/harmonia_v2"
 
@@ -172,3 +174,11 @@ v2-package:
 
 v2-fetch:
 	$(PYTHON) scripts/v2/fetch_model.py
+
+v3-package:
+	@test -n "$(V3_TAG)" || (echo "Set V3_TAG, e.g. make v3-package V3_TAG=ai-v3.0.0"; exit 1)
+	$(PYTHON) scripts/v3/export_model.py
+	$(PYTHON) scripts/v2/package_release.py --model-dir models/harmonia_v3 --tag $(V3_TAG)
+
+v3-fetch:
+	$(PYTHON) scripts/v2/fetch_model.py --model harmonia_v3

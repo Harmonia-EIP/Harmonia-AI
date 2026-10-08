@@ -2,7 +2,7 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
-## [Unreleased] - Harmonia v3 research (branch `research/ai-v3-presets`, not to be merged)
+## [0.2.0] - Harmonia v3 research (prerelease `ai-v3.0.0`, branch `research/ai-v3-presets`, not to be merged)
 Goal: generate presets from text with an AI trained only on real, human-made presets and human-written
 text (no generated training data), on a richer engine. Progress is checked by ear on a listening page
 where Malo rates each sound. Details: [V3.md](V3.md).
@@ -156,7 +156,26 @@ optimizer may no longer add absent modules.
   faithfully, minus 17 rated 2 or less in round 3), a few MB with their embeddings, shipped inside the model
   data; chosen by sound (v3.0 target) within the type the prompt names; a light variation (15 % of the
   noise schedule) of the chosen preset.
-- Blind round 3 on the same prompts: curated choice, its light variation, and v3.0's choice when different.
+- Blind round 3 on the same prompts: curated choice 2.5, v3.0's choice in the whole bank 2.6, light
+  variation 2.1. Curating the library does not beat choosing by sound in the whole bank, and the best
+  choices stay around 3-4/5. Malo: even good presets "feel off" next to professional instruments: the
+  next limit is the sound Harmonia makes, not the choice.
+
+### Release `ai-v3.0.0` (GitHub prerelease, models only)
+- `scripts/v3/export_model.py` gathers the trained models into `models/harmonia_v3/` with a manifest
+  (sha256 per file); packaged by `scripts/v2/package_release.py` and pinned in `models/release.json`;
+  `python scripts/v2/fetch_model.py --model harmonia_v3` downloads and verifies it.
+- Contents (538 MB): multilingual text encoder (FR/EN), v3.0 prior and generators, v3.1 synth space and
+  generators. No preset and no audio: the repository is public and the banks are not ours to
+  redistribute; the bank and the curated library are rebuilt locally from their sources.
+- Summary of the listening results the release stands on:
+
+  | Listening | Question | Result |
+  |---|---|---|
+  | Round 3 (presets) | Harmonia vs original | OB-Xf 3.4, Surge 3.3, DX7 mode 3.2 |
+  | Prompts 1 | matches the description | v3.0 generation 2.0, selection 2.8 |
+  | Prompts 2 | idem | v3.1 generation 2.0, variation 1.5, selection 1.7 |
+  | Prompts 3 | idem | curated choice 2.5, v3.0 choice 2.6, light variation 2.1 |
 
 ## [0.1.0] - Harmonia v2: Listened Presets and French Prompts
 ### Added
