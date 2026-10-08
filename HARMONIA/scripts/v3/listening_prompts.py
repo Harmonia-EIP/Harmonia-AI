@@ -38,6 +38,7 @@ TEMPLATE = Path(__file__).with_name("listening_v3_template.html")
 NOTE = ("Écoute à l'aveugle : pour chaque description, {count} sons joués sur trois notes (do2, do3, do4) : {what}, "
         "dans un ordre caché. Note chacun de 1 à 5 selon qu'il correspond à la description.")
 WHAT = {2: "l'un créé par l'IA (génération), l'autre un vrai preset choisi dans la banque (sélection)",
+        "v32": "de vrais presets choisis par l'IA et une légère variation créée par l'IA",
         3: "un créé par l'IA de zéro (génération), un créé par l'IA à partir de vrais presets (variation) et un vrai "
            "preset choisi dans la banque (sélection)"}
 
@@ -82,11 +83,18 @@ def main() -> int:
         if "generated_vector" in row:  # v3.0
             systems = [("generation", decoded(row["generated_kind"], row["generated_vector"])),
                        ("selection", bank_preset(row["selected"]["id"]))]
+        elif "curated" in row:  # v3.2: one sound when the curated choice is v3.0's
+            systems = [("curated", bank_preset(row["curated"]["id"])),
+                       ("varied", decoded(row["varied"]["kind"], row["varied"]["vector"]))]
+            if row["reference"]["id"] == row["curated"]["id"]:
+                systems[0] = ("curated+reference", systems[0][1])
+            else:
+                systems.append(("reference", bank_preset(row["reference"]["id"])))
         else:  # v3.1
             systems = [("generation", decoded(row["generation"]["kind"], row["generation"]["vector"])),
                        ("variation", decoded(row["variation"]["kind"], row["variation"]["vector"])),
                        ("selection", bank_preset(row["selection"]["id"]))]
-        count = len(systems)
+        count = max(count, len(systems))
         rng.shuffle(systems)
         for letter, (system, (kind, preset)) in zip("ABC", systems):
             opaque = hashlib.sha1(f"{args.round}-{n}-{letter}".encode(), usedforsecurity=False).hexdigest()[:12]
@@ -99,7 +107,10 @@ def main() -> int:
     page = TEMPLATE.read_text(encoding="utf-8").replace("/*ITEMS*/[]", json.dumps(items, ensure_ascii=False))
     page = page.replace("<title>Banc d'écoute Harmonia v3</title>", "<title>Prompts Harmonia v3</title>")
     page = page.replace("<h1>Banc d'écoute Harmonia v3</h1>", "<h1>Harmonia v3 · du texte au preset</h1>")
-    note = NOTE.format(count=count, what=WHAT[count])
+    if "curated" in rows[0]:
+        note = NOTE.format(count="2 ou 3", what=WHAT["v32"])
+    else:
+        note = NOTE.format(count=count, what=WHAT[count])
     page = re.sub(r'<p class="lede">.*?</p>', f'<p class="lede">{html.escape(note)}</p>', page, count=1, flags=re.S)
     page = re.sub(r'\s*<div class="legend">.*?(?=\s*<div class="bar">)', "", page, count=1, flags=re.S)
     page = re.sub(r'\s*<button data-f="(OB-Xf|Surge XT|DX7)"[^\n]*', "", page)

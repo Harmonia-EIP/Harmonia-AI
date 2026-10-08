@@ -141,8 +141,22 @@ optimizer may no longer add absent modules.
 - **Fairer choice of the candidate** (`scripts/v3/generate_v31.py`): close to the prompt with the right
   type, plus how typical it is of the generator's draws for that prompt (the best match alone favours
   sounds that fool the judge); both engines compete with no engine preference.
-- **Blind listening round 2** on the same 13 prompts: generation, variation and selection (now in the synth
-  space) in a hidden order. Ratings to come.
+- **Blind listening round 2** on the same 13 prompts (Malo: "vraiment nul"): generation 2.0, variation 1.5,
+  selection 1.7 (v3.0's selection: 2.8). The synth space learned to put a preset's sound next to its own
+  name, so it picks presets whose *names* match the prompt (GlassBreak, MOOG BASS, Tabla 2), mostly amateur
+  DX7 cartridge voices that sound poor (v3.0's choices by sound - Glasscrush, Ignitor, K SNARE 7 - had 4/5).
+  Renders are identical to the round-3 page (checked on "Fuji"): the gap with that page is which presets
+  are played, not the engine.
+
+### v3.2 test: a curated library inside Harmonia, chosen by sound
+- 13,002 of the 27,471 DX7 voices appear in a single cartridge of the community collection; the round-3
+  page played Yamaha's factory voices and factory OB-Xf / Surge presets.
+- `scripts/v3/curated_v32.py`: library of professional presets only (2,941 voices from Yamaha's own DX7
+  cartridges - ROM1-4, VRC, TX816, DX5, DX7II - and the 2,110 OB-Xf / Surge presets Harmonia reproduces
+  faithfully, minus 17 rated 2 or less in round 3), a few MB with their embeddings, shipped inside the model
+  data; chosen by sound (v3.0 target) within the type the prompt names; a light variation (15 % of the
+  noise schedule) of the chosen preset.
+- Blind round 3 on the same prompts: curated choice, its light variation, and v3.0's choice when different.
 
 ## [0.1.0] - Harmonia v2: Listened Presets and French Prompts
 ### Added
