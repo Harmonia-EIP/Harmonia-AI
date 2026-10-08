@@ -95,8 +95,20 @@ optimizer may no longer add absent modules.
   | Hypnotic Futuristic Pluck | analog 0.56 | Utopia 0.58 |
 
   Generation is within 0.05 of selection on 6 of 13 prompts and weakest on non-instrument sounds (glass,
-  percussion) and on a place ("big room"), which the bank barely covers. The blind A/B listening page
-  decides; its ratings will be added here.
+  percussion) and on a place ("big room"), which the bank barely covers.
+- **Blind A/B listening on those prompts** (Malo, 1-5 "matches the description"): **generation 2.0,
+  selection 2.8**; generation better on 2 prompts, equal on 2, worse on 9. Remarks: generated glass and
+  bongos "wtf", "Soft Piano" "bizarre"; selection's glass (DX7 "Glasscrush") and percussion rated 4, but
+  "Soft Pad" got a saw lead and "Melencholic House Pad" a hardstyle lead; nothing sounds like Gorillaz.
+- **Why** (`1,433` OB-Xf/Surge presets whose category names a type: bass, pad, lead, pluck, keys, drums,
+  brass, strings, fx):
+  - CLAP's text side barely knows synth words: "a synthesizer pad sound" etc. finds the right type for
+    25 % of presets (chance 18 %). Its audio side groups them better (5-NN type vote 56 %).
+  - Through the v3 encoder and prior, type precision of the 20 nearest presets is 44 % for a bare type
+    word ("lead" 5 %, "strings" 5 %, "fx" 0 %) and drops to 24 % with an adjective ("soft pad": 15 %).
+  - The generator is then asked for the wrong sound, and keeping the candidate CLAP scores highest picks
+    sounds that fool CLAP (as the first matching optimizer did) rather than good ones.
+  - 93 % of the bank is unlabelled DX7 cartridge voices; only 2,117 analog presets.
 
 ## [0.1.0] - Harmonia v2: Listened Presets and French Prompts
 ### Added
