@@ -36,6 +36,11 @@ where Malo rates each sound. Details: [V3.md](V3.md).
 |---|---|---|---|---|
 | 1 | first conversions, log-mel matching | 2.5 | 1.9 | 2.8 |
 | 2 | perceptual metric, no added modules, stereo, 16-voice unison | 3.3 (17 better, 1 worse) | 3.1 (23 better, 0 worse) | — |
+| 3 | fixes below (octave, cross-mod, oversampling, reverb, DX7 velocity) | 3.4 (9 better, 4 worse) | 3.3 (8 better, 6 worse) | 3.2 (8 better, 1 worse vs round 1) |
+
+Round 3 is the frozen v3 sound: 82 ratings, 38 of them 4 or 5, 5 at 1. Remaining remarks are about some
+saw-based Surge sounds still "metallic" or lacking depth/clarity ("Church", "Newton was evil", "Fuji"),
+and "Tek stab" not resembling its original at all. More engine and matching work goes to a later version.
 
 Round 1 showed the first optimizer "cheated": it lowered its log-mel distance by adding distortion (69 %
 of presets), noise (50 %), LFO and effects the originals do not have. The perceptual metric (1/3-octave
@@ -69,6 +74,29 @@ optimizer may no longer add absent modules.
   of 2,000 for 63 %). `scripts/v3/generate_v3.py` draws 8 candidates per engine, plays them, keeps the one
   CLAP hears closest; 1-2 s per prompt including rendering. `scripts/v3/listening_prompts.py` builds a blind
   A/B page (generated vs selected from the bank) for Malo's prompts.
+- **First run on Malo's prompts** (`benchmarks/v3_prompts_p1.json`, 13 prompts, never used for training;
+  "Piano", "Electric Piano", "Soft Piano" and "Soft Pad" are also names of real presets the prior learned
+  from). CLAP similarity to the prompt's target sound, before listening:
+
+  | Prompt | Generated | Selected from the bank |
+  |---|---|---|
+  | Piano | DX7 0.80 | SOFT-PIANO 0.91 |
+  | Electric Piano | DX7 0.84 | E.PIANO 58 0.88 |
+  | Soft Piano | DX7 0.67 | Steel 11 0.74 |
+  | Piano in a big room | analog 0.30 | MIRop4ff 0.39 |
+  | Techno Lead | DX7 0.75 | Need'sWork 0.81 |
+  | Melencholic House Pad | analog 0.59 | Hardstyle Lead 1 0.59 |
+  | Emotional old pluck | analog 0.72 | JP80x0 Pluck 0.71 |
+  | Lead from melancholic hill of Gorillaz | analog 0.73 | Like Old Analog 0.74 |
+  | Glass breaking | analog 0.33 | Glasscrush 0.49 |
+  | Bongo Percussion | analog 0.40 | K SNARE 7 0.48 |
+  | Soft Pad | analog 0.50 | SawPW1 0.54 |
+  | Minimoog bass | analog 0.73 | Ignitor 0.79 |
+  | Hypnotic Futuristic Pluck | analog 0.56 | Utopia 0.58 |
+
+  Generation is within 0.05 of selection on 6 of 13 prompts and weakest on non-instrument sounds (glass,
+  percussion) and on a place ("big room"), which the bank barely covers. The blind A/B listening page
+  decides; its ratings will be added here.
 
 ## [0.1.0] - Harmonia v2: Listened Presets and French Prompts
 ### Added

@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import html
 import json
 import random
+import re
 import sys
 from pathlib import Path
 
@@ -30,9 +32,9 @@ from src.synth.engine_v3 import render_physical  # noqa: E402
 
 BANK = BASE_DIR / "data" / "v3" / "bank"
 TEMPLATE = Path(__file__).with_name("listening_v3_template.html")
-NOTE = ("Écoute à l'aveugle : pour chaque description, deux sons. L'un est créé par l'IA (génération), l'autre est "
-        "un vrai preset choisi dans la banque (sélection), dans un ordre caché. Note chacun de 1 à 5 selon qu'il "
-        "correspond à la description.")
+NOTE = ("Écoute à l'aveugle : pour chaque description, deux sons joués sur trois notes (do2, do3, do4). L'un est créé "
+        "par l'IA (génération), l'autre est un vrai preset choisi dans la banque (sélection), dans un ordre caché. "
+        "Note chacun de 1 à 5 selon qu'il correspond à la description.")
 
 
 def notes_audio(kind: str, preset) -> list:
@@ -78,7 +80,11 @@ def main() -> int:
             items.append({"id": item_id, "source": "Prompts", "name": f"{letter} · {row['prompt']}", "category": "",
                           "author": "", "license": "", "clips": {"dx7": path}})
     page = TEMPLATE.read_text(encoding="utf-8").replace("/*ITEMS*/[]", json.dumps(items, ensure_ascii=False))
-    page = page.replace('/*ROUND*/""', json.dumps(NOTE, ensure_ascii=False))
+    page = page.replace("<title>Banc d'écoute Harmonia v3</title>", "<title>Prompts Harmonia v3</title>")
+    page = page.replace("<h1>Banc d'écoute Harmonia v3</h1>", "<h1>Harmonia v3 · du texte au preset</h1>")
+    page = re.sub(r'<p class="lede">.*?</p>', f'<p class="lede">{html.escape(NOTE)}</p>', page, count=1, flags=re.S)
+    page = re.sub(r'\s*<div class="legend">.*?(?=\s*<div class="bar">)', "", page, count=1, flags=re.S)
+    page = re.sub(r'\s*<button data-f="(OB-Xf|Surge XT|DX7)"[^\n]*', "", page)
     page = page.replace("Mode DX7 (Harmonia)", "Son").replace("Son réussi ?", "Correspond ?")
     (args.out / "index.html").write_text(page, encoding="utf-8")
     (args.out / "key.json").write_text(json.dumps(key, ensure_ascii=False, indent=1), encoding="utf-8")
