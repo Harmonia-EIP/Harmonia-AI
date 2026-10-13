@@ -5,7 +5,7 @@ Main project documentation now lives in `HARMONIA/`.
 Start here:
 - `HARMONIA/README.md` for setup and quickstart
 - `HARMONIA/DOC.md` for technical documentation
-- `HARMONIA/PROJECT_TECH_AUDIT.md` for limitations, risks, and roadmap
+- `HARMONIA/V3.md` for the v3 research (this branch, `research/ai-v3-presets`: not merged, models in prerelease `ai-v3.0.0`)
 
 Quick run from repository root:
 

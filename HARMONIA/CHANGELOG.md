@@ -60,7 +60,7 @@ optimizer may no longer add absent modules.
 - Pitch envelope is exponential; OB-Xf pitch envelopes on sustained filter envelopes no longer detune.
 - Matching weighs attack/impact more and tries the whole preset an octave up/down.
 
-### Step 4 in progress: generating presets from text
+### Step 4: generating presets from text
 - **v3 bank** (`scripts/v3/build_bank_v3.py`): 29,531 real presets heard by CLAP (27,414 DX7 voices,
   425 OB-Xf and 1,692 Surge presets whose Harmonia version scored <= 13, the threshold that separated
   round-2 ratings: 3.6/5 kept vs 2.4/5 dropped).
