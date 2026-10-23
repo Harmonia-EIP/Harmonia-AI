@@ -34,44 +34,9 @@ PLUGIN_PARAM_COUNT = len(PARAM_KEYS)
 
 DEFAULT_MODEL_KEY = "default"
 
-# Named models selectable from the app's model switcher, in addition to the
-# default model resolved via resolve_latest_model().
-EXPLICIT_MODELS = {
-    "charter_v1": {
-        "model_path": SAVED_MODELS_DIR / "model_charter_v1.pth",
-        "metadata_path": SAVED_MODELS_DIR / "model_charter_v1.meta.json",
-    },
-}
-
-# Maps the model_id/model_name/model values the app can send to a key in
-# EXPLICIT_MODELS, or DEFAULT_MODEL_KEY.
-MODEL_KEY_ALIASES = {
-    "model-1": DEFAULT_MODEL_KEY,
-    "1": DEFAULT_MODEL_KEY,
-    "model-2": "charter_v1",
-    "charter_v1": "charter_v1",
-    "2": "charter_v1",
-}
-
-
-def _resolve_model_key(data: dict) -> str:
-    raw = data.get("model_name") or data.get("model") or data.get("model_id")
-    if raw is None:
-        return DEFAULT_MODEL_KEY
-    return MODEL_KEY_ALIASES.get(str(raw).strip().lower(), DEFAULT_MODEL_KEY)
-
-@dataclass
-class InferenceRuntime:
-    model: Optional[TextToParams]
-    tokenizer: Optional[object]
-    ready: bool
-    error: str = ""
-    model_version: str = "unknown"
-    model_hash: str = "unknown"
-    model_path: str = ""
-    model_metadata_path: str = ""
-    param_keys: Tuple[str, ...] = tuple(PARAM_KEYS)
-    tokenizer_max_length: int = TOKENIZER_MAX_LENGTH
+# Seuls ces mots désignent le modèle par défaut (le dernier déployé).
+# Tous les autres modèles sont découverts dans saved_models/.
+DEFAULT_ALIASES = {"default", "latest"}
 
 
 def _load_json_file(path):
@@ -88,15 +53,79 @@ def _load_json_file(path):
     return {}
 
 
-def _build_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
-    if model_key == DEFAULT_MODEL_KEY:
-        artifact = resolve_latest_model(
+def _discover_models() -> dict:
+    """Scanne saved_models/ : chaque .pth devient un modèle, l'id est le nom du fichier."""
+    models = {}
+    for f in sorted(SAVED_MODELS_DIR.glob("*.pth")):
+        key = f.stem.removeprefix("model_")
+        meta_path = f.with_suffix(".meta.json")
+        meta = _load_json_file(meta_path)
+        models[key] = {
+            "id": key,
+            "name": meta.get("display_name") or key.replace("_", " ").title(),
+            "model_path": f,
+            "metadata_path": meta_path,
+            "model_version": meta.get("model_version", "unknown"),
+            "model_hash": meta.get("model_hash", "unknown"),
+        }
+    return models
+
+
+def _latest_path():
+    try:
+        art = resolve_latest_model(
             SAVED_MODELS_DIR,
             legacy_model_path=LEGACY_MODEL_PATH,
             legacy_metadata_path=LEGACY_METADATA_PATH,
         )
-    else:
-        artifact = EXPLICIT_MODELS[model_key]
+        return Path(art["model_path"]).resolve() if art.get("model_path") else None
+    except Exception:
+        return None
+
+
+def _resolve_model_key(data: dict) -> str:
+    raw = data.get("model_name") or data.get("model") or data.get("model_id")
+    if raw is None:
+        return DEFAULT_MODEL_KEY
+    raw = str(raw).strip().lower()
+    if raw in DEFAULT_ALIASES:
+        return DEFAULT_MODEL_KEY
+    if raw in _discover_models():
+        return raw
+    return DEFAULT_MODEL_KEY  # id inconnu -> modèle par défaut
+
+
+@dataclass
+class InferenceRuntime:
+    model: Optional[TextToParams]
+    tokenizer: Optional[object]
+    ready: bool
+    error: str = ""
+    model_version: str = "unknown"
+    model_hash: str = "unknown"
+    model_path: str = ""
+    model_metadata_path: str = ""
+    param_keys: Tuple[str, ...] = tuple(PARAM_KEYS)
+    tokenizer_max_length: int = TOKENIZER_MAX_LENGTH
+
+
+def _build_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
+    try:
+        if model_key == DEFAULT_MODEL_KEY:
+            artifact = resolve_latest_model(
+                SAVED_MODELS_DIR,
+                legacy_model_path=LEGACY_MODEL_PATH,
+                legacy_metadata_path=LEGACY_METADATA_PATH,
+            )
+        else:
+            artifact = _discover_models()[model_key]
+    except Exception as exc:
+        return InferenceRuntime(
+            model=None,
+            tokenizer=None,
+            ready=False,
+            error=f"Model lookup failed: {exc}",
+        )
 
     model_path = artifact.get("model_path")
     metadata_path = artifact.get("metadata_path")
@@ -174,9 +203,20 @@ def _build_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
     )
 
 
-@lru_cache(maxsize=None)
-def _get_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
+@lru_cache(maxsize=8)
+def _get_runtime_cached(model_key: str, _mtime: float) -> InferenceRuntime:
     return _build_runtime(model_key)
+
+
+def _get_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
+    """Le mtime du fichier fait partie de la clé de cache : un nouveau .pth est rechargé tout seul."""
+    if model_key == DEFAULT_MODEL_KEY:
+        path = _latest_path()
+    else:
+        entry = _discover_models().get(model_key)
+        path = entry["model_path"] if entry else None
+    mtime = Path(path).stat().st_mtime if path and Path(path).exists() else 0.0
+    return _get_runtime_cached(model_key, mtime)
 
 
 def _validate_prompt(payload: dict) -> Tuple[Optional[str], Optional[str]]:
@@ -213,6 +253,22 @@ def health():
         }
     )
 
+@app.route("/models", methods=["GET"])
+@app.route("/ai/models", methods=["GET"], endpoint="list_models_alias")
+def list_models():
+    latest = _latest_path()
+    models = [
+        {
+            "id": m["id"],
+            "name": m["name"],
+            "is_latest": latest is not None and m["model_path"].resolve() == latest,
+            "model_version": m["model_version"],
+            "model_hash": m["model_hash"],
+        }
+        for m in _discover_models().values()
+    ]
+    return jsonify({"count": len(models), "models": models})
+
 
 @app.route("/metrics/latest", methods=["GET"])
 def latest_metrics():
@@ -241,6 +297,7 @@ def latest_metrics():
             "latest_evaluation_report": report_payload,
         }
     )
+
 
 @app.route('/generate', methods=['POST'])
 @app.route('/ai/generate-preset', methods=['POST'], endpoint='generate_preset_alias')
@@ -286,7 +343,7 @@ def generate():
     with torch.no_grad():
         prediction = runtime.model(inputs['input_ids'], inputs['attention_mask'])
 
-    # 3. Formatd output
+    # 3. Format output
     param_list = prediction[0].tolist()
     is_charter = tuple(runtime.param_keys) == tuple(PARAM_NAMES)
     if is_charter:
@@ -332,6 +389,7 @@ def generate():
 @app.route("/charter", methods=["GET"])
 def charter():
     return jsonify({"version": "1.0", "parameters": charter_metadata()})
+
 
 if __name__ == '__main__':
     print("Server is running on http://127.0.0.1:5000")
