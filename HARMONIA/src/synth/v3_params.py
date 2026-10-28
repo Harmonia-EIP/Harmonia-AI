@@ -1,9 +1,11 @@
 """Harmonia v3 analog engine: the 46 parameters, their physical ranges and the 0..1 mapping.
 
-The first 20 keep their v2 names. New parameters were chosen from what real presets use
-(scripts/v3/analyze_presets.py on OB-Xf and Surge XT banks). Every new parameter has a neutral
-default, so a v2 preset (see from_v2_physical) keeps its sound apart from engine quality fixes:
-band-limited oscillators and exponential decay/release (v2 ramps linearly, like juce::ADSR).
+The parameters come from the charter (charter/harmonia_v3.json via src/charter_v3.py), the single source shared
+with the plugin; this module keeps the array-oriented API the engine and the AI use. The first 20 keep their v2
+names. New parameters were chosen from what real presets use (scripts/v3/analyze_presets.py on OB-Xf and
+Surge XT banks). Every new parameter has a neutral default, so a v2 preset (see from_v2_physical) keeps its
+sound apart from engine quality fixes: band-limited oscillators and exponential decay/release (v2 ramps
+linearly, like juce::ADSR).
 """
 
 from __future__ import annotations
@@ -13,6 +15,8 @@ from dataclasses import dataclass
 from typing import Dict, Optional, Sequence
 
 import numpy as np
+
+from src import charter_v3
 
 
 @dataclass(frozen=True)
@@ -33,60 +37,9 @@ class V3Param:
         return math.log(0.5) / math.log((self.midpoint - self.start) / (self.end - self.start))
 
 
-SPECS = (
-    # --- v2 parameters (same names; lfo_to_pitch, lfo_to_cutoff, filter_env_amount now in cents / octaves) ---
-    V3Param("osc_1_waveform", 0, 3, 0, 1, choices=4, unit="sine|triangle|saw|pulse"),
-    V3Param("osc_2_waveform", 0, 3, 0, 1, choices=4, unit="sine|triangle|saw|pulse"),
-    V3Param("osc_mix", 0, 1, 0, unit="osc1..osc2"),
-    V3Param("osc_2_detune", 0, 100, 0, unit="cents"),
-    V3Param("noise_level", 0, 1, 0),
-    V3Param("filter_cutoff", 20, 20000, 20000, midpoint=1000, unit="Hz"),
-    V3Param("filter_resonance", 0, 0.95, 0),
-    V3Param("filter_type", 0, 2, 0, 1, choices=3, unit="lowpass|bandpass|highpass"),
-    V3Param("amp_attack", 1, 5000, 1, midpoint=100, unit="ms"),
-    V3Param("amp_decay", 10, 20000, 300, midpoint=500, unit="ms"),
-    V3Param("amp_sustain", 0, 1, 1),
-    V3Param("amp_release", 10, 20000, 300, midpoint=500, unit="ms"),
-    V3Param("filter_env_amount", -10, 10, 0, unit="octaves"),
-    V3Param("filter_env_decay", 10, 20000, 300, midpoint=500, unit="ms"),
-    V3Param("lfo_rate", 0.05, 40, 5, midpoint=2, unit="Hz"),
-    V3Param("lfo_to_pitch", 0, 1200, 0, midpoint=50, unit="cents"),
-    V3Param("lfo_to_cutoff", 0, 4, 0, midpoint=1, unit="octaves"),
-    V3Param("velocity_to_filter", 0, 1, 0),
-    V3Param("distortion_mix", 0, 1, 0),
-    V3Param("reverb_mix", 0, 1, 0),
-    # --- oscillators ---
-    V3Param("osc_1_coarse", -24, 24, 0, 1, unit="semitones"),
-    V3Param("osc_2_coarse", -24, 24, 0, 1, unit="semitones"),
-    V3Param("pulse_width", 0.05, 0.95, 0.5),
-    V3Param("osc_sync", 0, 1, 0, 1, choices=2, unit="off|osc2 synced to osc1"),
-    V3Param("fm_amount", 0, 48, 0, midpoint=6, unit="semitones of osc2 pitch per unit of osc1 (cross-mod)"),
-    V3Param("ring_mod", 0, 1, 0),
-    V3Param("unison_voices", 1, 16, 1, 1, unit="voices"),
-    V3Param("unison_detune", 0, 50, 10, midpoint=10, unit="cents"),
-    # --- filter ---
-    V3Param("filter_slope", 0, 1, 0, 1, choices=2, unit="12 dB|24 dB"),
-    V3Param("filter_keytrack", 0, 1, 0),
-    V3Param("filter_env_attack", 1, 5000, 1, midpoint=100, unit="ms"),
-    V3Param("filter_env_sustain", 0, 1, 0),
-    V3Param("filter_env_release", 10, 20000, 50, midpoint=500, unit="ms"),
-    # --- amp / pitch ---
-    V3Param("velocity_to_amp", 0, 1, 0.6),
-    V3Param("pitch_env_amount", -24, 24, 0, unit="semitones"),
-    V3Param("pitch_env_decay", 1, 5000, 100, midpoint=100, unit="ms"),
-    # --- LFO ---
-    V3Param("lfo_waveform", 0, 4, 0, 1, choices=5, unit="sine|triangle|saw|square|sample&hold"),
-    V3Param("lfo_delay", 0, 5000, 0, midpoint=500, unit="ms"),
-    V3Param("lfo_to_amp", 0, 1, 0),
-    V3Param("lfo_to_pw", 0, 1, 0),
-    # --- effects ---
-    V3Param("chorus_mix", 0, 1, 0),
-    V3Param("delay_time", 10, 2000, 300, midpoint=300, unit="ms"),
-    V3Param("delay_feedback", 0, 0.9, 0.3),
-    V3Param("delay_mix", 0, 1, 0),
-    V3Param("reverb_size", 0, 1, 0.7),
-    # --- added after listening: real presets spread their voices in stereo (66 % of OB-Xf presets) ---
-    V3Param("stereo_width", 0, 1, 0, unit="unison voices and osc1/osc2 spread"),
+SPECS = tuple(
+    V3Param(p.id, p.min, p.max, p.default, p.interval, p.centre, len(p.choices) or None, p.unit or "|".join(p.choices))
+    for p in charter_v3.load().engine_params("analog")
 )
 
 NAMES = tuple(spec.name for spec in SPECS)
@@ -96,23 +49,19 @@ DEFAULTS = np.array([spec.default for spec in SPECS], dtype=np.float64)
 N_PARAMS = len(SPECS)
 
 
+_CHARTER = {p.id: p for p in charter_v3.load().engine_params("analog")}
+
+
 def snap(spec: V3Param, value: float) -> float:
-    value = min(spec.end, max(spec.start, float(value)))
-    if spec.interval > 0:
-        value = spec.start + spec.interval * math.floor((value - spec.start) / spec.interval + 0.5)
-    return min(spec.end, max(spec.start, value))
+    return _CHARTER[spec.name].snap(value)
 
 
 def to_normalized(spec: V3Param, value: float) -> float:
-    proportion = (snap(spec, value) - spec.start) / (spec.end - spec.start)
-    return proportion ** spec.skew if spec.skew != 1.0 and proportion > 0 else proportion
+    return _CHARTER[spec.name].to_normalized(value)
 
 
 def from_normalized(spec: V3Param, normalized: float) -> float:
-    proportion = min(1.0, max(0.0, float(normalized)))
-    if spec.skew != 1.0 and proportion > 0:
-        proportion = math.exp(math.log(proportion) / spec.skew)
-    return snap(spec, spec.start + (spec.end - spec.start) * proportion)
+    return _CHARTER[spec.name].from_normalized(normalized)
 
 
 def physical_from_dict(values: Dict[str, float]) -> np.ndarray:
@@ -132,11 +81,6 @@ def denormalize(normalized: Sequence[float]) -> np.ndarray:
 
 
 def from_v2_physical(v2: Sequence[float]) -> np.ndarray:
-    """A v2 preset (20 physical values, src/synth/params.py order) in the v3 engine."""
-    v2 = list(v2)
-    values = dict(zip(NAMES[:20], v2))
-    values["filter_env_amount"] = v2[12] * 4.0
-    values["lfo_to_pitch"] = v2[15] * 50.0
-    values["lfo_to_cutoff"] = v2[16] * 2.0
-    values["reverb_size"] = 0.55 + 0.35 * v2[19]
+    """A v2 preset (20 physical values, src/synth/params.py order) in the v3 engine (the charter's v2 rules)."""
+    values = charter_v3.upgrade_v2(dict(zip(NAMES[:20], list(v2))))
     return physical_from_dict(values)

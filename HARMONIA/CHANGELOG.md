@@ -177,6 +177,28 @@ optimizer may no longer add absent modules.
   | Prompts 2 | idem | v3.1 generation 2.0, variation 1.5, selection 1.7 |
   | Prompts 3 | idem | curated choice 2.5, v3.0 choice 2.6, light variation 2.1 |
 
+### Charter v3: one source for the plugin, the backend and the AI
+- **`charter/harmonia_v3.json`**: every v3 parameter: `engine`, the 46 analog ones in the AI's vector order, and
+  the 145 DX7 ones described once per operator. For each: module, range, curve (`centre`), default, choices,
+  unit, English and French labels, description. Also the preset format, the v2 upgrade rules and a draft sound
+  brief (family, attack, brightness, length, movement, width, space, references) whose bins are quantiles of
+  measures on the real presets (charter/README.md).
+- **`src/charter_v3.py`** reads it (standard library only): presets made, read and validated, DX7 voice <->
+  parameters, v2 -> v3 upgrade. `src/synth/v3_params.py` now builds its 46 specs from it: same ranges, same
+  vectors, renders bit-exact with before.
+- **`scripts/v3/charter_cpp.py`** generates the plugin's headers into `charter/generated/`:
+  `HarmoniaCharterV3.h` (plain C++17 table and normalization) and `HarmoniaParametersV3.h` (JUCE layout, one
+  group per module and per DX7 operator, `applyV2State`). Checked against JUCE 8.0.8 (Harmonia-APP's
+  submodule): the generated layout creates the 192 parameters, and JUCE's conversions match the charter's
+  on all of them.
+- That check found that JUCE rounds int and choice parameters half to even (`juce::roundToInt`: 8.5 -> 8),
+  where v3_params rounded halves up. The charter now rounds as JUCE does, in Python and C++, so a
+  normalized value plays the same in the plugin as in the AI. Only exact halves change; no training vector
+  is affected.
+- Tests (`tests/test_charter_v3.py`): unique ids in the vector order, DX7 layout equal to the codec's,
+  normalization and rounding, preset round trips and validation, v2 rules, generated headers up to date,
+  and the C++ table compiled and compared with Python.
+
 ## [0.1.0] - Harmonia v2: Listened Presets and French Prompts
 ### Added
 - **Offline synth renderer (`src/synth/`)**: numba port of the app's `Synth.cpp`, reverb settings and JUCE parameter conversions, validated sample by sample against the real C++ compiled with JUCE (relative RMS error: median 4e-4). `ENGINE_APP_1_0` reproduces the current app, `ENGINE_APP_1_1` the fixed engine (Harmonia-App#40). ~1000 notes/s on 14 cores.

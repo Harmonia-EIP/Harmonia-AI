@@ -1,0 +1,1261 @@
+{
+  "name": "harmonia",
+  "version": "3.0.0",
+  "description": "Single source of truth for Harmonia v3 presets, shared by the plugin (Harmonia-APP), the backend and the AI. Generated from it: the C++ parameter table and JUCE layout of the plugin (scripts/v3/charter_cpp.py) and the Python parameter specs (src/charter_v3.py, src/synth/v3_params.py). Edit this file, never the generated ones.",
+  "versioning": "Major: an id is renamed or removed, or a value changes meaning (needs upgrade rules). Minor: new parameters whose default leaves existing presets unchanged. Patch: labels, descriptions, documentation.",
+  "normalization": {
+    "description": "Presets carry every value normalized to [0, 1], as plugin hosts do; the curves below are those of juce::NormalisableRange, so the plugin and the AI read a value the same way.",
+    "snap": "clamp v to [min, max], then round exactly as the plugin's JUCE parameters do: int and choice to the nearest integer, halves to the even one (juce::roundToInt: 8.5 -> 8, 2.5 -> 2); bool: max when v - min >= half the range, else min (juce::AudioParameterBool); float with step > 0: min + step * floor((v - min) / step + 0.5)",
+    "skew": "1 without centre; log(0.5) / log((centre - min) / (max - min)) with a centre: that value sits at 0.5 (juce::NormalisableRange::setSkewForCentre)",
+    "to_normalized": "p = (snap(v) - min) / (max - min); n = p ^ skew",
+    "from_normalized": "p = clamp(n, 0, 1) ^ (1 / skew); v = snap(min + (max - min) * p)",
+    "choices": "a choice or bool parameter holds the index of its choice: i of n <-> i / (n - 1)"
+  },
+  "modules": [
+    {
+      "id": "global",
+      "engine": "global",
+      "label": "Global",
+      "label_fr": "Global"
+    },
+    {
+      "id": "osc",
+      "engine": "analog",
+      "label": "Oscillators",
+      "label_fr": "Oscillateurs"
+    },
+    {
+      "id": "unison",
+      "engine": "analog",
+      "label": "Unison & Stereo",
+      "label_fr": "Unisson et stéréo"
+    },
+    {
+      "id": "filter",
+      "engine": "analog",
+      "label": "Filter",
+      "label_fr": "Filtre"
+    },
+    {
+      "id": "filter_env",
+      "engine": "analog",
+      "label": "Filter Envelope",
+      "label_fr": "Enveloppe du filtre"
+    },
+    {
+      "id": "amp",
+      "engine": "analog",
+      "label": "Amplifier",
+      "label_fr": "Amplificateur"
+    },
+    {
+      "id": "pitch_env",
+      "engine": "analog",
+      "label": "Pitch Envelope",
+      "label_fr": "Enveloppe de hauteur"
+    },
+    {
+      "id": "lfo",
+      "engine": "analog",
+      "label": "LFO",
+      "label_fr": "LFO"
+    },
+    {
+      "id": "drive",
+      "engine": "analog",
+      "label": "Drive",
+      "label_fr": "Saturation"
+    },
+    {
+      "id": "chorus",
+      "engine": "analog",
+      "label": "Chorus",
+      "label_fr": "Chorus"
+    },
+    {
+      "id": "delay",
+      "engine": "analog",
+      "label": "Delay",
+      "label_fr": "Delay"
+    },
+    {
+      "id": "reverb",
+      "engine": "analog",
+      "label": "Reverb",
+      "label_fr": "Reverb"
+    },
+    {
+      "id": "dx7_operator",
+      "engine": "dx7",
+      "label": "DX7 Operator {n}",
+      "label_fr": "Opérateur DX7 {n}"
+    },
+    {
+      "id": "dx7_voice",
+      "engine": "dx7",
+      "label": "DX7 Voice",
+      "label_fr": "Voix DX7"
+    }
+  ],
+  "global": [
+    {
+      "id": "engine",
+      "module": "global",
+      "kind": "choice",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "choices": [
+        "Analog",
+        "DX7"
+      ],
+      "label": "Engine",
+      "label_fr": "Moteur",
+      "description": "Which engine plays the preset: the analog engine or the DX7 FM engine."
+    }
+  ],
+  "engines": {
+    "analog": {
+      "label": "Analog",
+      "label_fr": "Analogique",
+      "reference": "src/synth/engine_v3.py (reference implementation for the C++ port): per voice 2 oscillators x unison + noise -> filter -> drive -> amplifier, at twice the sample rate; then chorus -> delay -> reverb.",
+      "order": "The order of `parameters` is the order of the AI's vectors (src/synth/v3_params.py, src/v3/codecs.py): never reorder, append only.",
+      "parameters": [
+        {
+          "id": "osc_1_waveform",
+          "module": "osc",
+          "kind": "choice",
+          "min": 0,
+          "max": 3,
+          "default": 0,
+          "choices": [
+            "Sine",
+            "Triangle",
+            "Saw",
+            "Pulse"
+          ],
+          "label": "Osc 1 Wave",
+          "label_fr": "Forme osc 1",
+          "description": "Oscillator 1 shape; saw and pulse are band-limited (PolyBLEP).",
+          "v2": {
+            "from": "osc_1_waveform",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "osc_2_waveform",
+          "module": "osc",
+          "kind": "choice",
+          "min": 0,
+          "max": 3,
+          "default": 0,
+          "choices": [
+            "Sine",
+            "Triangle",
+            "Saw",
+            "Pulse"
+          ],
+          "label": "Osc 2 Wave",
+          "label_fr": "Forme osc 2",
+          "description": "Oscillator 2 shape; saw and pulse are band-limited (PolyBLEP).",
+          "v2": {
+            "from": "osc_2_waveform",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "osc_mix",
+          "module": "osc",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Osc Mix",
+          "label_fr": "Mélange osc",
+          "description": "Crossfade from oscillator 1 (0) to oscillator 2 (1).",
+          "v2": {
+            "from": "osc_mix",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "osc_2_detune",
+          "module": "osc",
+          "kind": "float",
+          "min": 0,
+          "max": 100,
+          "default": 0,
+          "unit": "cents",
+          "label": "Osc 2 Detune",
+          "label_fr": "Désaccord osc 2",
+          "description": "Oscillator 2 tuned this many cents above oscillator 1.",
+          "v2": {
+            "from": "osc_2_detune",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "noise_level",
+          "module": "osc",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Noise",
+          "label_fr": "Bruit",
+          "description": "White noise crossfaded with the oscillators (1 = noise only).",
+          "v2": {
+            "from": "noise_level",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "filter_cutoff",
+          "module": "filter",
+          "kind": "float",
+          "min": 20,
+          "max": 20000,
+          "default": 20000,
+          "centre": 1000,
+          "unit": "Hz",
+          "label": "Cutoff",
+          "label_fr": "Coupure",
+          "description": "Filter cutoff before modulation (envelope, LFO, velocity, keyboard).",
+          "v2": {
+            "from": "filter_cutoff",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "filter_resonance",
+          "module": "filter",
+          "kind": "float",
+          "min": 0,
+          "max": 0.95,
+          "default": 0,
+          "label": "Resonance",
+          "label_fr": "Résonance",
+          "description": "Filter resonance: Q = 0.707 x 17^(resonance / 0.95) (Harmonia-App#40 mapping).",
+          "v2": {
+            "from": "filter_resonance",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "filter_type",
+          "module": "filter",
+          "kind": "choice",
+          "min": 0,
+          "max": 2,
+          "default": 0,
+          "choices": [
+            "Low-pass",
+            "Band-pass",
+            "High-pass"
+          ],
+          "label": "Filter Type",
+          "label_fr": "Type de filtre",
+          "description": "State-variable filter output (juce::dsp::StateVariableTPTFilter).",
+          "v2": {
+            "from": "filter_type",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "amp_attack",
+          "module": "amp",
+          "kind": "float",
+          "min": 1,
+          "max": 5000,
+          "default": 1,
+          "centre": 100,
+          "unit": "ms",
+          "label": "Attack",
+          "label_fr": "Attaque",
+          "description": "Amplitude envelope attack (linear rise to full level).",
+          "v2": {
+            "from": "amp_attack",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "amp_decay",
+          "module": "amp",
+          "kind": "float",
+          "min": 10,
+          "max": 20000,
+          "default": 300,
+          "centre": 500,
+          "unit": "ms",
+          "label": "Decay",
+          "label_fr": "Déclin",
+          "description": "Amplitude envelope decay to the sustain level (exponential, -80 dB of the distance at this time).",
+          "v2": {
+            "from": "amp_decay",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "amp_sustain",
+          "module": "amp",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 1,
+          "label": "Sustain",
+          "label_fr": "Maintien",
+          "description": "Amplitude level held while the key is down.",
+          "v2": {
+            "from": "amp_sustain",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "amp_release",
+          "module": "amp",
+          "kind": "float",
+          "min": 10,
+          "max": 20000,
+          "default": 300,
+          "centre": 500,
+          "unit": "ms",
+          "label": "Release",
+          "label_fr": "Relâchement",
+          "description": "Amplitude release after note-off (exponential, -80 dB at this time).",
+          "v2": {
+            "from": "amp_release",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "filter_env_amount",
+          "module": "filter_env",
+          "kind": "float",
+          "min": -10,
+          "max": 10,
+          "default": 0,
+          "unit": "octaves",
+          "label": "Filter Env Amount",
+          "label_fr": "Quantité env. filtre",
+          "description": "Filter envelope depth in octaves at full envelope (negative closes the filter).",
+          "v2": {
+            "from": "filter_env_amount",
+            "scale": 4.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "filter_env_decay",
+          "module": "filter_env",
+          "kind": "float",
+          "min": 10,
+          "max": 20000,
+          "default": 300,
+          "centre": 500,
+          "unit": "ms",
+          "label": "Filter Env Decay",
+          "label_fr": "Déclin env. filtre",
+          "description": "Filter envelope decay to its sustain level (exponential).",
+          "v2": {
+            "from": "filter_env_decay",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "lfo_rate",
+          "module": "lfo",
+          "kind": "float",
+          "min": 0.05,
+          "max": 40,
+          "default": 5,
+          "centre": 2,
+          "unit": "Hz",
+          "label": "LFO Rate",
+          "label_fr": "Vitesse LFO",
+          "description": "LFO frequency.",
+          "v2": {
+            "from": "lfo_rate",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "lfo_to_pitch",
+          "module": "lfo",
+          "kind": "float",
+          "min": 0,
+          "max": 1200,
+          "default": 0,
+          "centre": 50,
+          "unit": "cents",
+          "label": "LFO to Pitch",
+          "label_fr": "LFO vers hauteur",
+          "description": "Vibrato: LFO to the pitch of every oscillator, in cents at full LFO.",
+          "v2": {
+            "from": "lfo_to_pitch",
+            "scale": 50.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "lfo_to_cutoff",
+          "module": "lfo",
+          "kind": "float",
+          "min": 0,
+          "max": 4,
+          "default": 0,
+          "centre": 1,
+          "unit": "octaves",
+          "label": "LFO to Cutoff",
+          "label_fr": "LFO vers coupure",
+          "description": "LFO to the filter cutoff, in octaves at full LFO.",
+          "v2": {
+            "from": "lfo_to_cutoff",
+            "scale": 2.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "velocity_to_filter",
+          "module": "filter",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Velocity to Cutoff",
+          "label_fr": "Vélocité vers coupure",
+          "description": "Velocity to cutoff: at 1, from -2 octaves (softest note) to +2 octaves (hardest).",
+          "v2": {
+            "from": "velocity_to_filter",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "distortion_mix",
+          "module": "drive",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Drive",
+          "label_fr": "Saturation",
+          "description": "Soft clipping after the filter (tanh, drive 1 + 12 x mix) mixed with the clean signal.",
+          "v2": {
+            "from": "distortion_mix",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "reverb_mix",
+          "module": "reverb",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Reverb Mix",
+          "label_fr": "Mix reverb",
+          "description": "Reverb wet level; the dry level is 1 - 0.7 x mix (v2 law).",
+          "v2": {
+            "from": "reverb_mix",
+            "scale": 1.0,
+            "offset": 0.0
+          }
+        },
+        {
+          "id": "osc_1_coarse",
+          "module": "osc",
+          "kind": "int",
+          "min": -24,
+          "max": 24,
+          "default": 0,
+          "unit": "semitones",
+          "label": "Osc 1 Coarse",
+          "label_fr": "Transposition osc 1",
+          "description": "Oscillator 1 transposition."
+        },
+        {
+          "id": "osc_2_coarse",
+          "module": "osc",
+          "kind": "int",
+          "min": -24,
+          "max": 24,
+          "default": 0,
+          "unit": "semitones",
+          "label": "Osc 2 Coarse",
+          "label_fr": "Transposition osc 2",
+          "description": "Oscillator 2 transposition."
+        },
+        {
+          "id": "pulse_width",
+          "module": "osc",
+          "kind": "float",
+          "min": 0.05,
+          "max": 0.95,
+          "default": 0.5,
+          "label": "Pulse Width",
+          "label_fr": "Largeur d'impulsion",
+          "description": "Width of the pulse wave of both oscillators."
+        },
+        {
+          "id": "osc_sync",
+          "module": "osc",
+          "kind": "bool",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "choices": [
+            "Off",
+            "On"
+          ],
+          "label": "Sync",
+          "label_fr": "Synchro",
+          "description": "Hard sync: oscillator 2 restarts with each cycle of oscillator 1."
+        },
+        {
+          "id": "fm_amount",
+          "module": "osc",
+          "kind": "float",
+          "min": 0,
+          "max": 48,
+          "default": 0,
+          "centre": 6,
+          "unit": "semitones",
+          "label": "Cross Mod",
+          "label_fr": "Modulation croisée",
+          "description": "Cross-modulation as on the OB-X: oscillator 1 bends oscillator 2's pitch by this many semitones per unit."
+        },
+        {
+          "id": "ring_mod",
+          "module": "osc",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Ring Mod",
+          "label_fr": "Modulation en anneau",
+          "description": "Ring modulation (osc 1 x osc 2) crossfaded in place of the oscillator mix."
+        },
+        {
+          "id": "unison_voices",
+          "module": "unison",
+          "kind": "int",
+          "min": 1,
+          "max": 16,
+          "default": 1,
+          "unit": "voices",
+          "label": "Unison Voices",
+          "label_fr": "Voix d'unisson",
+          "description": "Number of stacked voices per note."
+        },
+        {
+          "id": "unison_detune",
+          "module": "unison",
+          "kind": "float",
+          "min": 0,
+          "max": 50,
+          "default": 10,
+          "centre": 10,
+          "unit": "cents",
+          "label": "Unison Detune",
+          "label_fr": "Désaccord unisson",
+          "description": "Unison voices are spread evenly from -detune to +detune cents."
+        },
+        {
+          "id": "filter_slope",
+          "module": "filter",
+          "kind": "choice",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "choices": [
+            "12 dB",
+            "24 dB"
+          ],
+          "label": "Filter Slope",
+          "label_fr": "Pente du filtre",
+          "description": "One (12 dB/octave) or two (24 dB/octave) filter stages."
+        },
+        {
+          "id": "filter_keytrack",
+          "module": "filter",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Key Tracking",
+          "label_fr": "Suivi de clavier",
+          "description": "Cutoff follows the keyboard: at 1, one octave per octave around C4 (MIDI 60)."
+        },
+        {
+          "id": "filter_env_attack",
+          "module": "filter_env",
+          "kind": "float",
+          "min": 1,
+          "max": 5000,
+          "default": 1,
+          "centre": 100,
+          "unit": "ms",
+          "label": "Filter Env Attack",
+          "label_fr": "Attaque env. filtre",
+          "description": "Filter envelope attack (linear)."
+        },
+        {
+          "id": "filter_env_sustain",
+          "module": "filter_env",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Filter Env Sustain",
+          "label_fr": "Maintien env. filtre",
+          "description": "Filter envelope level held while the key is down."
+        },
+        {
+          "id": "filter_env_release",
+          "module": "filter_env",
+          "kind": "float",
+          "min": 10,
+          "max": 20000,
+          "default": 50,
+          "centre": 500,
+          "unit": "ms",
+          "label": "Filter Env Release",
+          "label_fr": "Relâchement env. filtre",
+          "description": "Filter envelope release after note-off (exponential)."
+        },
+        {
+          "id": "velocity_to_amp",
+          "module": "amp",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0.6,
+          "label": "Velocity to Level",
+          "label_fr": "Vélocité vers niveau",
+          "description": "0: every note at full level; 1: level proportional to velocity."
+        },
+        {
+          "id": "pitch_env_amount",
+          "module": "pitch_env",
+          "kind": "float",
+          "min": -24,
+          "max": 24,
+          "default": 0,
+          "unit": "semitones",
+          "label": "Pitch Env Amount",
+          "label_fr": "Quantité env. hauteur",
+          "description": "Pitch offset at note-on, decaying to 0."
+        },
+        {
+          "id": "pitch_env_decay",
+          "module": "pitch_env",
+          "kind": "float",
+          "min": 1,
+          "max": 5000,
+          "default": 100,
+          "centre": 100,
+          "unit": "ms",
+          "label": "Pitch Env Decay",
+          "label_fr": "Déclin env. hauteur",
+          "description": "Pitch envelope decay (exp(-5 t / decay): 0.7 % of the offset left at this time)."
+        },
+        {
+          "id": "lfo_waveform",
+          "module": "lfo",
+          "kind": "choice",
+          "min": 0,
+          "max": 4,
+          "default": 0,
+          "choices": [
+            "Sine",
+            "Triangle",
+            "Saw",
+            "Square",
+            "Sample & Hold"
+          ],
+          "label": "LFO Wave",
+          "label_fr": "Forme LFO",
+          "description": "LFO shape (sample & hold draws a new random value each cycle)."
+        },
+        {
+          "id": "lfo_delay",
+          "module": "lfo",
+          "kind": "float",
+          "min": 0,
+          "max": 5000,
+          "default": 0,
+          "centre": 500,
+          "unit": "ms",
+          "label": "LFO Delay",
+          "label_fr": "Délai LFO",
+          "description": "LFO fades in linearly over this time after note-on."
+        },
+        {
+          "id": "lfo_to_amp",
+          "module": "lfo",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "LFO to Level",
+          "label_fr": "LFO vers niveau",
+          "description": "Tremolo: at 1 the level dips to 0 at the LFO's lowest point."
+        },
+        {
+          "id": "lfo_to_pw",
+          "module": "lfo",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "LFO to Pulse Width",
+          "label_fr": "LFO vers largeur",
+          "description": "LFO to pulse width: at 1, +/- 0.45."
+        },
+        {
+          "id": "chorus_mix",
+          "module": "chorus",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Chorus",
+          "label_fr": "Chorus",
+          "description": "Juno-style stereo chorus (0.5 Hz, 3.5 +/- 1.75 ms, opposite phases): wet share."
+        },
+        {
+          "id": "delay_time",
+          "module": "delay",
+          "kind": "float",
+          "min": 10,
+          "max": 2000,
+          "default": 300,
+          "centre": 300,
+          "unit": "ms",
+          "label": "Delay Time",
+          "label_fr": "Temps de delay",
+          "description": "Echo time."
+        },
+        {
+          "id": "delay_feedback",
+          "module": "delay",
+          "kind": "float",
+          "min": 0,
+          "max": 0.9,
+          "default": 0.3,
+          "label": "Delay Feedback",
+          "label_fr": "Retour delay",
+          "description": "Share of each echo fed back (low-passed at 6 kHz)."
+        },
+        {
+          "id": "delay_mix",
+          "module": "delay",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Delay Mix",
+          "label_fr": "Mix delay",
+          "description": "Echo level added to the dry signal."
+        },
+        {
+          "id": "reverb_size",
+          "module": "reverb",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0.7,
+          "label": "Reverb Size",
+          "label_fr": "Taille reverb",
+          "description": "Reverb decay: T60 = 0.3 + 11.7 x size^2 seconds (feedback delay network).",
+          "v2": {
+            "from": "reverb_mix",
+            "scale": 0.35,
+            "offset": 0.55
+          }
+        },
+        {
+          "id": "stereo_width",
+          "module": "unison",
+          "kind": "float",
+          "min": 0,
+          "max": 1,
+          "default": 0,
+          "label": "Stereo Width",
+          "label_fr": "Largeur stéréo",
+          "description": "Spread of the unison voices, and of osc 1 (left) / osc 2 (right), across the stereo field."
+        }
+      ]
+    },
+    "dx7": {
+      "label": "DX7",
+      "label_fr": "DX7",
+      "reference": "native/dx7: Dexed's msfa FM core (Apache-2.0). A preset is one DX7 voice (VCED single-voice layout); operators[0] is OP1 (the VCED buffer stores OP6 first).",
+      "operators": 6,
+      "id_pattern": "operator field: dx7_op{n}_{id} (n = 1..6); voice field: dx7_{id}; {k} = 1..4 for the four envelope stages",
+      "order": "OP1..OP6 (operator fields in this order), then voice fields: the order of src/v3/codecs.py.",
+      "operator_fields": [
+        {
+          "field": "rates",
+          "id": "eg_rate_{k}",
+          "count": 4,
+          "max": 99,
+          "default": 99,
+          "label": "EG Rate {k}",
+          "label_fr": "Vitesse EG {k}",
+          "description": "Envelope generator rate of stage {k} (99 = fastest).",
+          "kind": "int"
+        },
+        {
+          "field": "levels",
+          "id": "eg_level_{k}",
+          "count": 4,
+          "max": 99,
+          "default": [
+            99,
+            99,
+            99,
+            0
+          ],
+          "label": "EG Level {k}",
+          "label_fr": "Niveau EG {k}",
+          "description": "Envelope generator level reached at the end of stage {k}.",
+          "kind": "int"
+        },
+        {
+          "field": "kbd_breakpoint",
+          "id": "kbd_breakpoint",
+          "max": 99,
+          "default": 39,
+          "label": "Break Point",
+          "label_fr": "Point de rupture",
+          "description": "Keyboard level scaling break point (0 = A-1, 39 = C3, 99 = C8).",
+          "kind": "int"
+        },
+        {
+          "field": "kbd_left_depth",
+          "id": "kbd_left_depth",
+          "max": 99,
+          "default": 0,
+          "label": "Left Depth",
+          "label_fr": "Profondeur gauche",
+          "description": "Level scaling depth below the break point.",
+          "kind": "int"
+        },
+        {
+          "field": "kbd_right_depth",
+          "id": "kbd_right_depth",
+          "max": 99,
+          "default": 0,
+          "label": "Right Depth",
+          "label_fr": "Profondeur droite",
+          "description": "Level scaling depth above the break point.",
+          "kind": "int"
+        },
+        {
+          "field": "kbd_left_curve",
+          "id": "kbd_left_curve",
+          "choices": [
+            "-LIN",
+            "-EXP",
+            "+EXP",
+            "+LIN"
+          ],
+          "default": 0,
+          "label": "Left Curve",
+          "label_fr": "Courbe gauche",
+          "description": "Level scaling curve below the break point.",
+          "kind": "choice"
+        },
+        {
+          "field": "kbd_right_curve",
+          "id": "kbd_right_curve",
+          "choices": [
+            "-LIN",
+            "-EXP",
+            "+EXP",
+            "+LIN"
+          ],
+          "default": 0,
+          "label": "Right Curve",
+          "label_fr": "Courbe droite",
+          "description": "Level scaling curve above the break point.",
+          "kind": "choice"
+        },
+        {
+          "field": "rate_scaling",
+          "id": "rate_scaling",
+          "max": 7,
+          "default": 0,
+          "label": "Rate Scaling",
+          "label_fr": "Échelle des vitesses",
+          "description": "Envelope rates speed up for higher keys.",
+          "kind": "int"
+        },
+        {
+          "field": "amp_mod_sens",
+          "id": "amp_mod_sens",
+          "max": 3,
+          "default": 0,
+          "label": "Amp Mod Sens",
+          "label_fr": "Sensibilité mod. ampl.",
+          "description": "Sensitivity of this operator to LFO amplitude modulation.",
+          "kind": "int"
+        },
+        {
+          "field": "key_vel_sens",
+          "id": "key_vel_sens",
+          "max": 7,
+          "default": 0,
+          "label": "Velocity Sens",
+          "label_fr": "Sensibilité vélocité",
+          "description": "Output level follows key velocity.",
+          "kind": "int"
+        },
+        {
+          "field": "output_level",
+          "id": "output_level",
+          "max": 99,
+          "default": [
+            99,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "label": "Output Level",
+          "label_fr": "Niveau de sortie",
+          "description": "Operator output level (carrier volume or modulation index).",
+          "kind": "int"
+        },
+        {
+          "field": "osc_mode",
+          "id": "osc_mode",
+          "choices": [
+            "Ratio",
+            "Fixed"
+          ],
+          "default": 0,
+          "label": "Osc Mode",
+          "label_fr": "Mode osc",
+          "description": "Frequency as a ratio of the key, or fixed.",
+          "kind": "choice"
+        },
+        {
+          "field": "freq_coarse",
+          "id": "freq_coarse",
+          "max": 31,
+          "default": 1,
+          "label": "Coarse",
+          "label_fr": "Fréquence grossière",
+          "description": "Frequency ratio (0 = 0.5) or fixed frequency range.",
+          "kind": "int"
+        },
+        {
+          "field": "freq_fine",
+          "id": "freq_fine",
+          "max": 99,
+          "default": 0,
+          "label": "Fine",
+          "label_fr": "Fréquence fine",
+          "description": "Fine frequency.",
+          "kind": "int"
+        },
+        {
+          "field": "detune",
+          "id": "detune",
+          "max": 14,
+          "default": 7,
+          "display_offset": -7,
+          "label": "Detune",
+          "label_fr": "Désaccord",
+          "description": "Detune, shown -7..+7 (7 = none).",
+          "kind": "int"
+        }
+      ],
+      "voice_fields": [
+        {
+          "field": "pitch_eg_rates",
+          "id": "pitch_eg_rate_{k}",
+          "count": 4,
+          "max": 99,
+          "default": 99,
+          "label": "Pitch EG Rate {k}",
+          "label_fr": "Vitesse EG hauteur {k}",
+          "description": "Pitch envelope rate of stage {k}.",
+          "kind": "int"
+        },
+        {
+          "field": "pitch_eg_levels",
+          "id": "pitch_eg_level_{k}",
+          "count": 4,
+          "max": 99,
+          "default": 50,
+          "label": "Pitch EG Level {k}",
+          "label_fr": "Niveau EG hauteur {k}",
+          "description": "Pitch envelope level of stage {k} (50 = no shift).",
+          "kind": "int"
+        },
+        {
+          "field": "algorithm",
+          "id": "algorithm",
+          "max": 31,
+          "default": 0,
+          "display_offset": 1,
+          "label": "Algorithm",
+          "label_fr": "Algorithme",
+          "description": "How the six operators modulate each other, shown 1..32.",
+          "kind": "int"
+        },
+        {
+          "field": "feedback",
+          "id": "feedback",
+          "max": 7,
+          "default": 0,
+          "label": "Feedback",
+          "label_fr": "Réinjection",
+          "description": "Self-modulation of the algorithm's feedback operator.",
+          "kind": "int"
+        },
+        {
+          "field": "osc_key_sync",
+          "id": "osc_key_sync",
+          "choices": [
+            "Off",
+            "On"
+          ],
+          "default": 1,
+          "label": "Osc Key Sync",
+          "label_fr": "Synchro osc au clavier",
+          "description": "Operators restart their phase at each note.",
+          "kind": "bool"
+        },
+        {
+          "field": "lfo_speed",
+          "id": "lfo_speed",
+          "max": 99,
+          "default": 35,
+          "label": "LFO Speed",
+          "label_fr": "Vitesse LFO",
+          "description": "LFO rate.",
+          "kind": "int"
+        },
+        {
+          "field": "lfo_delay",
+          "id": "lfo_delay",
+          "max": 99,
+          "default": 0,
+          "label": "LFO Delay",
+          "label_fr": "Délai LFO",
+          "description": "LFO fade-in time.",
+          "kind": "int"
+        },
+        {
+          "field": "lfo_pitch_mod_depth",
+          "id": "lfo_pitch_mod_depth",
+          "max": 99,
+          "default": 0,
+          "label": "LFO Pitch Depth",
+          "label_fr": "Profondeur LFO hauteur",
+          "description": "LFO to pitch (vibrato).",
+          "kind": "int"
+        },
+        {
+          "field": "lfo_amp_mod_depth",
+          "id": "lfo_amp_mod_depth",
+          "max": 99,
+          "default": 0,
+          "label": "LFO Amp Depth",
+          "label_fr": "Profondeur LFO amplitude",
+          "description": "LFO to operator levels (tremolo / wah, see amp_mod_sens).",
+          "kind": "int"
+        },
+        {
+          "field": "lfo_key_sync",
+          "id": "lfo_key_sync",
+          "choices": [
+            "Off",
+            "On"
+          ],
+          "default": 1,
+          "label": "LFO Key Sync",
+          "label_fr": "Synchro LFO au clavier",
+          "description": "LFO restarts at each note.",
+          "kind": "bool"
+        },
+        {
+          "field": "lfo_wave",
+          "id": "lfo_wave",
+          "choices": [
+            "Triangle",
+            "Saw Down",
+            "Saw Up",
+            "Square",
+            "Sine",
+            "Sample & Hold"
+          ],
+          "default": 0,
+          "label": "LFO Wave",
+          "label_fr": "Forme LFO",
+          "description": "LFO shape.",
+          "kind": "choice"
+        },
+        {
+          "field": "pitch_mod_sens",
+          "id": "pitch_mod_sens",
+          "max": 7,
+          "default": 3,
+          "label": "Pitch Mod Sens",
+          "label_fr": "Sensibilité mod. hauteur",
+          "description": "Sensitivity of the pitch to the LFO.",
+          "kind": "int"
+        },
+        {
+          "field": "transpose",
+          "id": "transpose",
+          "max": 48,
+          "default": 24,
+          "display_offset": -24,
+          "label": "Transpose",
+          "label_fr": "Transposition",
+          "description": "Transposition in semitones, shown -24..+24 (24 = C3, none).",
+          "kind": "int"
+        }
+      ]
+    }
+  },
+  "v2_upgrade": {
+    "description": "A v2 preset or plugin state (20 parameters, src/synth/params.py / Harmonia-APP before v3) becomes v3 per analog parameter: v3 = offset + scale * v2[from], on physical values (a JUCE state stores physical values). Parameters without a rule take their default; the engine is analog.",
+    "rule": "v3 = offset + scale * v2[from]"
+  },
+  "preset_format": {
+    "metadata": {
+      "name": "preset name",
+      "charter_version": "3.0.0",
+      "engine": "analog | dx7",
+      "generated_by": "optional",
+      "model_version": "optional",
+      "model_hash": "optional"
+    },
+    "parameters": "object: parameter id -> normalized value in [0, 1]. Holds `engine` and the parameters of that engine; the other engine's parameters are ignored; a missing parameter takes its default.",
+    "brief": "optional: the sound brief the preset was made from (sound_brief)",
+    "compatibility": "Same shape as v1/v2 (metadata + parameters), so the backend's PresetCharterSchema and the plugin's PresetLoader keep working; `engine` is a parameter so that it survives the backend unchanged."
+  },
+  "sound_brief": {
+    "status": "draft (v0.1): to be validated by listening before any model is trained on it",
+    "description": "What a prompt asks for, in words a model can check on a sound: the step between the text and the parameters. For a real preset it is read from its human labels and measured on its rendered sound (C3, velocity 100/127, 1.5 s held, 4 s); for a prompt it is filled from the text. Bins are quantiles of the measure over the real presets of the bank, so every word covers a known share of real sounds; no threshold is invented.",
+    "fields": [
+      {
+        "id": "family",
+        "values": [
+          "bass",
+          "pad",
+          "lead",
+          "pluck",
+          "keys",
+          "organ",
+          "bell",
+          "brass",
+          "strings",
+          "winds",
+          "voice",
+          "guitar",
+          "drums",
+          "fx"
+        ],
+        "source": "human labels (preset categories and names, FSD50K classes) through src/v3/vocabulary.py; for a sound without a label, the synth space's type head"
+      },
+      {
+        "id": "attack",
+        "values": [
+          "instant",
+          "fast",
+          "slow"
+        ],
+        "measure": "time from note-on to 90 % of the peak of the RMS envelope (10 ms windows)",
+        "bins": "terciles"
+      },
+      {
+        "id": "brightness",
+        "values": [
+          "dark",
+          "neutral",
+          "bright"
+        ],
+        "measure": "spectral centroid over the held part divided by the note's fundamental",
+        "bins": "terciles"
+      },
+      {
+        "id": "length",
+        "values": [
+          "short",
+          "medium",
+          "long",
+          "sustained"
+        ],
+        "measure": "sustained when the level at the end of the hold is within 12 dB of the peak; otherwise the time from the peak to -30 dB",
+        "bins": "terciles of the non-sustained sounds"
+      },
+      {
+        "id": "movement",
+        "values": [
+          "static",
+          "slow",
+          "fast"
+        ],
+        "measure": "depth: standard deviation over time of the 1/3-octave band levels while held; rate: dominant frequency of that variation",
+        "bins": "static = lower half by depth; slow / fast split at the median rate of the others"
+      },
+      {
+        "id": "width",
+        "values": [
+          "mono",
+          "narrow",
+          "wide"
+        ],
+        "measure": "side / mid energy ratio",
+        "bins": "mono = no side energy (below -40 dB); narrow / wide split at the median of the others"
+      },
+      {
+        "id": "space",
+        "values": [
+          "dry",
+          "room",
+          "hall"
+        ],
+        "measure": "tail: time to fall 30 dB after note-off, minus the same with reverb and delay off",
+        "bins": "dry = under 50 ms; room / hall split at the median of the others"
+      },
+      {
+        "id": "references",
+        "values": "free list of names (instrument, synth, artist, era)",
+        "source": "matched against the human names, categories and comments of real presets (src/presets/labels.py); never measured"
+      },
+      {
+        "id": "engine",
+        "values": [
+          "analog",
+          "dx7"
+        ],
+        "optional": true,
+        "source": "preferred engine, when the text implies one (e.g. FM, DX7)"
+      }
+    ]
+  }
+}
