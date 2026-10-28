@@ -16,7 +16,7 @@ It converts natural-language prompts into normalized synthesizer parameters in t
 - `scripts/prepare_dataset.py`: parse raw dumps and build `data/processed/presets.json`
 - `scripts/train.py`: train, save model, produce benchmark history and validation metrics report
 - `scripts/generate.py`: CLI inference
-- `scripts/server.py`: Flask API (`POST /generate`, `GET /health`, `GET /metrics/latest`)
+- `scripts/server.py`: Flask API (`POST /generate`, `POST /refine-preset`, `GET /health`, `GET /metrics/latest`)
 - `scripts/auto_trainer.py`: filesystem watcher for continuous retraining
 - `scripts/benchmark_viewer.py`: print training history evolution
 
@@ -131,6 +131,7 @@ Endpoint:
 
 ```text
 POST http://127.0.0.1:5000/generate
+POST http://127.0.0.1:5000/refine-preset
 GET  http://127.0.0.1:5000/health
 GET  http://127.0.0.1:5000/metrics/latest
 ```
@@ -149,6 +150,21 @@ Validation on `POST /generate`:
 - max prompt length: `512`
 - prompts exceeding model token context (default `32` tokens) are rejected
 - if model weights are unavailable/invalid, API returns `503`
+
+`POST /refine-preset` (alias `/ai/refine-preset`) generates for the prompt, then puts the locked parameters back to their current value:
+
+```json
+{
+  "prompt": "Brighter, more attack",
+  "parameters": { "filter_cutoff": 0.42, "amp_attack": 0.1 },
+  "locked_params": ["filter_cutoff"],
+  "model_name": "charter_v1"
+}
+```
+
+- same `prompt` rules and response format as `POST /generate`
+- `parameters` (current preset, values in `0..1`) must be an object of numbers, `locked_params` a list of ids
+- a locked id unknown to the model or missing from `parameters` is ignored
 
 API traceability:
 - `GET /health` returns `model_version` and `model_hash`

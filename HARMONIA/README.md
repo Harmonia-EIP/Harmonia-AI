@@ -152,6 +152,8 @@ python3 scripts/server.py
 
 Endpoint: `POST http://127.0.0.1:5000/generate`
 
+Refine: `POST http://127.0.0.1:5000/refine-preset` with the current `parameters` and the `locked_params` to keep (see `DOC.md`)
+
 Health check: `GET http://127.0.0.1:5000/health`
 
 Latest metrics: `GET http://127.0.0.1:5000/metrics/latest`
