@@ -72,6 +72,17 @@ def groups(charter: charter_v3.Charter) -> Tuple[List[Tuple[str, str, str]], Dic
     return [g for g in order if g[0] in used], of
 
 
+def row(p: charter_v3.Param, group: str, v2_ids: List[str]) -> str:
+    rule = "{ -1, 1.0f, 0.0f }"
+    if p.v2 is not None:
+        rule = f"{{ {v2_ids.index(p.v2.source)}, {cpp_float(p.v2.scale)}, {cpp_float(p.v2.offset)} }}"
+    choice_ref = (f"choices::{p.id}, {len(p.choices)}" if p.choices else "nullptr, 0")
+    engine = ENGINE.get(p.engine, "Global")
+    return (f"        {{ {cpp_string(p.id)}, {cpp_string(group)}, Engine::{engine}, Kind::{KIND[p.kind]}, "
+            f"{cpp_float(p.min)}, {cpp_float(p.max)}, {cpp_float(p.default)}, {cpp_float(p.interval)}, {cpp_float(p.skew)}, "
+            f"{choice_ref}, {cpp_string(p.unit)}, {cpp_string(p.label)}, {cpp_string(p.label_fr)}, {p.display_offset}, {rule} }},")
+
+
 def table_header(charter: charter_v3.Charter) -> str:
     params = charter.params
     group_order, group_of = groups(charter)
@@ -142,14 +153,7 @@ def table_header(charter: charter_v3.Charter) -> str:
     lines += ["    }};", "", "    /** Every parameter: the global ones, then the analog engine (the AI's vector order), then the DX7 voice. */",
               f"    inline constexpr std::array<Param, {len(params)}> params {{{{"]
     for p in params:
-        rule = "{ -1, 1.0f, 0.0f }"
-        if p.v2 is not None:
-            rule = f"{{ {v2_ids.index(p.v2.source)}, {cpp_float(p.v2.scale)}, {cpp_float(p.v2.offset)} }}"
-        choice_ref = (f"choices::{p.id}, {len(p.choices)}" if p.choices else "nullptr, 0")
-        lines.append(
-            f"        {{ {cpp_string(p.id)}, {cpp_string(group_of[p.id])}, Engine::{ENGINE[p.engine]}, Kind::{KIND[p.kind]}, "
-            f"{cpp_float(p.min)}, {cpp_float(p.max)}, {cpp_float(p.default)}, {cpp_float(p.interval)}, {cpp_float(p.skew)}, "
-            f"{choice_ref}, {cpp_string(p.unit)}, {cpp_string(p.label)}, {cpp_string(p.label_fr)}, {p.display_offset}, {rule} }},")
+        lines.append(row(p, group_of[p.id], v2_ids))
     analog = [i for i, p in enumerate(params) if p.engine == "analog"]
     dx7 = [i for i, p in enumerate(params) if p.engine == "dx7"]
     lines += [
@@ -160,6 +164,21 @@ def table_header(charter: charter_v3.Charter) -> str:
         "",
         "    /** The 20 parameters of a v2 preset or plugin state, in v2 order (V2Rule::source indexes this). */",
         f"    inline constexpr std::array<std::string_view, {len(v2_ids)}> v2Ids {{{{ {', '.join(cpp_string(i) for i in v2_ids)} }}}};",
+        "",
+        "    /** Their v2 ranges, to read a v2 preset (values normalized on these ranges). */",
+        f"    inline constexpr std::array<Param, {len(charter.v2_params)}> v2Params {{{{",
+        *[row(p, "v2", v2_ids).replace(f"choices::{p.id}, {len(p.choices)}", "nullptr, 0") for p in charter.v2_params],
+        "    }};",
+        "",
+        "    /** Position of each analog parameter in `params` minus analogBegin: the order of an analog patch. */",
+        "    namespace analog",
+        "    {",
+        "        enum Index : int",
+        "        {",
+        *[f"            {p.id}," for p in charter.engine_params("analog")],
+        "        };",
+        f"        inline constexpr int count = {len(charter.engine_params('analog'))};",
+        "    }",
         "",
         "    /** Legal value, rounded as JUCE's parameters do: int / choice like juce::roundToInt (halves to even),",
         "        bool like juce::AudioParameterBool (>= half the range), stepped float to the nearest step. */",
@@ -206,6 +225,15 @@ def table_header(charter: charter_v3.Charter) -> str:
         "        if (p.v2.source < 0)",
         "            return p.defaultValue;",
         "        return snap (p, p.v2.offset + p.v2.scale * v2Physical[(std::size_t) p.v2.source]);",
+        "    }",
+        "",
+        "    /** Same from a v2 preset: 20 values normalized on the v2 ranges, v2 order. */",
+        f"    inline float upgradeFromV2Normalized (const Param& p, const std::array<float, {len(v2_ids)}>& v2Normalized) noexcept",
+        "    {",
+        f"        std::array<float, {len(v2_ids)}> physical {{}};",
+        "        for (std::size_t i = 0; i < physical.size(); ++i)",
+        "            physical[i] = fromNormalized (v2Params[i], v2Normalized[i]);",
+        "        return upgradeFromV2 (p, physical);",
         "    }",
         "}",
         "",
@@ -286,6 +314,24 @@ namespace HarmoniaParamsV3
 
         return layout;
     }}
+
+    /** Physical value of every charter parameter for the audio thread (index = position in HarmoniaCharter::params). */
+    struct ParameterRefs
+    {{
+        std::array<std::atomic<float>*, HarmoniaCharter::params.size()> values {{}};
+
+        void bind (juce::AudioProcessorValueTreeState& apvts)
+        {{
+            for (std::size_t i = 0; i < values.size(); ++i)
+            {{
+                values[i] = apvts.getRawParameterValue (toJuce (HarmoniaCharter::params[i].id));
+                jassert (values[i] != nullptr);
+            }}
+        }}
+
+        float get (std::size_t index) const noexcept {{ return values[index]->load (std::memory_order_relaxed); }}
+        float analog (int index) const noexcept {{ return get (HarmoniaCharter::analogBegin + (std::size_t) index); }}
+    }};
 
     /** After loading a state saved before charter v3 (20 physical values by v2 id): analog engine, v2 rules. */
     inline void applyV2State (juce::AudioProcessorValueTreeState& apvts,

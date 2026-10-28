@@ -47,6 +47,7 @@ class Param:
     v2: Optional[V2Rule] = None
     # DX7 only: where the value lives in a voice dict (operator index 0..5 or None, field, stage 0..3 or None)
     dx7_path: Optional[Tuple[Optional[int], str, Optional[int]]] = None
+    fixed_skew: Optional[float] = None  # v2 ranges give their skew directly instead of a centre
 
     @property
     def interval(self) -> float:
@@ -54,6 +55,8 @@ class Param:
 
     @property
     def skew(self) -> float:
+        if self.fixed_skew is not None:
+            return self.fixed_skew
         if self.centre is None:
             return 1.0
         return math.log(0.5) / math.log((self.centre - self.min) / (self.max - self.min))
@@ -85,6 +88,7 @@ class Charter:
     version: str
     raw: dict
     params: Tuple[Param, ...]  # global, then analog, then DX7, in the file's order
+    v2_params: Tuple[Param, ...] = ()  # the 20 v2 ranges, to read v2 presets
 
     @property
     def by_id(self) -> Dict[str, Param]:
@@ -147,7 +151,9 @@ def load(path: Path = CHARTER_PATH) -> Charter:
     ids = [p.id for p in params]
     if len(set(ids)) != len(ids):
         raise ValueError("duplicate parameter ids in the charter")
-    return Charter(raw["version"], raw, tuple(params))
+    v2 = tuple(_param(dict(e, module="v2", default=e["min"]), "v2", fixed_skew=e.get("skew"))
+               for e in raw["v2_upgrade"]["parameters"])
+    return Charter(raw["version"], raw, tuple(params), v2)
 
 
 # --- presets ----------------------------------------------------------------------------------------------
@@ -255,6 +261,12 @@ def upgrade_v2(v2_physical: Mapping[str, float]) -> Dict[str, float]:
         else:
             out[p.id] = p.default
     return out
+
+
+def upgrade_v2_normalized(v2_normalized: Mapping[str, float]) -> Dict[str, float]:
+    """A v2 preset ({v2 name: value normalized on the v2 ranges}) -> physical v3 analog values."""
+    v2 = {p.id: p.from_normalized(v2_normalized[p.id]) for p in load().v2_params if p.id in v2_normalized}
+    return upgrade_v2(v2)
 
 
 def ids(engine: str) -> Sequence[str]:

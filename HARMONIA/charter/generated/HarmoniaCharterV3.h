@@ -306,6 +306,85 @@ namespace HarmoniaCharter
     /** The 20 parameters of a v2 preset or plugin state, in v2 order (V2Rule::source indexes this). */
     inline constexpr std::array<std::string_view, 20> v2Ids {{ "osc_1_waveform", "osc_2_waveform", "osc_mix", "osc_2_detune", "noise_level", "filter_cutoff", "filter_resonance", "filter_type", "amp_attack", "amp_decay", "amp_sustain", "amp_release", "filter_env_amount", "filter_env_decay", "lfo_rate", "lfo_to_pitch", "lfo_to_cutoff", "velocity_to_filter", "distortion_mix", "reverb_mix" }};
 
+    /** Their v2 ranges, to read a v2 preset (values normalized on these ranges). */
+    inline constexpr std::array<Param, 20> v2Params {{
+        { "osc_1_waveform", "v2", Engine::Global, Kind::Choice, 0.0f, 3.0f, 0.0f, 1.0f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "osc_2_waveform", "v2", Engine::Global, Kind::Choice, 0.0f, 3.0f, 0.0f, 1.0f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "osc_mix", "v2", Engine::Global, Kind::Float, 0.0f, 1.0f, 0.0f, 0.0001f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "osc_2_detune", "v2", Engine::Global, Kind::Float, 0.0f, 100.0f, 0.0f, 0.01f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "noise_level", "v2", Engine::Global, Kind::Float, 0.0f, 1.0f, 0.0f, 0.0001f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "filter_cutoff", "v2", Engine::Global, Kind::Float, 20.0f, 20000.0f, 20.0f, 0.0001f, 0.22990456223487854f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "filter_resonance", "v2", Engine::Global, Kind::Float, 0.0f, 0.95f, 0.0f, 0.0001f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "filter_type", "v2", Engine::Global, Kind::Choice, 0.0f, 2.0f, 0.0f, 1.0f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "amp_attack", "v2", Engine::Global, Kind::Float, 1.0f, 5000.0f, 1.0f, 0.0001f, 0.17673879861831665f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "amp_decay", "v2", Engine::Global, Kind::Float, 10.0f, 5000.0f, 10.0f, 0.0001f, 0.24361039698123932f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "amp_sustain", "v2", Engine::Global, Kind::Float, 0.0f, 1.0f, 0.0f, 0.0001f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "amp_release", "v2", Engine::Global, Kind::Float, 10.0f, 10000.0f, 10.0f, 0.0001f, 0.22990456223487854f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "filter_env_amount", "v2", Engine::Global, Kind::Float, -1.0f, 1.0f, -1.0f, 0.0001f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "filter_env_decay", "v2", Engine::Global, Kind::Float, 10.0f, 5000.0f, 10.0f, 0.0001f, 0.24361039698123932f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "lfo_rate", "v2", Engine::Global, Kind::Float, 0.1f, 20.0f, 0.1f, 0.0001f, 0.2950986623764038f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "lfo_to_pitch", "v2", Engine::Global, Kind::Float, 0.0f, 1.0f, 0.0f, 0.0001f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "lfo_to_cutoff", "v2", Engine::Global, Kind::Float, 0.0f, 1.0f, 0.0f, 0.0001f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "velocity_to_filter", "v2", Engine::Global, Kind::Float, 0.0f, 1.0f, 0.0f, 0.0001f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "distortion_mix", "v2", Engine::Global, Kind::Float, 0.0f, 1.0f, 0.0f, 0.0001f, 1.8f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+        { "reverb_mix", "v2", Engine::Global, Kind::Float, 0.0f, 1.0f, 0.0f, 0.0001f, 1.0f, nullptr, 0, "", "", "", 0, { -1, 1.0f, 0.0f } },
+    }};
+
+    /** Position of each analog parameter in `params` minus analogBegin: the order of an analog patch. */
+    namespace analog
+    {
+        enum Index : int
+        {
+            osc_1_waveform,
+            osc_2_waveform,
+            osc_mix,
+            osc_2_detune,
+            noise_level,
+            filter_cutoff,
+            filter_resonance,
+            filter_type,
+            amp_attack,
+            amp_decay,
+            amp_sustain,
+            amp_release,
+            filter_env_amount,
+            filter_env_decay,
+            lfo_rate,
+            lfo_to_pitch,
+            lfo_to_cutoff,
+            velocity_to_filter,
+            distortion_mix,
+            reverb_mix,
+            osc_1_coarse,
+            osc_2_coarse,
+            pulse_width,
+            osc_sync,
+            fm_amount,
+            ring_mod,
+            unison_voices,
+            unison_detune,
+            filter_slope,
+            filter_keytrack,
+            filter_env_attack,
+            filter_env_sustain,
+            filter_env_release,
+            velocity_to_amp,
+            pitch_env_amount,
+            pitch_env_decay,
+            lfo_waveform,
+            lfo_delay,
+            lfo_to_amp,
+            lfo_to_pw,
+            chorus_mix,
+            delay_time,
+            delay_feedback,
+            delay_mix,
+            reverb_size,
+            stereo_width,
+        };
+        inline constexpr int count = 46;
+    }
+
     /** Legal value, rounded as JUCE's parameters do: int / choice like juce::roundToInt (halves to even),
         bool like juce::AudioParameterBool (>= half the range), stepped float to the nearest step. */
     inline float snap (const Param& p, float value) noexcept
@@ -351,5 +430,14 @@ namespace HarmoniaCharter
         if (p.v2.source < 0)
             return p.defaultValue;
         return snap (p, p.v2.offset + p.v2.scale * v2Physical[(std::size_t) p.v2.source]);
+    }
+
+    /** Same from a v2 preset: 20 values normalized on the v2 ranges, v2 order. */
+    inline float upgradeFromV2Normalized (const Param& p, const std::array<float, 20>& v2Normalized) noexcept
+    {
+        std::array<float, 20> physical {};
+        for (std::size_t i = 0; i < physical.size(); ++i)
+            physical[i] = fromNormalized (v2Params[i], v2Normalized[i]);
+        return upgradeFromV2 (p, physical);
     }
 }

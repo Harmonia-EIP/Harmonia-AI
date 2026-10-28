@@ -71,6 +71,24 @@ namespace HarmoniaParamsV3
         return layout;
     }
 
+    /** Physical value of every charter parameter for the audio thread (index = position in HarmoniaCharter::params). */
+    struct ParameterRefs
+    {
+        std::array<std::atomic<float>*, HarmoniaCharter::params.size()> values {};
+
+        void bind (juce::AudioProcessorValueTreeState& apvts)
+        {
+            for (std::size_t i = 0; i < values.size(); ++i)
+            {
+                values[i] = apvts.getRawParameterValue (toJuce (HarmoniaCharter::params[i].id));
+                jassert (values[i] != nullptr);
+            }
+        }
+
+        float get (std::size_t index) const noexcept { return values[index]->load (std::memory_order_relaxed); }
+        float analog (int index) const noexcept { return get (HarmoniaCharter::analogBegin + (std::size_t) index); }
+    };
+
     /** After loading a state saved before charter v3 (20 physical values by v2 id): analog engine, v2 rules. */
     inline void applyV2State (juce::AudioProcessorValueTreeState& apvts,
                               const std::array<float, HarmoniaCharter::v2Ids.size()>& v2Physical)

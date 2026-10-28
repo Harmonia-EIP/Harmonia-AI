@@ -1141,8 +1141,154 @@
     }
   },
   "v2_upgrade": {
-    "description": "A v2 preset or plugin state (20 parameters, src/synth/params.py / Harmonia-APP before v3) becomes v3 per analog parameter: v3 = offset + scale * v2[from], on physical values (a JUCE state stores physical values). Parameters without a rule take their default; the engine is analog.",
-    "rule": "v3 = offset + scale * v2[from]"
+    "description": "A v2 preset or plugin state (20 parameters, Harmonia-APP before v3) becomes v3 per analog parameter: v3 = offset + scale * v2[from], on physical values. A JUCE state stores physical values; a v2 preset (no charter_version 3 in its metadata) stores values normalized on the v2 ranges below, read with the same normalization rules. Parameters without a rule take their default; the engine is analog.",
+    "rule": "v3 = offset + scale * v2[from]",
+    "parameters": [
+      {
+        "id": "osc_1_waveform",
+        "kind": "choice",
+        "min": 0,
+        "max": 3
+      },
+      {
+        "id": "osc_2_waveform",
+        "kind": "choice",
+        "min": 0,
+        "max": 3
+      },
+      {
+        "id": "osc_mix",
+        "kind": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.0001
+      },
+      {
+        "id": "osc_2_detune",
+        "kind": "float",
+        "min": 0,
+        "max": 100,
+        "step": 0.01
+      },
+      {
+        "id": "noise_level",
+        "kind": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.0001
+      },
+      {
+        "id": "filter_cutoff",
+        "kind": "float",
+        "min": 20,
+        "max": 20000,
+        "step": 0.0001,
+        "skew": 0.22990456223487854
+      },
+      {
+        "id": "filter_resonance",
+        "kind": "float",
+        "min": 0,
+        "max": 0.95,
+        "step": 0.0001
+      },
+      {
+        "id": "filter_type",
+        "kind": "choice",
+        "min": 0,
+        "max": 2
+      },
+      {
+        "id": "amp_attack",
+        "kind": "float",
+        "min": 1,
+        "max": 5000,
+        "step": 0.0001,
+        "skew": 0.17673879861831665
+      },
+      {
+        "id": "amp_decay",
+        "kind": "float",
+        "min": 10,
+        "max": 5000,
+        "step": 0.0001,
+        "skew": 0.24361039698123932
+      },
+      {
+        "id": "amp_sustain",
+        "kind": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.0001
+      },
+      {
+        "id": "amp_release",
+        "kind": "float",
+        "min": 10,
+        "max": 10000,
+        "step": 0.0001,
+        "skew": 0.22990456223487854
+      },
+      {
+        "id": "filter_env_amount",
+        "kind": "float",
+        "min": -1,
+        "max": 1,
+        "step": 0.0001
+      },
+      {
+        "id": "filter_env_decay",
+        "kind": "float",
+        "min": 10,
+        "max": 5000,
+        "step": 0.0001,
+        "skew": 0.24361039698123932
+      },
+      {
+        "id": "lfo_rate",
+        "kind": "float",
+        "min": 0.1,
+        "max": 20,
+        "step": 0.0001,
+        "skew": 0.2950986623764038
+      },
+      {
+        "id": "lfo_to_pitch",
+        "kind": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.0001
+      },
+      {
+        "id": "lfo_to_cutoff",
+        "kind": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.0001
+      },
+      {
+        "id": "velocity_to_filter",
+        "kind": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.0001
+      },
+      {
+        "id": "distortion_mix",
+        "kind": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.0001,
+        "skew": 1.8
+      },
+      {
+        "id": "reverb_mix",
+        "kind": "float",
+        "min": 0,
+        "max": 1,
+        "step": 0.0001
+      }
+    ]
   },
   "preset_format": {
     "metadata": {

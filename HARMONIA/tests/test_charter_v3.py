@@ -105,6 +105,16 @@ def test_v2_upgrade_rules():
     assert v3["unison_voices"] == 1  # new parameters keep their neutral default
 
 
+def test_v2_presets_are_read_on_the_app_v2_ranges():
+    import numpy as np
+
+    rng = np.random.default_rng(3)
+    for normalized in rng.random((20, 20)):
+        expected = P.from_v2_physical(v2_params.to_physical(normalized))  # the v2 app's own decoding
+        got = C.upgrade_v2_normalized(dict(zip(v2_params.PARAM_NAMES, normalized)))
+        assert [got[n] for n in P.NAMES] == pytest.approx(list(expected), rel=1e-6, abs=1e-6)
+
+
 def test_sound_brief_vocabulary():
     fields = {f["id"]: f for f in C.load().raw["sound_brief"]["fields"]}
     assert fields["family"]["values"] == TYPES
