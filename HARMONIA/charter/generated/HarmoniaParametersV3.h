@@ -15,6 +15,59 @@ namespace HarmoniaParamsV3
         return juce::String::fromUTF8 (text.data(), (int) text.size());
     }
 
+    /** Short unit shown after a value ("cents" -> "ct"...); empty when the number speaks for itself. */
+    inline juce::String shortUnit (std::string_view unit)
+    {
+        if (unit == "Hz" || unit == "ms")
+            return toJuce (unit);
+        if (unit == "cents")
+            return "ct";
+        if (unit == "octaves")
+            return "oct";
+        if (unit == "semitones")
+            return "st";
+        return {};
+    }
+
+    /** Readable value: 2, 1 or 0 decimals by magnitude, kHz / s above 1000, a sign on bipolar parameters. */
+    inline juce::String formatValue (const HarmoniaCharter::Param& p, float value)
+    {
+        auto unit = shortUnit (p.unit);
+        if (p.kind == HarmoniaCharter::Kind::Int)
+        {
+            const int shown = (int) std::lround (value) + p.displayOffset;
+            const auto text = ((float) p.displayOffset + p.min < 0.0f && shown > 0 ? "+" : "") + juce::String (shown);
+            return unit.isEmpty() ? text : text + " " + unit;
+        }
+        if (unit == "Hz" && std::abs (value) >= 1000.0f)
+        {
+            value /= 1000.0f;
+            unit = "kHz";
+        }
+        else if (unit == "ms" && std::abs (value) >= 1000.0f)
+        {
+            value /= 1000.0f;
+            unit = "s";
+        }
+        const float magnitude = std::abs (value);
+        auto text = juce::String (value, magnitude >= 100.0f ? 0 : (magnitude >= 10.0f ? 1 : 2));
+        if (p.min < 0.0f && value > 0.0f)
+            text = "+" + text;
+        return unit.isEmpty() ? text : text + " " + unit;
+    }
+
+    /** Value typed in the host ("1.2 kHz", "450", "1.5 s"). */
+    inline float parseValue (const HarmoniaCharter::Param& p, const juce::String& text)
+    {
+        const auto t = text.trim().toLowerCase();
+        float value = t.getFloatValue();
+        if (t.endsWith ("khz"))
+            value *= 1000.0f;
+        else if (p.unit == "ms" && t.endsWith ("s") && ! t.endsWith ("ms"))
+            value *= 1000.0f;
+        return value;
+    }
+
     inline std::unique_ptr<juce::RangedAudioParameter> makeParameter (const HarmoniaCharter::Param& p)
     {
         using HarmoniaCharter::Kind;
@@ -26,7 +79,10 @@ namespace HarmoniaParamsV3
             case Kind::Float:
                 return std::make_unique<juce::AudioParameterFloat> (
                     id, name, juce::NormalisableRange<float> (p.min, p.max, p.interval, p.skew), p.defaultValue,
-                    juce::AudioParameterFloatAttributes().withLabel (toJuce (p.unit)));
+                    juce::AudioParameterFloatAttributes()
+                        .withLabel (toJuce (p.unit))
+                        .withStringFromValueFunction ([spec = &p] (float value, int) { return formatValue (*spec, value); })
+                        .withValueFromStringFunction ([spec = &p] (const juce::String& text) { return parseValue (*spec, text); }));
 
             case Kind::Int:
             {
@@ -35,7 +91,7 @@ namespace HarmoniaParamsV3
                     id, name, (int) p.min, (int) p.max, (int) p.defaultValue,
                     juce::AudioParameterIntAttributes()
                         .withLabel (toJuce (p.unit))
-                        .withStringFromValueFunction ([offset] (int value, int) { return juce::String (value + offset); })
+                        .withStringFromValueFunction ([spec = &p] (int value, int) { return formatValue (*spec, (float) value); })
                         .withValueFromStringFunction ([offset] (const juce::String& text) { return text.getIntValue() - offset; }));
             }
 

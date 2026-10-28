@@ -185,6 +185,8 @@ optimizer may no longer add absent modules.
   it with `src/synth/engine_v3.py` on real bank presets (C2, C3, C4, perceptual distance). On 80 analog presets:
   median distance 2.55 plugin vs Python, 2.57 between two Python renders (random unison phases, drift, noise);
   all 80 within that spread; level 0.0 dB median, 2.3 dB at worst.
+- Readable values in the plugin: the generated JUCE layout formats every parameter (2, 1 or 0 decimals by
+  magnitude, short units: kHz, ms, s, ct, oct, st; a sign on bipolar ones) and reads typed values ("1.2 kHz").
 - DX7 mode (Harmonia-App#50): `engine_parity.py --dx7 N` rebuilds bank voices from the charter's DX7 values
   through the plugin and renders them with its msfa voice: 300/300 voices byte-identical, samples within 3e-5
   of `src/presets/dx7_render.py` (-90 dB; the plugin frees a voice once it is silent after the release).
