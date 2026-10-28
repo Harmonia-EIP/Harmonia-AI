@@ -177,6 +177,15 @@ optimizer may no longer add absent modules.
   | Prompts 2 | idem | v3.1 generation 2.0, variation 1.5, selection 1.7 |
   | Prompts 3 | idem | curated choice 2.5, v3.0 choice 2.6, light variation 2.1 |
 
+### The v3 engine in the plugin (Harmonia-EIP/Harmonia-App#48, #49)
+- Charter additions for the port: the 20 v2 ranges (a v2 preset, what the v1/v2 models return, is read
+  correctly once the plugin uses the v3 layout), `HarmoniaCharter::analog::Index` and
+  `HarmoniaParamsV3::ParameterRefs` in the generated C++.
+- **`scripts/v3/engine_parity.py`**: builds the plugin's C++ engine (Harmonia-App, `src/engine`) and compares
+  it with `src/synth/engine_v3.py` on real bank presets (C2, C3, C4, perceptual distance). On 80 analog presets:
+  median distance 2.55 plugin vs Python, 2.57 between two Python renders (random unison phases, drift, noise);
+  all 80 within that spread; level 0.0 dB median, 2.3 dB at worst.
+
 ### Charter v3: one source for the plugin, the backend and the AI
 - **`charter/harmonia_v3.json`**: every v3 parameter: `engine`, the 46 analog ones in the AI's vector order, and
   the 145 DX7 ones described once per operator. For each: module, range, curve (`centre`), default, choices,
