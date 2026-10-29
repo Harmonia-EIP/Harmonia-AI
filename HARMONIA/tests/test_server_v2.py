@@ -10,9 +10,9 @@ def v2_client(tmp_path, monkeypatch):
     build_model_dir(tmp_path / "harmonia_v2")
     monkeypatch.setenv("HARMONIA_PUSH_METRICS", "0")
     monkeypatch.setattr(server_module, "V2_MODEL_DIR", tmp_path / "harmonia_v2")
-    server_module._get_runtime.cache_clear()
+    server_module._get_runtime_cached.cache_clear()
     yield server_module.app.test_client()
-    server_module._get_runtime.cache_clear()
+    server_module._get_runtime_cached.cache_clear()
 
 
 # The app's model selector values reach the v2 model.
@@ -56,9 +56,30 @@ def test_v2_rejects_invalid_options(v2_client, extra):
 # Without downloaded model files, v2 answers 503 instead of crashing.
 def test_v2_missing_files_returns_503(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "V2_MODEL_DIR", tmp_path / "missing")
-    server_module._get_runtime.cache_clear()
+    server_module._get_runtime_cached.cache_clear()
     try:
         response = server_module.app.test_client().post("/generate", json={"prompt": "door slam", "model_name": "harmonia_v2"})
         assert response.status_code == 503
     finally:
-        server_module._get_runtime.cache_clear()
+        server_module._get_runtime_cached.cache_clear()
+
+
+# GET /models lists harmonia_v2 next to the .pth models of saved_models/, so the app's model menu offers it.
+def test_models_lists_v2(v2_client, tmp_path, monkeypatch):
+    monkeypatch.setattr(server_module, "SAVED_MODELS_DIR", tmp_path / "saved_models")
+    (tmp_path / "saved_models").mkdir()
+    (tmp_path / "saved_models" / "model_charter_v1.pth").write_bytes(b"")
+    body = v2_client.get("/models").get_json()
+    assert body["count"] == 2
+    by_id = {m["id"]: m for m in body["models"]}
+    assert set(by_id) == {"charter_v1", "harmonia_v2"}
+    assert by_id["harmonia_v2"]["model_version"] == "harmonia_v2"
+    assert by_id["harmonia_v2"]["is_latest"] is False
+
+
+# Without its files, harmonia_v2 is not offered.
+def test_models_without_v2_files(tmp_path, monkeypatch):
+    monkeypatch.setattr(server_module, "V2_MODEL_DIR", tmp_path / "missing")
+    monkeypatch.setattr(server_module, "SAVED_MODELS_DIR", tmp_path / "saved_models")
+    body = server_module.app.test_client().get("/models").get_json()
+    assert body == {"count": 0, "models": []}
