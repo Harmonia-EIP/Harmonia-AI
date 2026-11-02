@@ -2,6 +2,19 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.0.21] - Refine Preset Endpoint
+### Added
+- **`POST /refine-preset` (alias `/ai/refine-preset`)**: the plugin's "refine" mode called this route through the backend, but the AI service did not implement it, so every refine request failed. The route generates a preset for the prompt with the requested model, then puts each locked parameter back to its current value, in `parameters` and in `values`. The response uses the same charter format as `/generate`.
+  - Body: `prompt`, `parameters` (current preset, `{id: 0..1}`), `locked_params` (list of ids, optional), `model_name` / `model_id` (optional, same resolution as `/generate`: an unknown id falls back to the default model).
+  - Returns `400` for an empty prompt, a `parameters` that is not an object of numbers, or a `locked_params` that is not a list of strings. A locked id that the model does not know, or that is missing from `parameters`, is ignored.
+  - Dashboard events from this route use `source: "http-refine"`.
+
+### Changed
+- `scripts/server.py`: the prediction and the response format of `/generate` moved to helpers shared with `/refine-preset`. `/generate` responses are unchanged.
+
+### Tests
+- `tests/test_server.py`: locked parameters are kept and the others match `/generate`, the alias answers in the charter format, unknown locked ids are ignored, empty prompt and malformed payloads return `400`, an unknown model falls back to the default, and an unavailable model returns `503`.
+
 ## [0.0.20] - Preset Generation Outage Fix (transformers v5)
 ### Fixed
 - **AI service returned HTTP 500 on every request since 2026-09-25**: the dependency bump to `transformers==5.10.0` broke encoder loading, because transformers v5 no longer infers the model type from the repo name and `prajjwal1/bert-tiny` ships a `config.json` without `model_type`. Preset generation in the app failed as a result.
