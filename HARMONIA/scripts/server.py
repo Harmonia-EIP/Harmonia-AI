@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 import os
 import json
+import math
 
 import torch
 from flask import Flask, jsonify, request
@@ -300,6 +301,123 @@ def _validate_prompt(payload: dict) -> Tuple[Optional[str], Optional[str]]:
     return prompt, None
 
 
+def _validate_current_parameters(payload: dict) -> Tuple[Optional[dict], Optional[str]]:
+    """Preset courant envoyé par le plugin : {id: valeur normalisée 0..1}."""
+    parameters = payload.get("parameters")
+    if not isinstance(parameters, dict):
+        return None, "'parameters' must be an object."
+
+    current = {}
+    for key, value in parameters.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            return None, f"'parameters.{key}' must be a number."
+        current[str(key)] = round(min(1.0, max(0.0, float(value))), 6)
+    return current, None
+
+
+def _validate_locked_params(payload: dict) -> Tuple[Optional[list], Optional[str]]:
+    locked = payload.get("locked_params", [])
+    if not isinstance(locked, list) or not all(isinstance(key, str) for key in locked):
+        return None, "'locked_params' must be a list of parameter ids."
+    return locked, None
+
+
+def _predict_parameters(
+    runtime: InferenceRuntime, prompt: str, options: Optional[dict] = None
+) -> Tuple[Optional[dict], Optional[dict], Optional[str]]:
+    """Renvoie ({id: valeur 0..1} prédit pour le prompt, infos de génération v2 ou None, message d'erreur ou None).
+
+    options : le corps de la requête ; harmonia_v2 y lit 'mode' et 'variation'."""
+    options = options or {}
+    generation_info = None
+    if getattr(runtime, "v2", None) is not None:
+        mode = options.get("mode")
+        variation = options.get("variation")
+        if mode is not None and mode not in V2_MODES:
+            return None, None, f"'mode' must be one of {', '.join(V2_MODES)}."
+        if variation is not None and (not isinstance(variation, int) or isinstance(variation, bool)):
+            return None, None, "'variation' must be an integer."
+        result = runtime.v2.generate(prompt, mode=mode, variation=variation)
+        param_list = result.values
+        generation_info = {"mode": result.mode, "bank_index": result.bank_index, "similarity": result.similarity}
+    else:
+        # 1. Prepare text
+        tokenized = runtime.tokenizer(prompt, return_tensors="pt", padding=False, truncation=False)
+        token_count = int(tokenized["input_ids"].shape[1])
+        if token_count > runtime.tokenizer_max_length:
+            return None, None, (
+                "Prompt exceeds model token context. "
+                f"Got {token_count} tokens, max {runtime.tokenizer_max_length}."
+            )
+
+        inputs = runtime.tokenizer(
+            prompt,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=runtime.tokenizer_max_length,
+        )
+
+        # 2. Predict
+        with torch.no_grad():
+            prediction = runtime.model(inputs['input_ids'], inputs['attention_mask'])
+        param_list = prediction[0].tolist()
+
+    # 3. Format output
+    if _is_charter(runtime):
+        param_list = normalise_vector(param_list)
+
+    named_parameters = {}
+    for i, key in enumerate(runtime.param_keys):
+        if i < len(param_list):
+            value = float(param_list[i])
+            named_parameters[key] = round(min(1.0, max(0.0, value)), 6)
+    return named_parameters, generation_info, None
+
+
+def _is_charter(runtime: InferenceRuntime) -> bool:
+    return tuple(runtime.param_keys) == tuple(PARAM_NAMES)
+
+
+def _preset_response(
+    runtime: InferenceRuntime, prompt: str, named_parameters: dict, generation_info: Optional[dict] = None
+) -> dict:
+    """Format charte lu par le PresetLoader du plugin."""
+    is_charter = _is_charter(runtime)
+    response = {
+        "metadata": {
+            "name": prompt,
+            "generated_by": "Harmonia-Server",
+            "model_version": runtime.model_version,
+            "model_hash": runtime.model_hash,
+            "charter_version": "1.0" if is_charter else None,
+        },
+        "parameters": named_parameters,
+    }
+
+    if is_charter:
+        response["values"] = [named_parameters[name] for name in PARAM_NAMES]
+        response["charter"] = charter_metadata()
+    if generation_info is not None:
+        response["generation"] = generation_info
+    return response
+
+
+def _publish_preset(runtime: InferenceRuntime, prompt: str, response: dict, source: str) -> None:
+    try:
+        publish_generation(
+            prompt,
+            response["parameters"],
+            response.get("values"),
+            model_version=runtime.model_version,
+            model_hash=runtime.model_hash,
+            charter_version=response["metadata"]["charter_version"],
+            source=source,
+        )
+    except Exception as exc:  # pragma: no cover - best effort
+        app.logger.warning("dashboard publish failed: %s", exc)
+
+
 @app.route("/health", methods=["GET"])
 def health():
     runtime = _get_runtime()
@@ -384,93 +502,55 @@ def generate():
 
     print(f"Received request for: '{prompt}'")
 
-    generation_info = None
-    if getattr(runtime, "v2", None) is not None:
-        mode = data.get("mode")
-        variation = data.get("variation")
-        if mode is not None and mode not in V2_MODES:
-            return jsonify({"error": f"'mode' must be one of {', '.join(V2_MODES)}."}), 400
-        if variation is not None and (not isinstance(variation, int) or isinstance(variation, bool)):
-            return jsonify({"error": "'variation' must be an integer."}), 400
-        result = runtime.v2.generate(prompt, mode=mode, variation=variation)
-        param_list = result.values
-        generation_info = {"mode": result.mode, "bank_index": result.bank_index, "similarity": result.similarity}
-    else:
-        param_list, error_response = _predict_v1(runtime, prompt)
-        if error_response is not None:
-            return error_response
+    named_parameters, generation_info, prediction_error = _predict_parameters(runtime, prompt, data)
+    if prediction_error:
+        return jsonify({"error": prediction_error}), 400
 
-    is_charter = tuple(runtime.param_keys) == tuple(PARAM_NAMES)
-    if is_charter:
-        param_list = normalise_vector(param_list)
-
-    named_parameters = {}
-    for i, key in enumerate(runtime.param_keys):
-        if i < len(param_list):
-            value = float(param_list[i])
-            named_parameters[key] = round(min(1.0, max(0.0, value)), 6)
-
-    response = {
-        "metadata": {
-            "name": prompt,
-            "generated_by": "Harmonia-Server",
-            "model_version": runtime.model_version,
-            "model_hash": runtime.model_hash,
-            "charter_version": "1.0" if is_charter else None,
-        },
-        "parameters": named_parameters,
-    }
-
-    if is_charter:
-        response["values"] = [named_parameters[name] for name in PARAM_NAMES]
-        response["charter"] = charter_metadata()
-    if generation_info is not None:
-        response["generation"] = generation_info
-
-    try:
-        publish_generation(
-            prompt,
-            named_parameters,
-            response.get("values"),
-            model_version=runtime.model_version,
-            model_hash=runtime.model_hash,
-            charter_version="1.0" if is_charter else None,
-            source="http",
-        )
-    except Exception as exc:  # pragma: no cover - best effort
-        app.logger.warning("dashboard publish failed: %s", exc)
-
+    response = _preset_response(runtime, prompt, named_parameters, generation_info)
+    _publish_preset(runtime, prompt, response, source="http")
     return jsonify(response)
 
 
-def _predict_v1(runtime: InferenceRuntime, prompt: str):
-    """Returns (parameter list, None) or (None, error response) for the torch v1 models."""
-    tokenized = runtime.tokenizer(prompt, return_tensors="pt", padding=False, truncation=False)
-    token_count = int(tokenized["input_ids"].shape[1])
-    if token_count > runtime.tokenizer_max_length:
-        return None, (
-            jsonify(
-                {
-                    "error": (
-                        "Prompt exceeds model token context. "
-                        f"Got {token_count} tokens, max {runtime.tokenizer_max_length}."
-                    )
-                }
-            ),
-            400,
-        )
+@app.route("/refine-preset", methods=["POST"])
+@app.route("/ai/refine-preset", methods=["POST"], endpoint="refine_preset_alias")
+def refine_preset():
+    """Génère pour le prompt, puis remet les paramètres verrouillés à leur valeur actuelle."""
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify({"error": "Invalid or missing JSON body."}), 400
 
-    inputs = runtime.tokenizer(
-        prompt,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=runtime.tokenizer_max_length,
-    )
+    if not isinstance(data, dict):
+        return jsonify({"error": "JSON body must be an object."}), 400
+    prompt, validation_error = _validate_prompt(data)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
 
-    with torch.no_grad():
-        prediction = runtime.model(inputs["input_ids"], inputs["attention_mask"])
-    return prediction[0].tolist(), None
+    current_parameters, validation_error = _validate_current_parameters(data)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    locked_params, validation_error = _validate_locked_params(data)
+    if validation_error:
+        return jsonify({"error": validation_error}), 400
+
+    runtime = _get_runtime(_resolve_model_key(data))
+    if not runtime.ready:
+        return jsonify({"error": "Model unavailable. Train and save model first."}), 503
+
+    print(f"Received refine request for: '{prompt}' ({len(locked_params)} locked)")
+
+    named_parameters, generation_info, prediction_error = _predict_parameters(runtime, prompt, data)
+    if prediction_error:
+        return jsonify({"error": prediction_error}), 400
+
+    # Un id verrouillé inconnu du modèle ou absent du preset courant est ignoré.
+    for key in locked_params:
+        if key in named_parameters and key in current_parameters:
+            named_parameters[key] = current_parameters[key]
+
+    response = _preset_response(runtime, prompt, named_parameters, generation_info)
+    _publish_preset(runtime, prompt, response, source="http-refine")
+    return jsonify(response)
 
 
 @app.route("/charter", methods=["GET"])

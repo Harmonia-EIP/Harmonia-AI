@@ -1,6 +1,8 @@
 import torch
 import json
 
+import pytest
+
 from scripts import server as server_module
 
 
@@ -160,6 +162,134 @@ def test_generate_uses_runtime_parameter_keys(monkeypatch):
 
     assert response.status_code == 200
     assert response.get_json()["parameters"] == {"cutoff": 0.2, "attack": 0.9}
+
+
+CURRENT_PRESET = {name: 0.5 for name in server_module.PARAM_KEYS}
+
+
+# /refine-preset should keep locked parameters at their current value and regenerate the others.
+def test_refine_keeps_locked_parameters(monkeypatch):
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
+    client = server_module.app.test_client()
+    generated = client.post("/generate", json={"prompt": "Bright lead"}).get_json()["parameters"]
+
+    locked = ["filter_cutoff", "reverb_mix"]
+    current = dict(CURRENT_PRESET, filter_cutoff=0.123, reverb_mix=0.987)
+    response = client.post(
+        "/refine-preset",
+        json={"prompt": "Bright lead", "parameters": current, "locked_params": locked},
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["parameters"]["filter_cutoff"] == 0.123
+    assert body["parameters"]["reverb_mix"] == 0.987
+    unlocked = [name for name in server_module.PARAM_KEYS if name not in locked]
+    assert {name: body["parameters"][name] for name in unlocked} == {name: generated[name] for name in unlocked}
+    assert body["values"] == [body["parameters"][name] for name in server_module.PARAM_KEYS]
+
+
+# /ai/refine-preset should answer in the same charter format as /ai/generate-preset.
+def test_refine_alias_returns_charter_format(monkeypatch):
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
+    client = server_module.app.test_client()
+
+    response = client.post(
+        "/ai/refine-preset",
+        json={"prompt": "Darker pad", "parameters": CURRENT_PRESET, "locked_params": []},
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    generated = client.post("/ai/generate-preset", json={"prompt": "Darker pad"}).get_json()
+    assert body.keys() == generated.keys()
+    assert body["metadata"] == generated["metadata"]
+    assert body["parameters"] == generated["parameters"]
+
+
+# /refine-preset should ignore locked ids the model does not know or the current preset does not contain.
+def test_refine_ignores_unknown_locked_parameters(monkeypatch):
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
+    client = server_module.app.test_client()
+    generated = client.post("/generate", json={"prompt": "Pluck"}).get_json()["parameters"]
+
+    current = {name: value for name, value in CURRENT_PRESET.items() if name != "lfo_rate"}
+    response = client.post(
+        "/refine-preset",
+        json={"prompt": "Pluck", "parameters": current, "locked_params": ["not_a_param", "lfo_rate"]},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["parameters"] == generated
+
+
+# /refine-preset should return 400 for an empty or whitespace-only prompt.
+def test_refine_rejects_empty_prompt(monkeypatch):
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
+    client = server_module.app.test_client()
+
+    response = client.post("/refine-preset", json={"prompt": "   ", "parameters": CURRENT_PRESET})
+
+    assert response.status_code == 400
+    assert "No prompt provided" in response.get_json()["error"]
+
+
+# /refine-preset should return 400 when the current preset or the locked ids are malformed.
+@pytest.mark.parametrize(
+    "extra, message",
+    [
+        ({}, "'parameters' must be an object"),
+        ({"parameters": [0.5, 0.5]}, "'parameters' must be an object"),
+        ({"parameters": {"filter_cutoff": "high"}}, "must be a number"),
+        ({"parameters": {"filter_cutoff": True}}, "must be a number"),
+        ({"parameters": {}, "locked_params": "filter_cutoff"}, "must be a list"),
+        ({"parameters": {}, "locked_params": [3]}, "must be a list"),
+    ],
+)
+def test_refine_rejects_invalid_payload(monkeypatch, extra, message):
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=True))
+    client = server_module.app.test_client()
+
+    response = client.post("/refine-preset", json={"prompt": "Pad", **extra})
+
+    assert response.status_code == 400
+    assert message in response.get_json()["error"]
+
+
+# /refine-preset should fall back to the default model for an unknown model id, like /generate.
+def test_refine_unknown_model_uses_default(monkeypatch):
+    requested = []
+
+    def fake_get_runtime(model_key=None):
+        requested.append(model_key)
+        return FakeRuntime(ready=True)
+
+    monkeypatch.setattr(server_module, "_get_runtime", fake_get_runtime)
+    monkeypatch.setattr(server_module, "_discover_models", lambda: {"charter_v1": {}})
+    client = server_module.app.test_client()
+
+    unknown = client.post(
+        "/refine-preset",
+        json={"prompt": "Pad", "parameters": CURRENT_PRESET, "model_name": "does_not_exist"},
+    )
+    known = client.post(
+        "/refine-preset",
+        json={"prompt": "Pad", "parameters": CURRENT_PRESET, "model_name": "charter_v1"},
+    )
+
+    assert unknown.status_code == 200
+    assert known.status_code == 200
+    assert requested == [server_module.DEFAULT_MODEL_KEY, "charter_v1"]
+
+
+# /refine-preset should return 503 when the runtime's model is not ready.
+def test_refine_returns_503_when_model_unavailable(monkeypatch):
+    monkeypatch.setattr(server_module, "_get_runtime", lambda model_key=None: FakeRuntime(ready=False))
+    client = server_module.app.test_client()
+
+    response = client.post("/refine-preset", json={"prompt": "Deep bass", "parameters": CURRENT_PRESET})
+
+    assert response.status_code == 503
 
 
 # /metrics/latest should return the most recent benchmark entry and its evaluation report.

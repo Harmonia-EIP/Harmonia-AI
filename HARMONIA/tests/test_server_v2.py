@@ -53,6 +53,35 @@ def test_v2_rejects_invalid_options(v2_client, extra):
     assert response.status_code == 400
 
 
+# /refine-preset with the v2 model: the locked parameters keep their current value, the others come from v2.
+def test_refine_with_v2_keeps_locked_parameters(v2_client):
+    generated = v2_client.post("/generate", json={"prompt": "door slam", "model_name": "harmonia_v2"}).get_json()
+    current = {name: 0.123 for name in PARAM_NAMES}
+    response = v2_client.post(
+        "/refine-preset",
+        json={"prompt": "door slam", "model_name": "harmonia_v2", "parameters": current,
+              "locked_params": ["filter_cutoff", "reverb_mix"]},
+    )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["parameters"]["filter_cutoff"] == 0.123
+    assert body["parameters"]["reverb_mix"] == 0.123
+    for name in PARAM_NAMES:
+        if name not in ("filter_cutoff", "reverb_mix"):
+            assert body["parameters"][name] == generated["parameters"][name]
+    assert body["values"] == [body["parameters"][name] for name in PARAM_NAMES]
+    assert body["generation"]["mode"] == "retrieval"
+
+
+# Invalid v2 options are rejected by /refine-preset too.
+def test_refine_with_v2_rejects_invalid_options(v2_client):
+    response = v2_client.post(
+        "/refine-preset",
+        json={"prompt": "door slam", "model_name": "harmonia_v2", "parameters": {}, "variation": "abc"},
+    )
+    assert response.status_code == 400
+
+
 # Without downloaded model files, v2 answers 503 instead of crashing.
 def test_v2_missing_files_returns_503(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "V2_MODEL_DIR", tmp_path / "missing")
