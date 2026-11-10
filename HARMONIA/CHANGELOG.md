@@ -14,6 +14,7 @@ All notable changes to the **Harmonia** project will be documented in this file.
   - retrieval priors: near-inaudible presets excluded, CSLS hub penalty tuned on FSD50K eval;
   - ONNX export with per-channel int8 quantization (160 MB total, encoder cosine to fp32 ≥ 0.999).
 - **`harmonia_v2` model served by `scripts/server.py`** (`model_name` `harmonia_v2`, aliases `model-3`, `v2`, `3`) with ONNX Runtime only: 0.4 s load, ~8 ms per request on CPU. Modes `retrieval` (default), `hybrid`, `neural`; `variation` for alternative presets. Same response format as v1 plus `generation`.
+- **`/refine-preset` with `harmonia_v2`**: the route added on `dev` (0.0.21) also answers for the v2 model, with the same `mode` / `variation` options as `/generate`.
 - **Release distribution**: `scripts/v2/package_release.py` and `scripts/v2/fetch_model.py` (GitHub release asset pinned by tag + sha256 in `models/release.json`); the Dockerfile fetches it at build time.
 - **Benchmark with an independent judge** (`scripts/v2/benchmark_*.py`): 70 prompts in English and hand-written French, held out of all training data, scored by Microsoft CLAP 2023 against the text and against real FSD50K eval recordings. Listening page generator (`scripts/v2/listening_page.py`).
 
@@ -29,6 +30,19 @@ v2 beats today's v1 by +0.18 (EN) and +0.23 (FR) on the text score (95% CI exclu
 
 ### Changed
 - Requirements: `onnxruntime==1.30.0` and `tokenizers==0.23.2` for serving; `onnx` and `numba` for CI; new `requirements-train.txt`.
+
+## [0.0.21] - Refine Preset Endpoint
+### Added
+- **`POST /refine-preset` (alias `/ai/refine-preset`)**: the plugin's "refine" mode called this route through the backend, but the AI service did not implement it, so every refine request failed. The route generates a preset for the prompt with the requested model, then puts each locked parameter back to its current value, in `parameters` and in `values`. The response uses the same charter format as `/generate`.
+  - Body: `prompt`, `parameters` (current preset, `{id: 0..1}`), `locked_params` (list of ids, optional), `model_name` / `model_id` (optional, same resolution as `/generate`: an unknown id falls back to the default model).
+  - Returns `400` for an empty prompt, a `parameters` that is not an object of numbers, or a `locked_params` that is not a list of strings. A locked id that the model does not know, or that is missing from `parameters`, is ignored.
+  - Dashboard events from this route use `source: "http-refine"`.
+
+### Changed
+- `scripts/server.py`: the prediction and the response format of `/generate` moved to helpers shared with `/refine-preset`. `/generate` responses are unchanged.
+
+### Tests
+- `tests/test_server.py`: locked parameters are kept and the others match `/generate`, the alias answers in the charter format, unknown locked ids are ignored, empty prompt and malformed payloads return `400`, an unknown model falls back to the default, and an unavailable model returns `503`.
 
 ## [0.0.20] - Preset Generation Outage Fix (transformers v5)
 ### Fixed
