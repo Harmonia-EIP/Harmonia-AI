@@ -2,6 +2,35 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.3.0] - Harmonia v3 in the server: generation and refine (branch `research/ai-v3-presets`)
+The v3 models were only used by offline scripts. The server now answers with them, in the charter-v3
+format the plugin of the same branch plays (#32). Details: [V3.md](V3.md).
+
+### Added
+- **v3 run time (`src/v3/inference.py`)**: prompt -> charter-v3 preset with trained weights only (no preset
+  bank, no recording). Each generator (analog engine, DX7 mode) draws candidates for the sound the prompt
+  asks for, Harmonia plays them, CLAP listens, and the closest one is polished by a short search around it
+  (variations drawn by the generator and small moves of the settings, each played and heard; a variation is
+  kept only when it is closer to the prompt). About 2 s per prompt on a laptop CPU, no GPU.
+- **`harmonia_v3` in `scripts/server.py`**: `model_name` `harmonia_v3` (aliases `v3`, `model-4`, `4`), listed
+  by `GET /models` when its files are installed. `/generate` takes `variation`; `GET /charter/v3` serves the
+  charter. `HARMONIA_DEFAULT_MODEL=harmonia_v3` makes it the model behind `latest`.
+- **Refine for v3 (`/refine-preset`)**: instead of generating again and putting the locks back (v1, #26), it
+  starts from the plugin's current preset and searches around it: a variation is kept when it is closer to
+  the prompt and still sounds like the preset it started from. The engine is kept, locked parameters come
+  back exactly as sent, tunings / algorithm / ratios are held unless `strength` (0..1, default 0.5) is above
+  0.75. A v1/v2 preset is accepted and converted with the charter's rules. About 1.5 s per click.
+- **Locked values in the generator (`src/v3/diffusion.py`)**: `sample(..., keep=mask)` draws the free
+  values so that they fit the kept ones.
+- **CLAP audio tower alone (`src/v3/listener.py`)**: the server only listens; same embeddings as the
+  training embedder (cosine 1.0000), read from the model directory when present.
+
+### Tests
+- `tests/test_v3_inference.py`, `tests/test_server_v3.py` with a tiny offline model (`tests/v3_fixtures.py`):
+  valid charter-v3 presets, repeatable generations, variations, locks returned exactly (analog and DX7),
+  pitch structure held, v2 presets accepted, invalid options (400), missing files (503), default-model
+  override.
+
 ## [0.2.0] - Harmonia v3 research (prerelease `ai-v3.0.0`, branch `research/ai-v3-presets`, not to be merged)
 Goal: generate presets from text with an AI trained only on real, human-made presets and human-written
 text (no generated training data), on a richer engine. Progress is checked by ear on a listening page

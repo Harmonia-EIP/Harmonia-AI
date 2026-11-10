@@ -79,21 +79,29 @@ class Diffusion:
     @torch.no_grad()
     def sample(self, cond: torch.Tensor, steps: int = 50, guidance: float = 2.0,
                generator: torch.Generator | None = None, start: torch.Tensor | None = None,
-               strength: float = 1.0) -> torch.Tensor:
+               strength: float = 1.0, keep: torch.Tensor | None = None) -> torch.Tensor:
         """DDIM (eta 0) with classifier-free guidance; cond is (n, cond_dim).
 
         With `start` (n, dim) - real presets - the walk begins from them noised to `strength` (0..1) of the
         schedule instead of from pure noise: a variation that keeps more of the preset the lower it is.
+        With `keep` (a boolean mask over the dim values, needs `start`), those values follow `start` at every
+        step and come out unchanged: the others are drawn to fit them (locked parameters of a refine).
         """
+        if keep is not None and start is None:
+            raise ValueError("keep needs start")
         device = cond.device
         n = cond.shape[0]
         ac = self.alphas_cumprod.to(device)
         x = torch.randn((n, self.model.dim), device=device, generator=generator)
+        noise = x
         top = int(round(strength * (STEPS - 1)))
         times = torch.linspace(top, 0, max(2, int(round(steps * strength))), device=device).long()
         steps = len(times)
         if start is not None:
-            x = ac[times[0]].sqrt() * start.to(device) + (1 - ac[times[0]]).sqrt() * x
+            start = start.to(device)
+            x = ac[times[0]].sqrt() * start + (1 - ac[times[0]]).sqrt() * noise
+        if keep is not None:
+            keep = keep.to(device)
         null = self.model.null[None, :].expand_as(cond)
         for k, t in enumerate(times):
             tt = t.repeat(n)
@@ -104,4 +112,6 @@ class Diffusion:
             x0 = ((x - (1 - a).sqrt() * eps) / a.sqrt()).clamp(-1.5, 1.5)
             a_next = ac[times[k + 1]] if k + 1 < steps else torch.tensor(1.0, device=device)
             x = a_next.sqrt() * x0 + (1 - a_next).sqrt() * eps
+            if keep is not None:
+                x = torch.where(keep[None, :], a_next.sqrt() * start + (1 - a_next).sqrt() * noise, x)
         return x
