@@ -2,8 +2,9 @@
 
 Generate. The prompt goes through the multilingual text encoder and the prior to the sound it asks for (a
 point in CLAP's audio space). Each generator (analog engine, DX7 mode) draws candidates for that sound;
-Harmonia plays them and CLAP listens. The closest one is then polished: a short search around it (small
-moves of its settings, each played and heard) keeps what brings it closer to the prompt.
+Harmonia plays them and CLAP listens. The closest analog one is then polished: a short search around it
+(small moves of its settings, each played and heard) keeps what brings it closer to the prompt. The
+closest of the polished analog preset and the best DX7 draw is the answer.
 
 Refine. Same search, starting from the preset the user has: a variation is kept only when it is closer to
 the prompt and still sounds like the preset it started from, so the sound is kept and moves towards the
@@ -47,6 +48,7 @@ MAX_TOKENS = 64  # the text student reads this many tokens of a prompt (src/v2/t
 # at strength 0 and at strength 1. Two renders of one preset an octave apart are around 0.6.
 KEEP_AT_ZERO, KEEP_AT_ONE = 0.95, 0.45
 STRUCTURE_FREE = 0.75
+POLISHED = "analog"  # the engine whose draws the search improves after a generation
 
 # Analog settings a local search may switch (index -> legal values); the others move continuously.
 # The coarse tunings only move by octaves: any other interval would transpose or detune the sound.
@@ -413,31 +415,38 @@ class HarmoniaV3:
     # --- the two requests ---------------------------------------------------------------------------------
 
     def generate(self, prompt: str, variation: int = 0) -> Result:
-        """Best preset for the prompt; `variation` > 0 gives other answers to the same prompt."""
+        """Best preset for the prompt; `variation` > 0 gives other answers to the same prompt.
+
+        Each engine's closest draw is kept. The analog one is then polished by the search, and the engines are
+        compared after that. DX7 draws are left as drawn: on the benchmark the search raised their similarity
+        for CLAP but not for an independent judge, with or without their structure held (CHANGELOG 0.3.2),
+        where it does help analog presets."""
         target = self.target(prompt)
         seed = self.seed_of(prompt, variation)
-        best: Optional[Tuple[float, str, np.ndarray, np.ndarray]] = None
-        scores: Dict[str, List[float]] = {}
+        best: Dict[str, Tuple[float, np.ndarray, np.ndarray]] = {}
+        heard = 0
         for engine in self.engines:
             vectors = self._draw(engine, target, self.settings.candidates, seed)
             emb, audible = self.hear(engine, vectors)
+            heard += len(vectors)
             sims = np.where(audible, emb @ target, -np.inf)
-            scores[engine] = [round(float(s), 4) for s in sims if np.isfinite(s)]
             k = int(np.argmax(sims))
-            if np.isfinite(sims[k]) and (best is None or sims[k] > best[0]):
-                best = (float(sims[k]), engine, vectors[k], emb[k])
-        if best is None:
+            if np.isfinite(sims[k]):
+                best[engine] = (float(sims[k]), vectors[k], emb[k])
+        if not best:
             raise RuntimeError("no audible candidate")
-        drawn_similarity, engine, vector, emb = best
-        heard = sum(len(v) for v in scores.values())
-        if self.settings.polish_rounds > 0:
-            vector, emb, more = self._search(engine, vector, emb, target, self.settings.polish_rounds, seed,
+        drawn = {engine: round(sim, 4) for engine, (sim, _, _) in best.items()}
+        if self.settings.polish_rounds > 0 and POLISHED in best:
+            _, vector, emb = best[POLISHED]
+            vector, emb, more = self._search(POLISHED, vector, emb, target, self.settings.polish_rounds, seed,
                                              np.zeros(len(vector), dtype=bool), strength=0.5)
             heard += more
-        similarity = float(emb @ target)
+            best[POLISHED] = (float(emb @ target), vector, emb)
+        engine = max(best, key=lambda name: best[name][0])
+        similarity, vector, emb = best[engine]
         return Result(self._preset(engine, vector, prompt), engine, similarity,
-                      {"engine": engine, "similarity": round(similarity, 4),
-                       "drawn_similarity": round(drawn_similarity, 4), "variation": variation, "heard": heard})
+                      {"engine": engine, "similarity": round(similarity, 4), "drawn_similarity": drawn[engine],
+                       "drawn": drawn, "variation": variation, "heard": heard})
 
     def _refined_preset(self, engine: str, vector: np.ndarray, name: str, parameters: Mapping[str, float],
                         locked: Sequence[str]) -> Dict[str, object]:

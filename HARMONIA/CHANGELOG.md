@@ -2,6 +2,54 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.3.2] - Harmonia v3.3: sound effects learnt from real recordings (branch `research/ai-v3-presets`)
+"Porte qui claque" answered a telephone tone: the banks the generators learnt from are musical, they had
+never seen a sound-effect preset (#33). Details: [V3.md](V3.md).
+
+### Added
+- **Presets that imitate real recordings (`scripts/v3/match_recordings.py`)**: for FSD50K recordings (CC0
+  and CC BY only, human voice classes left out, up to 8 per class in turn), a search on the analog engine
+  that plays, listens and keeps what gets closer by two measures at once: CLAP similarity to the recording
+  and the perceptual distance of `src/presets/perceptual.py`. On 24 recordings, similarity to the real sound
+  for an independent judge: 0.30 with the perceptual distance alone, 0.42 with CLAP alone, 0.46 with both.
+  The recordings are never copied: one line of synthesizer settings each, with title, labels, licence and
+  author. 576 recordings imitated so far (of 1,295 chosen; the run resumes), 388 kept (CLAP similarity >=
+  0.45 and perceptual distance <= 30). Noisy textures come out best (thunder, waves, fan, tambourine), short
+  structured impacts worst (slam, knock, camera).
+- **Analog generator retrained with them** (`train_generator_v3.py --only analog --recordings ...`): 2,117
+  bank presets + 388 imitations; prior and DX7 generator unchanged.
+- **Benchmark with an independent judge** (`scripts/v3/benchmark_v3.py`, `benchmark_judge_v3.py`): Malo's 18
+  prompts and the 165 non-voice class names of FSD50K's eval split; Microsoft CLAP 2023 (never used to train
+  or to search) scores each sound against the prompt (text) and against real eval recordings of the class
+  (real). `--refine-from` measures refine clicks, `listening_prompts.py --bench` builds the blind page.
+
+### Changed
+- **Generation**: only the analog draw is polished by the search, and the engine is chosen after. On DX7
+  voices the search raised CLAP's similarity (+0.042) but not the judge's (+0.002 text, +0.004 real), and
+  holding their structure as a refine does changed nothing; on analog presets the gain is real (+0.018,
+  +0.021).
+- `export_model.py --generator data/v3/generator_sfx --version harmonia_v3.3` ships this generator.
+
+### Results (independent judge, 183 prompts)
+| System | Malo's prompts, text | FSD50K classes, text | FSD50K classes, real |
+|---|---|---|---|
+| v3.0 (release `ai-v3.0.0`: best of 8 draws per engine) | 0.125 | 0.063 | 0.303 |
+| v3.0 + search after the draw | 0.104 | 0.078 | 0.317 |
+| + 212 imitations | 0.119 | 0.097 | 0.347 |
+| + 388 imitations | 0.139 | 0.102 | 0.350 |
+| **v3.3**: 388 imitations, search on analog only | **0.168** | **0.103** | **0.352** |
+| real recordings of the class | | | 0.714 |
+
+v3.3 against v3.0, paired over the prompts: text +0.041 (95 % CI +0.028 .. +0.053), real +0.049 (+0.034 ..
++0.065). Largest gains on glass (0.44 -> 0.69), shatter (0.33 -> 0.62), knock (0.24 -> 0.49), rain (0.08 ->
+0.35); "slam" does not move (0.24 -> 0.21): a door slam is still out of reach of this engine. Three refine
+clicks with the same prompt add +0.014 text and +0.015 real (CI above 0), on DX7 voices as well.
+Malo's 18 prompts are too few to conclude alone: the blind listening round p4 (v3.0, v3.3, v3.3 after three
+refine clicks) is the judge that counts.
+
+### Fixed
+- `train_generator_v3.py` looked for the FSD50K embeddings at a path of the removed v3 worktree.
+
 ## [0.3.1] - Refine follows comparatives ("plus sombre", "more reverb") (branch `research/ai-v3-presets`)
 ### Fixed
 - **Relative refine prompts went the wrong way.** CLAP hears what a sound is, not how it compares with

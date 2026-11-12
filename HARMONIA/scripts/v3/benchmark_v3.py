@@ -79,6 +79,7 @@ def main() -> int:
     parser.add_argument("--refine-from", default=None,
                         help="instead of generating: refine each preset of that system with its own prompt")
     parser.add_argument("--clicks", type=int, default=3, help="with --refine-from: refine requests in a row")
+    parser.add_argument("--only-set", choices=("malo", "fsd"), default=None, help="one set of prompts only")
     args = parser.parse_args()
 
     from src.v3.inference import HarmoniaV3, Settings
@@ -91,6 +92,8 @@ def main() -> int:
     todo = prompts(args.fsd50k, args.classes)
     if args.refine_from:
         todo = json.loads((args.out / args.refine_from / "generations.json").read_text(encoding="utf-8"))
+    if args.only_set:
+        todo = [row for row in todo if row["set"] == args.only_set]
     for i, row in enumerate(todo):
         t = time.time()
         if args.refine_from:

@@ -19,20 +19,15 @@ its title, labels, licence and author (data/v3/matched_fsd/, not in git).
 
 from __future__ import annotations
 
+import argparse
+import json
+import multiprocessing as mp
 import os
+import sys
+import time
+from pathlib import Path
 
-for _var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
-             "NUMEXPR_NUM_THREADS", "NUMBA_NUM_THREADS"):
-    os.environ.setdefault(_var, "1")
-
-import argparse  # noqa: E402
-import json  # noqa: E402
-import multiprocessing as mp  # noqa: E402
-import sys  # noqa: E402
-import time  # noqa: E402
-from pathlib import Path  # noqa: E402
-
-import numpy as np  # noqa: E402
+import numpy as np
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 if str(BASE_DIR) not in sys.path:
@@ -137,6 +132,13 @@ def main() -> int:
     parser.add_argument("--max-new", type=int, default=0, help="stop after this many new recordings (0: all)")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
+
+    # One thread per rendering worker (they inherit the environment): numpy/Accelerate and numba would
+    # otherwise each start a thread per core in every worker. Set here, not at import, so that importing this
+    # module (tests) leaves the process alone.
+    for var in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
+                "NUMEXPR_NUM_THREADS", "NUMBA_NUM_THREADS"):
+        os.environ.setdefault(var, "1")
 
     import torch
 
