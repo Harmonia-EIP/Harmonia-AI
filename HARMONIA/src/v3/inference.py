@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
@@ -130,6 +131,9 @@ class Settings:
     refine_rounds: int = 3
     population: int = 8  # sounds played and heard per search round
     strength: float = 0.5  # refine: 0 barely moves the sound, 1 lets it go far towards the prompt
+    # Seconds a request should take on this machine (0: no limit). Every sound costs a render and a listen;
+    # the run time measures that cost and draws fewer candidates / searches fewer rounds on a slow machine.
+    time_budget: float = 0.0
 
 
 @dataclass
@@ -179,6 +183,7 @@ class HarmoniaV3:
 
             listener = ClapListener(self.model_dir, self.device)
         self.listener = listener
+        self.cost = 0.0  # seconds to play and hear one sound on this machine (measured, smoothed)
         self._discrete = {P.INDEX[name]: values for name, values in _ANALOG_DISCRETE.items()}
         self._dx7_nudge = _dx7_nudge_mask()
 
@@ -217,13 +222,35 @@ class HarmoniaV3:
              ) -> Tuple[np.ndarray, np.ndarray]:
         """Each vector played and heard: (unit CLAP vectors (n, 512), audible (n,)). With a `measures` list,
         the measures of each sound (src/v3/directives.py) are appended to it."""
+        started = time.perf_counter()
         audio = np.nan_to_num(self.render(engine, vectors))
         peak = np.abs(audio).reshape(len(vectors), -1).max(axis=1)
         flat = list(audio.reshape(-1, audio.shape[-1]).astype(np.float32))
         emb = normalize(self.listener.embed_audio(flat)).reshape(len(vectors), len(NOTES), -1)
         if measures is not None:
             measures.extend(D.measure_notes(notes) for notes in audio)
+        each = (time.perf_counter() - started) / max(1, len(vectors))
+        self.cost = each if self.cost == 0.0 else 0.7 * self.cost + 0.3 * each
         return normalize(emb.mean(axis=1)), peak >= SILENT
+
+    def warm_up(self) -> float:
+        """Play and hear two sounds per engine: compiles the engine, loads every weight and measures what a
+        sound costs here, so the first request is not the one that pays for it. Returns that cost (seconds)."""
+        for engine in self.engines:
+            dim = codecs.ANALOG_DIM if engine == "analog" else codecs.DX7_DIM
+            self.hear(engine, np.zeros((2, dim), dtype=np.float32))
+        self.cost = 0.0  # the first calls include compilation: measure again
+        for engine in self.engines:
+            dim = codecs.ANALOG_DIM if engine == "analog" else codecs.DX7_DIM
+            self.hear(engine, np.zeros((2, dim), dtype=np.float32))
+        self.target("warm up")
+        return self.cost
+
+    def _affordable(self, wanted: int, sounds_each: int, seconds: float, at_least: int) -> int:
+        """How many of `wanted` steps of `sounds_each` sounds fit in `seconds` on this machine."""
+        if self.settings.time_budget <= 0 or self.cost <= 0:
+            return wanted
+        return int(min(wanted, max(at_least, seconds / (self.cost * sounds_each))))
 
     def _draw(self, engine: str, target: np.ndarray, n: int, seed: int, start: Optional[np.ndarray] = None,
               strength: float = 1.0, keep: Optional[np.ndarray] = None) -> np.ndarray:
@@ -421,12 +448,16 @@ class HarmoniaV3:
         compared after that. DX7 draws are left as drawn: on the benchmark the search raised their similarity
         for CLAP but not for an independent judge, with or without their structure held (CHANGELOG 0.3.2),
         where it does help analog presets."""
+        started = time.perf_counter()
+        budget = self.settings.time_budget
         target = self.target(prompt)
         seed = self.seed_of(prompt, variation)
         best: Dict[str, Tuple[float, np.ndarray, np.ndarray]] = {}
         heard = 0
+        # half of the time for the draws of all engines, the rest for the search
+        candidates = self._affordable(self.settings.candidates, len(self.engines), 0.5 * budget, at_least=2)
         for engine in self.engines:
-            vectors = self._draw(engine, target, self.settings.candidates, seed)
+            vectors = self._draw(engine, target, candidates, seed)
             emb, audible = self.hear(engine, vectors)
             heard += len(vectors)
             sims = np.where(audible, emb @ target, -np.inf)
@@ -436,9 +467,11 @@ class HarmoniaV3:
         if not best:
             raise RuntimeError("no audible candidate")
         drawn = {engine: round(sim, 4) for engine, (sim, _, _) in best.items()}
-        if self.settings.polish_rounds > 0 and POLISHED in best:
+        rounds = self._affordable(self.settings.polish_rounds, self.settings.population,
+                                  budget - (time.perf_counter() - started), at_least=0)
+        if rounds > 0 and POLISHED in best:
             _, vector, emb = best[POLISHED]
-            vector, emb, more = self._search(POLISHED, vector, emb, target, self.settings.polish_rounds, seed,
+            vector, emb, more = self._search(POLISHED, vector, emb, target, rounds, seed,
                                              np.zeros(len(vector), dtype=bool), strength=0.5)
             heard += more
             best[POLISHED] = (float(emb @ target), vector, emb)
@@ -446,7 +479,8 @@ class HarmoniaV3:
         similarity, vector, emb = best[engine]
         return Result(self._preset(engine, vector, prompt), engine, similarity,
                       {"engine": engine, "similarity": round(similarity, 4), "drawn_similarity": drawn[engine],
-                       "drawn": drawn, "variation": variation, "heard": heard})
+                       "drawn": drawn, "variation": variation, "heard": heard,
+                       "seconds": round(time.perf_counter() - started, 2)})
 
     def _refined_preset(self, engine: str, vector: np.ndarray, name: str, parameters: Mapping[str, float],
                         locked: Sequence[str]) -> Dict[str, object]:
@@ -461,6 +495,7 @@ class HarmoniaV3:
     def refine(self, prompt: str, parameters: Mapping[str, float], locked: Sequence[str] = (),
                strength: Optional[float] = None) -> Result:
         """The current preset moved towards the prompt; locked parameters keep their value exactly."""
+        started = time.perf_counter()
         strength = self.settings.strength if strength is None else min(1.0, max(0.0, float(strength)))
         engine, start = self.read_current(parameters)
         if engine not in self.models:
@@ -480,8 +515,9 @@ class HarmoniaV3:
         start_emb = start_emb[0]
         # how much of the current sound must remain (a silent preset has no sound to keep)
         floor = KEEP_AT_ZERO - (KEEP_AT_ZERO - KEEP_AT_ONE) * strength if audible[0] else -1.0
-        vector, emb, heard = self._search(engine, start, start_emb, target, self.settings.refine_rounds, seed, keep,
-                                          strength, floor)
+        rounds = self._affordable(self.settings.refine_rounds, self.settings.population,
+                                  self.settings.time_budget - (time.perf_counter() - started), at_least=1)
+        vector, emb, heard = self._search(engine, start, start_emb, target, rounds, seed, keep, strength, floor)
         preset = self._refined_preset(engine, vector, prompt, parameters, locked)
         before, after = float(start_emb @ target), float(emb @ target)
         return Result(preset, engine, after,

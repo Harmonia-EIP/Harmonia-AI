@@ -62,3 +62,4 @@ metrics_dashboard/index.json
 metrics_dashboard/__pycache__/
 # Allow source files of the dashboard (index.html, receiver.php, api.php,
 # .htaccess, README.md, push_metrics.*, history_metrics.json) by NOT listing them.
+.venv-judge/

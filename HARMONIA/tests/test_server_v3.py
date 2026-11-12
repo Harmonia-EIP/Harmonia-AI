@@ -139,3 +139,20 @@ def test_refine_with_v3_follows_a_comparative(v3_client):
     assert body["generation"]["directives"] == ["brightness-"]
     assert body["parameters"]["filter_cutoff"] < current["filter_cutoff"]
     assert charter_v3.validate_preset(body) == []
+
+
+# The warm-up loads the model once, plays a few sounds and leaves the server answering.
+def test_warm_up_prepares_v3(v3_client):
+    server_module._warm_up_v3()
+    runtime = server_module._get_runtime(server_module.V3_MODEL_KEY)
+    assert runtime.v3.cost > 0.0
+    assert v3_client.post("/generate", json={"prompt": "door slam", "model_name": "harmonia_v3"}).status_code == 200
+
+
+def test_env_numbers_fall_back_on_bad_values(monkeypatch):
+    monkeypatch.setenv("HARMONIA_V3_TIME_BUDGET", "12.5")
+    assert server_module._env_float("HARMONIA_V3_TIME_BUDGET", 0.0) == 12.5
+    monkeypatch.setenv("HARMONIA_V3_TIME_BUDGET", "soon")
+    assert server_module._env_float("HARMONIA_V3_TIME_BUDGET", 3.0) == 3.0
+    monkeypatch.setenv("HARMONIA_V3_CANDIDATES", "x")
+    assert server_module._env_int("HARMONIA_V3_CANDIDATES", 8) == 8

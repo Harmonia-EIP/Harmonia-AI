@@ -234,3 +234,34 @@ def test_comparatives_on_a_dx7_voice(engine):
     result = engine.refine("plus long", current)
     assert result.engine == "dx7" and result.info["directives"] == ["length+"]
     assert result.info["measures_after"]["length"] >= result.info["measures_before"]["length"]
+
+
+# Warm-up plays a few sounds and measures what one costs on this machine.
+def test_warm_up_measures_the_cost_of_a_sound(tmp_path):
+    engine = build_engine(tmp_path / "m")
+    assert engine.cost == 0.0
+    assert engine.warm_up() > 0.0
+    assert engine.cost > 0.0
+
+
+# With a time budget the run time draws fewer candidates and searches less on a slow machine, and still answers.
+def test_time_budget_limits_the_work(tmp_path):
+    engine = build_engine(tmp_path / "m", candidates=6, polish_rounds=3, population=4, time_budget=30.0)
+    full = engine.generate("door slam")
+    assert full.info["heard"] >= 6 * len(engine.engines)
+    engine.cost = 1e6  # as if every sound took forever here (the measure is smoothed over the calls)
+    slow = engine.generate("door slam")
+    assert slow.info["heard"] == 2 * len(engine.engines)  # two draws per engine, no search
+    assert charter_v3.validate_preset(slow.preset) == []
+    current = full_preset({"engine": 0.0, "osc_mix": 0.5})
+    engine.cost = 1e6
+    refined = engine.refine("grosse basse", current)
+    assert refined.info["heard"] == 1 + 4  # the preset itself and a single round
+    assert charter_v3.validate_preset(refined.preset) == []
+
+
+# Without a budget nothing is cut, whatever the machine.
+def test_no_time_budget_means_no_limit(tmp_path):
+    engine = build_engine(tmp_path / "m", candidates=3, polish_rounds=1, population=4)
+    engine.cost = 1000.0
+    assert engine.generate("door slam").info["heard"] >= 3 * len(engine.engines)

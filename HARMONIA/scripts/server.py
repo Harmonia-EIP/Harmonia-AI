@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 import os
 import json
 import math
+import threading
 
 import torch
 from flask import Flask, jsonify, request
@@ -55,6 +56,8 @@ DEFAULT_MODEL_OVERRIDE = os.environ.get("HARMONIA_DEFAULT_MODEL", "").strip().lo
 V2_ALIASES = {V2_MODEL_KEY, "model-3", "v2", "3"}
 # harmonia_v3 is a directory of torch weights (V3_MODEL_DIR); it answers with charter-v3 presets.
 V3_ALIASES = {V3_MODEL_KEY, "model-4", "v3", "4"}
+# One v3 request at a time in a process: the model is loaded once and its engine is not re-entrant.
+_V3_LOCK = threading.Lock()
 
 
 def _load_json_file(path):
@@ -210,6 +213,13 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return max(0.0, float(os.environ.get(name, default)))
+    except ValueError:
+        return default
+
+
 def _build_v3_runtime() -> InferenceRuntime:
     manifest_path = V3_MODEL_DIR / "manifest.json"
     manifest = _load_json_file(manifest_path)
@@ -235,6 +245,7 @@ def _build_v3_runtime() -> InferenceRuntime:
                 polish_rounds=_env_int("HARMONIA_V3_POLISH_ROUNDS", defaults.polish_rounds),
                 refine_rounds=max(1, _env_int("HARMONIA_V3_REFINE_ROUNDS", defaults.refine_rounds)),
                 population=max(2, _env_int("HARMONIA_V3_POPULATION", defaults.population)),
+                time_budget=_env_float("HARMONIA_V3_TIME_BUDGET", defaults.time_budget),
             ),
         )
     except Exception as exc:  # missing runtime dependency or corrupt files
@@ -366,6 +377,13 @@ def _get_runtime_cached(model_key: str, _mtime: float) -> InferenceRuntime:
 
 def _get_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
     """Le mtime du fichier fait partie de la clé de cache : un nouveau .pth est rechargé tout seul."""
+    if model_key == V3_MODEL_KEY:
+        with _V3_LOCK:  # un seul chargement, même si le préchauffage et une requête arrivent ensemble
+            return _get_runtime_unlocked(model_key)
+    return _get_runtime_unlocked(model_key)
+
+
+def _get_runtime_unlocked(model_key: str) -> InferenceRuntime:
     if model_key == DEFAULT_MODEL_KEY:
         path = _latest_path()
     else:
@@ -539,7 +557,8 @@ def _generate_v3(runtime: InferenceRuntime, prompt: str, data: dict):
     if error:
         return jsonify({"error": error}), 400
     try:
-        result = runtime.v3.generate(prompt, variation=variation)
+        with _V3_LOCK:
+            result = runtime.v3.generate(prompt, variation=variation)
     except RuntimeError as exc:
         return jsonify({"error": f"Generation failed: {exc}"}), 500
     response = _v3_response(runtime, result)
@@ -555,7 +574,8 @@ def _refine_v3(runtime: InferenceRuntime, prompt: str, data: dict, locked_params
     # valeurs telles qu'envoyées (bornées à [0, 1], sans arrondi) : un paramètre verrouillé revient à l'identique
     current = {str(key): min(1.0, max(0.0, float(value))) for key, value in data["parameters"].items()}
     try:
-        result = runtime.v3.refine(prompt, current, locked=locked_params, strength=strength)
+        with _V3_LOCK:
+            result = runtime.v3.refine(prompt, current, locked=locked_params, strength=strength)
     except RuntimeError as exc:
         return jsonify({"error": f"Refine unavailable: {exc}"}), 503
     response = _v3_response(runtime, result, exact=tuple(locked_params))
@@ -721,6 +741,25 @@ def charter():
 def charter_v3_route():
     """La charte v3 complète (charter/harmonia_v3.json) : les 192 paramètres des presets harmonia_v3."""
     return jsonify(charter_v3.load().raw)
+
+
+def _warm_up_v3() -> None:
+    """Charge harmonia_v3 et joue quelques sons : la première requête ne paie ni le chargement ni la compilation."""
+    try:
+        runtime = _get_runtime(V3_MODEL_KEY)
+        if runtime.ready:
+            with _V3_LOCK:
+                cost = runtime.v3.warm_up()
+            app.logger.warning("harmonia_v3 ready: %.0f ms per sound on this machine", 1000 * cost)
+        else:
+            app.logger.warning("harmonia_v3 not ready: %s", runtime.error)
+    except Exception as exc:  # pragma: no cover - never stop the server for a warm-up
+        app.logger.warning("harmonia_v3 warm-up failed: %s", exc)
+
+
+# HARMONIA_V3_WARMUP=1 (set in the Docker image): prepare harmonia_v3 in the background when the server starts.
+if os.environ.get("HARMONIA_V3_WARMUP", "").strip() in ("1", "true", "yes") and V3_MODEL_KEY in _discover_models():
+    threading.Thread(target=_warm_up_v3, name="harmonia-v3-warm-up", daemon=True).start()
 
 
 if __name__ == '__main__':

@@ -2,6 +2,30 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.3.3] - harmonia_v3 on the VPS (release `ai-v3.3.0`)
+`harmonia_v3` becomes one more model of the server, next to the v1 models (which stay the default): the
+plugin with the v3 engine selects it in its model menu.
+
+### Added
+- **Release `ai-v3.3.0`** (613 MB, pinned in `models/release.json`, `python scripts/v2/fetch_model.py --model
+  harmonia_v3`): what the server loads and nothing else: text encoder, prior, the two generators (the analog
+  one of v3.3) and CLAP's audio tower. With `LICENSE`, `NOTICE.md` (third-party licences) and
+  `ATTRIBUTION.json`: title, author and licence of the 388 FSD50K recordings the imitations come from (210
+  CC BY, 178 CC0). No preset, no audio.
+- **Time budget** (`HARMONIA_V3_TIME_BUDGET`, seconds; 12 in the Docker image, 0 = no limit): the run time
+  measures what playing and hearing one sound costs on the machine and draws fewer candidates / searches
+  fewer rounds when it is slow, so a request stays under the backend's 30 s on a small VPS. `generation`
+  reports `seconds` and `heard`.
+- **Warm-up** (`HARMONIA_V3_WARMUP=1`, set in the image): the model is loaded and a few sounds are played in
+  the background when the server starts; the first request no longer pays for it.
+- One v3 request at a time per process (lock): one copy of the model, an engine that is never re-entered.
+
+### Changed
+- **Docker image**: one gunicorn worker with 4 threads instead of 2 workers (`HARMONIA_WORKERS`,
+  `HARMONIA_THREADS`): harmonia_v3 holds about 1.3 GB, two workers would hold it twice. The v2 model is
+  fetched only with `--build-arg HARMONIA_FETCH_V2=1`. `numba` joins `requirement.txt`.
+- `export_model.py`: `--runtime-only`, `--recordings` (credits), `--display-name`; `package_release.py --name`.
+
 ## [0.3.2] - Harmonia v3.3: sound effects learnt from real recordings (branch `research/ai-v3-presets`)
 "Porte qui claque" answered a telephone tone: the banks the generators learnt from are musical, they had
 never seen a sound-effect preset (#33). Details: [V3.md](V3.md).

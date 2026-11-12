@@ -6,9 +6,9 @@
     "bytes": 116810589
   },
   "harmonia_v3": {
-    "tag": "ai-v3.0.0",
-    "asset": "harmonia_v3-ai-v3.0.0.tar.gz",
-    "sha256": "bd41a239a00e44fcc4cd9c0039f006ab93d711147c8bce0543a22df80b8c9b33",
-    "bytes": 537790673
+    "tag": "ai-v3.3.0",
+    "asset": "harmonia_v3-ai-v3.3.0.tar.gz",
+    "sha256": "637313b4536b2e2dd9b320c63535cfd6ddb8bba6486a8045838c0543d4d39cfb",
+    "bytes": 613145912
   }
 }

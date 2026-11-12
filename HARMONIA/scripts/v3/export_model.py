@@ -66,27 +66,71 @@ def export_listener(out: Path) -> dict:
     return {"id": TEACHER_ID, "revision": TEACHER_REVISION, "license": "Apache-2.0", "files": files}
 
 
+NOTICE = """# Harmonia model {version}
+
+Trained weights of the Harmonia v3 text-to-preset model. Copyright (c) 2026 Harmonia-EIP
+(https://github.com/Harmonia-EIP), PolyForm Noncommercial License 1.0.0 (see LICENSE).
+
+Third-party parts in this archive:
+- text_student/encoder: fine-tuned from sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+  (Apache-2.0).
+- clap_audio: the audio tower of laion/larger_clap_general (Apache-2.0), unchanged, in half precision.
+
+No preset of the banks the generators learnt from (DX7 cartridges, Surge XT, OB-Xf) and no audio are in
+this archive. {recordings}
+"""
+RECORDINGS_NOTE = ("The analog generator also learnt from synthesizer settings that imitate {count} FSD50K recordings "
+                   "(Freesound, CC0 and CC BY only); the recordings themselves are not included. Their titles, "
+                   "authors and licences are listed in ATTRIBUTION.json.")
+
+
+def export_notices(out: Path, version: str, recordings: Path | None, min_cos: float, max_distance: float) -> dict:
+    """LICENSE, NOTICE.md and, when imitations of recordings were used, the credit of each recording."""
+    note = ""
+    if recordings is not None:
+        rows = [json.loads(line) for line in open(recordings, encoding="utf-8")]
+        rows = [r for r in rows if r["cos"] >= min_cos and r["distance"] <= max_distance]
+        credits = [{"freesound_id": r["fname"], "title": r["title"], "author": r["uploader"], "license": r["license"]}
+                   for r in sorted(rows, key=lambda r: int(r["fname"]))]
+        (out / "ATTRIBUTION.json").write_text(json.dumps(credits, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        note = RECORDINGS_NOTE.format(count=len(credits))
+    (out / "NOTICE.md").write_text(NOTICE.format(version=version, recordings=note), encoding="utf-8")
+    shutil.copy2(BASE_DIR.parent / "LICENSE", out / "LICENSE")
+    return {name: {"sha256": sha256(out / name), "bytes": (out / name).stat().st_size}
+            for name in ("LICENSE", "NOTICE.md", "ATTRIBUTION.json") if (out / name).exists()}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=BASE_DIR / "models" / "harmonia_v3")
     parser.add_argument("--version", default="harmonia_v3", help="model_version written in the manifest")
+    parser.add_argument("--display-name", default="Harmonia V3", help="name shown in the plugin's model menu")
     parser.add_argument("--generator", type=Path, default=DATA / "generator",
                         help="folder of the generators to ship (prior.pt, dx7.pt, analog.pt, meta.json)")
     parser.add_argument("--no-listener", action="store_true", help="leave CLAP's audio tower out (read from the hub)")
+    parser.add_argument("--runtime-only", action="store_true",
+                        help="only what the server loads: no v3.1 synth space and generators (research scripts)")
+    parser.add_argument("--recordings", type=Path, default=None,
+                        help="the imitations the analog generator was trained with (match_recordings.py): credits them")
+    parser.add_argument("--min-cos", type=float, default=0.45)
+    parser.add_argument("--max-distance", type=float, default=30.0)
     args = parser.parse_args()
 
     if args.out.exists():
         shutil.rmtree(args.out)
     files = {}
     for target, source in FILES.items():
+        if args.runtime_only and target.split("/")[0] in ("synth_space", "generator_synth"):
+            continue
         dest = args.out / target
         dest.parent.mkdir(parents=True, exist_ok=True)
         origin = args.generator / Path(source).name if source.startswith("generator/") else DATA / source
         shutil.copy2(origin, dest)
         files[target] = {"sha256": sha256(dest), "bytes": dest.stat().st_size}
-    manifest = {"model_version": args.version, "engine": "src/synth/engine_v3.py (46 parameters) + DX7 mode (msfa)",
+    manifest = {"model_version": args.version, "display_name": args.display_name, "engine": "src/synth/engine_v3.py (46 parameters) + DX7 mode (msfa)",
                 "text_encoder": json.loads((DATA / "text_student" / "meta.json").read_text())["base_model"],
                 "files": files}
+    files.update(export_notices(args.out, args.version, args.recordings, args.min_cos, args.max_distance))
     if not args.no_listener:
         listener = export_listener(args.out)
         files.update(listener.pop("files"))

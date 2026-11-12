@@ -231,7 +231,9 @@ and how close the sound is to the prompt.
 Environment: `HARMONIA_V3_MODEL_DIR` (default `models/harmonia_v3`), `HARMONIA_DEFAULT_MODEL=harmonia_v3` to make
 it the model behind `latest`, and `HARMONIA_V3_CANDIDATES` (8 per engine), `HARMONIA_V3_POLISH_ROUNDS` (2),
 `HARMONIA_V3_REFINE_ROUNDS` (3), `HARMONIA_V3_POPULATION` (8) to trade time for quality: every candidate is
-played and listened to, about 45 ms each on a laptop core. Details: [V3.md](V3.md).
+played and listened to, about 45 ms each on a laptop core. `HARMONIA_V3_TIME_BUDGET` (seconds, 0 = no limit)
+shrinks that work automatically on a slow machine, `HARMONIA_V3_WARMUP=1` prepares the model when the server
+starts. Install the model with `python scripts/v2/fetch_model.py --model harmonia_v3`. Details: [V3.md](V3.md).
 
 ### E. Auto-training
 

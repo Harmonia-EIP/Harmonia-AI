@@ -25,11 +25,13 @@ def main() -> int:
     parser.add_argument("--model-dir", type=Path, default=BASE_DIR / "models" / "harmonia_v2")
     parser.add_argument("--tag", required=True)
     parser.add_argument("--dist", type=Path, default=BASE_DIR / "dist")
+    parser.add_argument("--name", default=None,
+                        help="key in models/release.json and folder under models/ (default: the manifest's model_version)")
     args = parser.parse_args()
 
     verify_model_dir(args.model_dir)
     manifest = json.loads((args.model_dir / "manifest.json").read_text(encoding="utf-8"))
-    name = manifest["model_version"]
+    name = args.name or manifest["model_version"]
     args.dist.mkdir(parents=True, exist_ok=True)
     asset = args.dist / f"{name}-{args.tag}.tar.gz"
     with tarfile.open(asset, "w:gz") as tar:
