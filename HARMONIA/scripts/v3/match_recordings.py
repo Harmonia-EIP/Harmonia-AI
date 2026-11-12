@@ -83,11 +83,17 @@ def _play(task):
     return mono.astype(np.float32), perceptual.distance(_targets[fname], perceptual.describe([mono]))
 
 
-def pick_clips(fsd50k: Path, embeddings: Path, per_class: int, seed: int):
-    """Up to per_class recordings of every non-voice class (its most specific label), class by class in turn."""
+def pick_clips(fsd50k: Path, embeddings: Path, per_class: int, seed: int, cache: Path | None = None):
+    """Up to per_class recordings of every non-voice class (its most specific label), class by class in turn.
+    The choice is kept in `cache` (reading every file's length takes minutes), so a resumed run starts at once."""
     import soundfile as sf
 
     z = np.load(embeddings)
+    if cache is not None and cache.exists():
+        saved = json.loads(cache.read_text(encoding="utf-8"))
+        if saved.get("per_class") == per_class and saved.get("seed") == seed:
+            index = {str(f): i for i, f in enumerate(z["fname"])}
+            return [{**clip, "emb": z["emb"][index[clip["fname"]]].astype(np.float32)} for clip in saved["clips"]]
     info = json.loads((fsd50k / "FSD50K.metadata" / "dev_clips_info_FSD50K.json").read_text(encoding="utf-8"))
     rng = np.random.default_rng(seed)
     by_class: dict = {}
@@ -106,7 +112,13 @@ def pick_clips(fsd50k: Path, embeddings: Path, per_class: int, seed: int):
         chosen.append({"fname": fname, "labels": labels, "title": str(z["title"][i]), "license": meta["license"],
                        "uploader": meta.get("uploader", ""), "emb": z["emb"][i].astype(np.float32)})
     rounds = [[c[k] for c in by_class.values() if len(c) > k] for k in range(per_class)]
-    return [clip for group in rounds for clip in group]
+    clips = [clip for group in rounds for clip in group]
+    if cache is not None:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_text(json.dumps({"per_class": per_class, "seed": seed,
+                                     "clips": [{k: v for k, v in c.items() if k != "emb"} for c in clips]},
+                                    ensure_ascii=False), encoding="utf-8")
+    return clips
 
 
 def main() -> int:
@@ -122,6 +134,7 @@ def main() -> int:
     parser.add_argument("--generations", type=int, default=20)
     parser.add_argument("--workers", type=int, default=max(1, mp.cpu_count() - 4))
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--max-new", type=int, default=0, help="stop after this many new recordings (0: all)")
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args()
 
@@ -132,16 +145,18 @@ def main() -> int:
     from src.v3 import codecs
     from src.v3.diffusion import Diffusion
 
-    clips = pick_clips(args.fsd50k, args.embeddings, args.per_class, args.seed)
+    args.out.mkdir(parents=True, exist_ok=True)
+    clips = pick_clips(args.fsd50k, args.embeddings, args.per_class, args.seed, args.out / "picked.json")
     if args.limit:
         clips = clips[:args.limit]
-    args.out.mkdir(parents=True, exist_ok=True)
     out_path = args.out / "fsd.jsonl"
     done = set()
     if out_path.exists():
         done = {json.loads(line)["fname"] for line in open(out_path, encoding="utf-8")}
     clips = [c for c in clips if c["fname"] not in done]
     print(f"{len(clips)} recordings to imitate ({len(done)} already done)", flush=True)
+    if args.max_new:
+        clips = clips[:args.max_new]
 
     diffusion = Diffusion.create(codecs.ANALOG_DIM)
     diffusion.model.load_state_dict(torch.load(args.generator, map_location="cpu", weights_only=True))
