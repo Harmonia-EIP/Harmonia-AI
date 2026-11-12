@@ -213,6 +213,11 @@ and how close the sound is to the prompt.
   how far the sound may move. `generation.similarity_before` / `similarity` show the progress, `kept` how
   much of the starting sound remains, `changed` whether a closer sound was found.
 
+  A comparative in the prompt ("plus sombre", "brighter", "more reverb", "attaque plus lente", "plus long",
+  French or English) is followed as a direction on a measure of the sound instead: `generation.directives`
+  lists what was read (`brightness-`, `space+`...), `measures_before` / `measures_after` the result, and
+  `unsupported` the comparatives the engine has no setting for.
+
 ```json
 {
   "prompt": "Porte qui claque dans une cathédrale",

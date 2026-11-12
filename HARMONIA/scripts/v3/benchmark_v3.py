@@ -11,6 +11,7 @@ an independent judge.
 
     python scripts/v3/benchmark_v3.py --name v3.0 --polish-rounds 0
     python scripts/v3/benchmark_v3.py --name polish2 --polish-rounds 2
+    python scripts/v3/benchmark_v3.py --name polish2+refine3 --refine-from polish2 --clicks 3   # Refine, same prompt
 """
 
 from __future__ import annotations
@@ -75,6 +76,9 @@ def main() -> int:
     parser.add_argument("--fsd50k", type=Path, default=Path.home() / "Datasets" / "FSD50K")
     parser.add_argument("--classes", type=int, default=0, help="only this many FSD50K classes (0: all)")
     parser.add_argument("--out", type=Path, default=OUT_DIR)
+    parser.add_argument("--refine-from", default=None,
+                        help="instead of generating: refine each preset of that system with its own prompt")
+    parser.add_argument("--clicks", type=int, default=3, help="with --refine-from: refine requests in a row")
     args = parser.parse_args()
 
     from src.v3.inference import HarmoniaV3, Settings
@@ -84,9 +88,19 @@ def main() -> int:
     out = args.out / args.name
     out.mkdir(parents=True, exist_ok=True)
     rows, t0 = [], time.time()
-    for i, row in enumerate(prompts(args.fsd50k, args.classes)):
+    todo = prompts(args.fsd50k, args.classes)
+    if args.refine_from:
+        todo = json.loads((args.out / args.refine_from / "generations.json").read_text(encoding="utf-8"))
+    for i, row in enumerate(todo):
         t = time.time()
-        result = model.generate(row["prompt"])
+        if args.refine_from:
+            parameters = row["parameters"]
+            for _ in range(args.clicks):
+                result = model.refine(row["prompt"], parameters)
+                parameters = result.preset["parameters"]
+            row = {k: row[k] for k in ("set", "prompt", "judge", "fsd_class") if k in row}
+        else:
+            result = model.generate(row["prompt"])
         audio = np.nan_to_num(play(result.preset)).astype(np.float32)
         sf.write(out / f"{i:04d}.wav", audio, SR)
         rows.append({**row, "wav": f"{i:04d}.wav", "engine": result.engine, "similarity": result.similarity,

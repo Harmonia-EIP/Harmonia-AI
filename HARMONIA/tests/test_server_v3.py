@@ -58,7 +58,7 @@ def test_refine_with_v3_keeps_locked_parameters(v3_client):
     current = plugin_preset({"engine": 0.0, "filter_cutoff": 0.123456789, "reverb_mix": 0.25, "osc_mix": 0.5})
     response = v3_client.post(
         "/ai/refine-preset",
-        json={"prompt": "plus sombre", "model_name": "harmonia_v3", "parameters": current,
+        json={"prompt": "basse ronflante", "model_name": "harmonia_v3", "parameters": current,
               "locked_params": ["filter_cutoff", "reverb_mix", "not_a_parameter"], "strength": 0.6},
     )
     assert response.status_code == 200
@@ -128,3 +128,14 @@ def test_charter_v3_route(v3_client):
     body = v3_client.get("/charter/v3").get_json()
     assert body["version"] == charter_v3.load().version
     assert "engines" in body
+
+
+# A comparative in the refine prompt is followed as a direction and reported in `generation`.
+def test_refine_with_v3_follows_a_comparative(v3_client):
+    current = plugin_preset({"engine": 0.0, "osc_1_waveform": 2 / 3, "filter_cutoff": 0.5})
+    body = v3_client.post(
+        "/refine-preset", json={"prompt": "Plus sombre", "model_name": "harmonia_v3", "parameters": current}
+    ).get_json()
+    assert body["generation"]["directives"] == ["brightness-"]
+    assert body["parameters"]["filter_cutoff"] < current["filter_cutoff"]
+    assert charter_v3.validate_preset(body) == []

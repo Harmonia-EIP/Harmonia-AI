@@ -2,6 +2,30 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.3.1] - Refine follows comparatives ("plus sombre", "more reverb") (branch `research/ai-v3-presets`)
+### Fixed
+- **Relative refine prompts went the wrong way.** CLAP hears what a sound is, not how it compares with
+  another: on 8 analog presets, two refines towards "darker" made 6 of them brighter, "plus brillant" made 6
+  darker, "attaque plus lente" shortened the attack of 5. A comparative is now read as a direction
+  (`src/v3/directives.py`, French and English): brightness, attack, length, space (reverb). The settings
+  that carry it move step by step (filter cutoff, amp attack, release, reverb mix; on the DX7 the operator
+  levels and envelope rates, each operator also tried alone since their role depends on the algorithm) and
+  a step is kept only when the measure taken on the sound went the asked way. Nothing else of the preset
+  changes; locked parameters stay put. When those settings cannot move (locked, at their limit), variations
+  of the sound are searched with the same measure.
+
+  | Refine prompt (2 clicks, 8 presets) | right way before | right way now | wrong way now |
+  |---|---|---|---|
+  | plus sombre / darker | 8 / 2 | 8 / 8 | 0 |
+  | plus brillant / brighter | 2 / 7 | 8 / 8 | 0 |
+  | plus de reverb / more reverb | 7 / 6 | 8 / 8 | 0 |
+  | attaque plus lente / slower attack | 3 / 4 | 6 / 6 | 0 |
+
+- "un peu", "slightly" halve the move, "beaucoup", "much" make it 1.6 times larger. `generation` reports
+  `directives` and the measures before and after; a comparative the engine has no setting for (reverb on
+  the DX7 mode, which plays dry) is listed in `unsupported`.
+- A prompt without comparative ("grosse basse ronflante") is a description: the refine of 0.3.0 is unchanged.
+
 ## [0.3.0] - Harmonia v3 in the server: generation and refine (branch `research/ai-v3-presets`)
 The v3 models were only used by offline scripts. The server now answers with them, in the charter-v3
 format the plugin of the same branch plays (#32). Details: [V3.md](V3.md).

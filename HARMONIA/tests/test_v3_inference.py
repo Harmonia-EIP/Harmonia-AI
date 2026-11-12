@@ -8,6 +8,7 @@ from src import charter_v3
 from src.charter import PARAM_NAMES
 from src.synth import v3_params as P
 from src.v3 import codecs
+from src.v3 import directives as D
 from src.v3.diffusion import Diffusion
 from src.v3.inference import HarmoniaV3, lock_mask, structure_mask
 from tests.v3_fixtures import build_engine, dx7_available
@@ -56,7 +57,7 @@ def test_refine_keeps_locked_parameters_and_the_engine(engine):
     current["engine"] = 0.0
     locked = ["filter_cutoff", "amp_attack", "reverb_mix"]
     current.update(filter_cutoff=0.123456789, amp_attack=0.3141592, reverb_mix=0.0)
-    result = engine.refine("plus sombre", current, locked=locked)
+    result = engine.refine("grosse basse ronflante", current, locked=locked)
     assert result.engine == "analog"
     assert charter_v3.validate_preset(result.preset) == []
     for key in locked:
@@ -148,3 +149,88 @@ def test_diffusion_keeps_masked_values():
     assert not torch.allclose(out[:, ~keep], start[:, ~keep])
     with pytest.raises(ValueError):
         diffusion.sample(torch.zeros(5, 4), keep=keep)
+
+
+# Comparatives are read in French and English, one direction per measure; descriptions hold none.
+@pytest.mark.parametrize("prompt, expected", [
+    ("plus sombre", ["brightness-"]),
+    ("Plus brillant et plus de réverb", ["brightness+", "space+"]),
+    ("make it darker with a slower attack", ["brightness-", "attack+"]),
+    ("attaque plus longue", ["attack+"]),
+    ("un peu plus long", ["length+"]),
+    ("sharper attack, shorter", ["attack-", "length-"]),
+    ("moins de reverb", ["space-"]),
+    ("punchier", ["attack-"]),
+    ("Porte qui claque dans une cathédrale", []),
+    ("sombre pad", []),
+    ("Grosse basse ronflante", []),
+])
+def test_comparatives_are_read(prompt, expected):
+    assert [d.label for d in D.read(prompt)] == expected
+
+
+def test_amount_words_scale_the_move():
+    assert D.amount("un peu plus sombre") == 0.5
+    assert D.amount("much brighter") == 1.6
+    assert D.amount("plus sombre") == 1.0
+
+
+# The measures follow the sound: a duller, slower, longer note reads lower brightness, longer attack and length.
+def test_measures_follow_the_sound():
+    t = np.arange(4 * D.SR) / D.SR
+    bright = np.sin(2 * np.pi * 3000 * t) * (t < 1.5)
+    dull = np.sin(2 * np.pi * 200 * t) * np.minimum(t / 0.5, 1.0) * np.where(t < 1.5, 1.0, np.exp(-(t - 1.5) * 3))
+    a, b = D.measure(bright), D.measure(dull)
+    assert a["brightness"] > b["brightness"] + 1.0
+    assert b["attack"] > a["attack"] + 1.0
+    assert b["length"] > a["length"]
+    assert b["space"] > a["space"]
+
+
+# A comparative moves the setting that carries it, the right way, and the measured sound follows.
+@pytest.mark.parametrize("prompt, parameter, sign, measure", [
+    ("plus sombre", "filter_cutoff", -1, "brightness"),
+    ("brighter", "filter_cutoff", +1, "brightness"),
+    ("plus de reverb", "reverb_mix", +1, "space"),
+    ("plus long", "amp_release", +1, "length"),
+    ("slower attack", "amp_attack", +1, "attack"),
+])
+def test_refine_follows_a_comparative(engine, prompt, parameter, sign, measure):
+    current = full_preset({"engine": 0.0, "osc_1_waveform": 2 / 3, "filter_cutoff": 0.5, "reverb_mix": 0.2,
+                           "amp_release": 0.3, "amp_attack": 0.2, "amp_sustain": 0.8})
+    result = engine.refine(prompt, current)
+    assert result.info["directives"] == [d.label for d in D.read(prompt)]
+    assert result.info["changed"] is True
+    assert sign * (result.preset["parameters"][parameter] - current[parameter]) > 0
+    assert sign * (result.info["measures_after"][measure] - result.info["measures_before"][measure]) > 0
+    # nothing else of the sound was asked to change
+    untouched = [n for n in ("osc_mix", "osc_1_waveform", "lfo_rate", "distortion_mix") if n != parameter]
+    for name in untouched:
+        assert result.preset["parameters"][name] == pytest.approx(current[name], abs=1e-6)
+
+
+# A locked control is not moved by a comparative either.
+def test_comparative_respects_locks(engine):
+    current = full_preset({"engine": 0.0, "osc_1_waveform": 2 / 3, "filter_cutoff": 0.5})
+    result = engine.refine("plus sombre", current, locked=["filter_cutoff", "filter_env_amount"])
+    assert result.preset["parameters"]["filter_cutoff"] == current["filter_cutoff"]
+    assert result.preset["parameters"]["filter_env_amount"] == current["filter_env_amount"]
+
+
+# "un peu" moves less far than the plain comparative.
+def test_un_peu_moves_less(engine):
+    current = full_preset({"engine": 0.0, "osc_1_waveform": 2 / 3, "filter_cutoff": 0.6})
+    plain = engine.refine("plus sombre", current).preset["parameters"]["filter_cutoff"]
+    slight = engine.refine("un peu plus sombre", current).preset["parameters"]["filter_cutoff"]
+    assert plain < slight < current["filter_cutoff"]
+
+
+# The DX7 mode plays dry: a reverb comparative is reported as unsupported there, the others are followed.
+@pytest.mark.skipif(not dx7_available(), reason="DX7 renderer not built (scripts/v3/build_dx7.py)")
+def test_comparatives_on_a_dx7_voice(engine):
+    voice = charter_v3.dx7_voice({})
+    current = full_preset(charter_v3.make_preset("dx7", charter_v3.dx7_values(voice), "init")["parameters"])
+    assert engine.refine("more reverb", current).info.get("unsupported") == ["space+"]
+    result = engine.refine("plus long", current)
+    assert result.engine == "dx7" and result.info["directives"] == ["length+"]
+    assert result.info["measures_after"]["length"] >= result.info["measures_before"]["length"]
