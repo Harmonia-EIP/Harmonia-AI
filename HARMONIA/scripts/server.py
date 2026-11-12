@@ -1,3 +1,4 @@
+import hashlib
 import sys
 from dataclasses import dataclass
 from functools import lru_cache
@@ -6,6 +7,7 @@ from typing import Optional, Tuple
 import os
 import json
 import math
+import threading
 
 import torch
 from flask import Flask, jsonify, request
@@ -14,6 +16,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
+from src import charter_v3
 from src.charter import PARAM_NAMES, charter_metadata, normalise_vector
 from src.dashboard_events import publish_generation
 from src.model import TextToParams, load_tokenizer
@@ -34,10 +37,27 @@ PARAM_KEYS = list(PARAM_NAMES)
 PLUGIN_PARAM_COUNT = len(PARAM_KEYS)
 
 DEFAULT_MODEL_KEY = "default"
+V2_MODEL_KEY = "harmonia_v2"
+V2_MODEL_DIR = Path(os.environ.get("HARMONIA_V2_MODEL_DIR", str(BASE_DIR / "models" / V2_MODEL_KEY)))
+V2_MODES = ("retrieval", "hybrid", "neural")
+
+V3_MODEL_KEY = "harmonia_v3"
+V3_MODEL_DIR = Path(os.environ.get("HARMONIA_V3_MODEL_DIR", str(BASE_DIR / "models" / V3_MODEL_KEY)))
 
 # Seuls ces mots désignent le modèle par défaut (le dernier déployé).
 # Tous les autres modèles sont découverts dans saved_models/.
 DEFAULT_ALIASES = {"default", "latest"}
+# HARMONIA_DEFAULT_MODEL=harmonia_v3 (or harmonia_v2) makes that model the default one instead of the latest
+# .pth of saved_models/, when its files are installed.
+DEFAULT_MODEL_OVERRIDE = os.environ.get("HARMONIA_DEFAULT_MODEL", "").strip().lower()
+
+# Values the app's model selector has sent for the harmonia_v2 model, which is not a .pth of
+# saved_models/ but an ONNX directory (V2_MODEL_DIR).
+V2_ALIASES = {V2_MODEL_KEY, "model-3", "v2", "3"}
+# harmonia_v3 is a directory of torch weights (V3_MODEL_DIR); it answers with charter-v3 presets.
+V3_ALIASES = {V3_MODEL_KEY, "model-4", "v3", "4"}
+# One v3 request at a time in a process: the model is loaded once and its engine is not re-entrant.
+_V3_LOCK = threading.Lock()
 
 
 def _load_json_file(path):
@@ -55,7 +75,8 @@ def _load_json_file(path):
 
 
 def _discover_models() -> dict:
-    """Scanne saved_models/ : chaque .pth devient un modèle, l'id est le nom du fichier."""
+    """Scanne saved_models/ : chaque .pth devient un modèle, l'id est le nom du fichier.
+    Le modèle harmonia_v2 s'y ajoute quand ses fichiers sont téléchargés (scripts/v2/fetch_model.py)."""
     models = {}
     for f in sorted(SAVED_MODELS_DIR.glob("*.pth")):
         key = f.stem.removeprefix("model_")
@@ -69,7 +90,36 @@ def _discover_models() -> dict:
             "model_version": meta.get("model_version", "unknown"),
             "model_hash": meta.get("model_hash", "unknown"),
         }
+    manifest_path = V2_MODEL_DIR / "manifest.json"
+    manifest = _load_json_file(manifest_path)
+    if manifest:
+        models[V2_MODEL_KEY] = {
+            "id": V2_MODEL_KEY,
+            "name": manifest.get("display_name") or "Harmonia V2",
+            "model_path": manifest_path,
+            "metadata_path": manifest_path,
+            "model_version": str(manifest.get("model_version", V2_MODEL_KEY)),
+            "model_hash": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        }
+    manifest_path = V3_MODEL_DIR / "manifest.json"
+    manifest = _load_json_file(manifest_path)
+    if manifest:
+        models[V3_MODEL_KEY] = {
+            "id": V3_MODEL_KEY,
+            "name": manifest.get("display_name") or "Harmonia V3",
+            "model_path": manifest_path,
+            "metadata_path": manifest_path,
+            "model_version": str(manifest.get("model_version", V3_MODEL_KEY)),
+            "model_hash": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        }
     return models
+
+
+def _default_model_key() -> str:
+    """The model behind "default" / "latest": HARMONIA_DEFAULT_MODEL when it is installed, else the latest .pth."""
+    if DEFAULT_MODEL_OVERRIDE in (V2_MODEL_KEY, V3_MODEL_KEY) and DEFAULT_MODEL_OVERRIDE in _discover_models():
+        return DEFAULT_MODEL_OVERRIDE
+    return DEFAULT_MODEL_KEY
 
 
 def _latest_path():
@@ -87,13 +137,17 @@ def _latest_path():
 def _resolve_model_key(data: dict) -> str:
     raw = data.get("model_name") or data.get("model") or data.get("model_id")
     if raw is None:
-        return DEFAULT_MODEL_KEY
+        return _default_model_key()
     raw = str(raw).strip().lower()
     if raw in DEFAULT_ALIASES:
-        return DEFAULT_MODEL_KEY
+        return _default_model_key()
+    if raw in V2_ALIASES:
+        return V2_MODEL_KEY
+    if raw in V3_ALIASES:
+        return V3_MODEL_KEY
     if raw in _discover_models():
         return raw
-    return DEFAULT_MODEL_KEY  # id inconnu -> modèle par défaut
+    return _default_model_key()  # id inconnu -> modèle par défaut
 
 
 @dataclass
@@ -108,9 +162,121 @@ class InferenceRuntime:
     model_metadata_path: str = ""
     param_keys: Tuple[str, ...] = tuple(PARAM_KEYS)
     tokenizer_max_length: int = TOKENIZER_MAX_LENGTH
+    v2: Optional[object] = None
+    v3: Optional[object] = None
+
+
+def _build_v2_runtime() -> InferenceRuntime:
+    manifest_path = V2_MODEL_DIR / "manifest.json"
+    manifest = _load_json_file(manifest_path)
+    if not manifest:
+        return InferenceRuntime(
+            model=None,
+            tokenizer=None,
+            ready=False,
+            error="v2 model files not found. Run scripts/v2/fetch_model.py.",
+            model_version=V2_MODEL_KEY,
+            model_path=str(V2_MODEL_DIR),
+        )
+    model_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    try:
+        from src.v2.inference import HarmoniaV2
+
+        engine = HarmoniaV2(V2_MODEL_DIR)
+    except Exception as exc:  # missing runtime dependency or corrupt files
+        return InferenceRuntime(
+            model=None,
+            tokenizer=None,
+            ready=False,
+            error=f"Invalid v2 model: {exc}",
+            model_version=str(manifest.get("model_version", V2_MODEL_KEY)),
+            model_hash=model_hash,
+            model_path=str(V2_MODEL_DIR),
+        )
+    return InferenceRuntime(
+        model=None,
+        tokenizer=None,
+        ready=True,
+        model_version=str(manifest.get("model_version", V2_MODEL_KEY)),
+        model_hash=model_hash,
+        model_path=str(V2_MODEL_DIR),
+        model_metadata_path=str(manifest_path),
+        tokenizer_max_length=engine.max_tokens,
+        v2=engine,
+    )
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(0, int(os.environ.get(name, default)))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return max(0.0, float(os.environ.get(name, default)))
+    except ValueError:
+        return default
+
+
+def _build_v3_runtime() -> InferenceRuntime:
+    manifest_path = V3_MODEL_DIR / "manifest.json"
+    manifest = _load_json_file(manifest_path)
+    if not manifest:
+        return InferenceRuntime(
+            model=None,
+            tokenizer=None,
+            ready=False,
+            error="v3 model files not found. Run scripts/v2/fetch_model.py --model harmonia_v3.",
+            model_version=V3_MODEL_KEY,
+            model_path=str(V3_MODEL_DIR),
+        )
+    model_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    model_version = str(manifest.get("model_version", V3_MODEL_KEY))
+    try:
+        from src.v3.inference import HarmoniaV3, Settings
+
+        defaults = Settings()
+        engine = HarmoniaV3(
+            V3_MODEL_DIR,
+            settings=Settings(
+                candidates=max(1, _env_int("HARMONIA_V3_CANDIDATES", defaults.candidates)),
+                polish_rounds=_env_int("HARMONIA_V3_POLISH_ROUNDS", defaults.polish_rounds),
+                refine_rounds=max(1, _env_int("HARMONIA_V3_REFINE_ROUNDS", defaults.refine_rounds)),
+                population=max(2, _env_int("HARMONIA_V3_POPULATION", defaults.population)),
+                time_budget=_env_float("HARMONIA_V3_TIME_BUDGET", defaults.time_budget),
+            ),
+        )
+    except Exception as exc:  # missing runtime dependency or corrupt files
+        return InferenceRuntime(
+            model=None,
+            tokenizer=None,
+            ready=False,
+            error=f"Invalid v3 model: {exc}",
+            model_version=model_version,
+            model_hash=model_hash,
+            model_path=str(V3_MODEL_DIR),
+        )
+    return InferenceRuntime(
+        model=None,
+        tokenizer=None,
+        ready=True,
+        model_version=model_version,
+        model_hash=model_hash,
+        model_path=str(V3_MODEL_DIR),
+        model_metadata_path=str(manifest_path),
+        param_keys=tuple(p.id for p in charter_v3.load().params),
+        tokenizer_max_length=engine.max_tokens,
+        v3=engine,
+    )
 
 
 def _build_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
+    if model_key == V2_MODEL_KEY:
+        return _build_v2_runtime()
+    if model_key == V3_MODEL_KEY:
+        return _build_v3_runtime()
     try:
         if model_key == DEFAULT_MODEL_KEY:
             artifact = resolve_latest_model(
@@ -211,6 +377,13 @@ def _get_runtime_cached(model_key: str, _mtime: float) -> InferenceRuntime:
 
 def _get_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
     """Le mtime du fichier fait partie de la clé de cache : un nouveau .pth est rechargé tout seul."""
+    if model_key == V3_MODEL_KEY:
+        with _V3_LOCK:  # un seul chargement, même si le préchauffage et une requête arrivent ensemble
+            return _get_runtime_unlocked(model_key)
+    return _get_runtime_unlocked(model_key)
+
+
+def _get_runtime_unlocked(model_key: str) -> InferenceRuntime:
     if model_key == DEFAULT_MODEL_KEY:
         path = _latest_path()
     else:
@@ -257,31 +430,48 @@ def _validate_locked_params(payload: dict) -> Tuple[Optional[list], Optional[str
     return locked, None
 
 
-def _predict_parameters(runtime: InferenceRuntime, prompt: str) -> Tuple[Optional[dict], Optional[str]]:
-    """Renvoie {id: valeur 0..1} prédit pour le prompt, ou un message d'erreur."""
-    # 1. Prepare text
-    tokenized = runtime.tokenizer(prompt, return_tensors="pt", padding=False, truncation=False)
-    token_count = int(tokenized["input_ids"].shape[1])
-    if token_count > runtime.tokenizer_max_length:
-        return None, (
-            "Prompt exceeds model token context. "
-            f"Got {token_count} tokens, max {runtime.tokenizer_max_length}."
+def _predict_parameters(
+    runtime: InferenceRuntime, prompt: str, options: Optional[dict] = None
+) -> Tuple[Optional[dict], Optional[dict], Optional[str]]:
+    """Renvoie ({id: valeur 0..1} prédit pour le prompt, infos de génération v2 ou None, message d'erreur ou None).
+
+    options : le corps de la requête ; harmonia_v2 y lit 'mode' et 'variation'."""
+    options = options or {}
+    generation_info = None
+    if getattr(runtime, "v2", None) is not None:
+        mode = options.get("mode")
+        variation = options.get("variation")
+        if mode is not None and mode not in V2_MODES:
+            return None, None, f"'mode' must be one of {', '.join(V2_MODES)}."
+        if variation is not None and (not isinstance(variation, int) or isinstance(variation, bool)):
+            return None, None, "'variation' must be an integer."
+        result = runtime.v2.generate(prompt, mode=mode, variation=variation)
+        param_list = result.values
+        generation_info = {"mode": result.mode, "bank_index": result.bank_index, "similarity": result.similarity}
+    else:
+        # 1. Prepare text
+        tokenized = runtime.tokenizer(prompt, return_tensors="pt", padding=False, truncation=False)
+        token_count = int(tokenized["input_ids"].shape[1])
+        if token_count > runtime.tokenizer_max_length:
+            return None, None, (
+                "Prompt exceeds model token context. "
+                f"Got {token_count} tokens, max {runtime.tokenizer_max_length}."
+            )
+
+        inputs = runtime.tokenizer(
+            prompt,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=runtime.tokenizer_max_length,
         )
 
-    inputs = runtime.tokenizer(
-        prompt,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
-        max_length=runtime.tokenizer_max_length,
-    )
-
-    # 2. Predict
-    with torch.no_grad():
-        prediction = runtime.model(inputs['input_ids'], inputs['attention_mask'])
+        # 2. Predict
+        with torch.no_grad():
+            prediction = runtime.model(inputs['input_ids'], inputs['attention_mask'])
+        param_list = prediction[0].tolist()
 
     # 3. Format output
-    param_list = prediction[0].tolist()
     if _is_charter(runtime):
         param_list = normalise_vector(param_list)
 
@@ -290,14 +480,16 @@ def _predict_parameters(runtime: InferenceRuntime, prompt: str) -> Tuple[Optiona
         if i < len(param_list):
             value = float(param_list[i])
             named_parameters[key] = round(min(1.0, max(0.0, value)), 6)
-    return named_parameters, None
+    return named_parameters, generation_info, None
 
 
 def _is_charter(runtime: InferenceRuntime) -> bool:
     return tuple(runtime.param_keys) == tuple(PARAM_NAMES)
 
 
-def _preset_response(runtime: InferenceRuntime, prompt: str, named_parameters: dict) -> dict:
+def _preset_response(
+    runtime: InferenceRuntime, prompt: str, named_parameters: dict, generation_info: Optional[dict] = None
+) -> dict:
     """Format charte lu par le PresetLoader du plugin."""
     is_charter = _is_charter(runtime)
     response = {
@@ -314,6 +506,8 @@ def _preset_response(runtime: InferenceRuntime, prompt: str, named_parameters: d
     if is_charter:
         response["values"] = [named_parameters[name] for name in PARAM_NAMES]
         response["charter"] = charter_metadata()
+    if generation_info is not None:
+        response["generation"] = generation_info
     return response
 
 
@@ -332,9 +526,66 @@ def _publish_preset(runtime: InferenceRuntime, prompt: str, response: dict, sour
         app.logger.warning("dashboard publish failed: %s", exc)
 
 
+def _v3_options(payload: dict) -> Tuple[int, Optional[float], Optional[str]]:
+    """(variation, strength, message d'erreur) lus dans le corps d'une requête harmonia_v3."""
+    variation = payload.get("variation", 0)
+    if variation is None:
+        variation = 0
+    if isinstance(variation, bool) or not isinstance(variation, int) or variation < 0:
+        return 0, None, "'variation' must be a non-negative integer."
+    strength = payload.get("strength")
+    if strength is not None and (
+        isinstance(strength, bool) or not isinstance(strength, (int, float)) or not 0.0 <= float(strength) <= 1.0
+    ):
+        return 0, None, "'strength' must be a number between 0 and 1."
+    return variation, None if strength is None else float(strength), None
+
+
+def _v3_response(runtime: InferenceRuntime, result, exact: Tuple[str, ...] = ()) -> dict:
+    """Preset charte v3 (metadata + parameters) ; `exact` : ids rendus sans arrondi (paramètres verrouillés)."""
+    preset = result.preset
+    metadata = dict(preset["metadata"])
+    metadata.update(generated_by="Harmonia-Server", model_version=runtime.model_version, model_hash=runtime.model_hash)
+    parameters = {
+        key: float(value) if key in exact else round(float(value), 6) for key, value in preset["parameters"].items()
+    }
+    return {"metadata": metadata, "parameters": parameters, "generation": result.info}
+
+
+def _generate_v3(runtime: InferenceRuntime, prompt: str, data: dict):
+    variation, _, error = _v3_options(data)
+    if error:
+        return jsonify({"error": error}), 400
+    try:
+        with _V3_LOCK:
+            result = runtime.v3.generate(prompt, variation=variation)
+    except RuntimeError as exc:
+        return jsonify({"error": f"Generation failed: {exc}"}), 500
+    response = _v3_response(runtime, result)
+    _publish_preset(runtime, prompt, response, source="http")
+    return jsonify(response)
+
+
+def _refine_v3(runtime: InferenceRuntime, prompt: str, data: dict, locked_params: list):
+    """Affinage v3 : part du preset courant et le rapproche du prompt ; les verrous restent en place."""
+    _, strength, error = _v3_options(data)
+    if error:
+        return jsonify({"error": error}), 400
+    # valeurs telles qu'envoyées (bornées à [0, 1], sans arrondi) : un paramètre verrouillé revient à l'identique
+    current = {str(key): min(1.0, max(0.0, float(value))) for key, value in data["parameters"].items()}
+    try:
+        with _V3_LOCK:
+            result = runtime.v3.refine(prompt, current, locked=locked_params, strength=strength)
+    except RuntimeError as exc:
+        return jsonify({"error": f"Refine unavailable: {exc}"}), 503
+    response = _v3_response(runtime, result, exact=tuple(locked_params))
+    _publish_preset(runtime, prompt, response, source="http-refine")
+    return jsonify(response)
+
+
 @app.route("/health", methods=["GET"])
 def health():
-    runtime = _get_runtime()
+    runtime = _get_runtime(_default_model_key())
     status = "ok" if runtime.ready else "degraded"
     return jsonify(
         {
@@ -350,15 +601,23 @@ def health():
         }
     )
 
+
 @app.route("/models", methods=["GET"])
 @app.route("/ai/models", methods=["GET"], endpoint="list_models_alias")
 def list_models():
     latest = _latest_path()
+    default_key = _default_model_key()
+
+    def is_latest(m: dict) -> bool:
+        if default_key != DEFAULT_MODEL_KEY:
+            return m["id"] == default_key
+        return latest is not None and m["model_path"].resolve() == latest
+
     models = [
         {
             "id": m["id"],
             "name": m["name"],
-            "is_latest": latest is not None and m["model_path"].resolve() == latest,
+            "is_latest": is_latest(m),
             "model_version": m["model_version"],
             "model_hash": m["model_hash"],
         }
@@ -415,11 +674,14 @@ def generate():
 
     print(f"Received request for: '{prompt}'")
 
-    named_parameters, prediction_error = _predict_parameters(runtime, prompt)
+    if getattr(runtime, "v3", None) is not None:
+        return _generate_v3(runtime, prompt, data)
+
+    named_parameters, generation_info, prediction_error = _predict_parameters(runtime, prompt, data)
     if prediction_error:
         return jsonify({"error": prediction_error}), 400
 
-    response = _preset_response(runtime, prompt, named_parameters)
+    response = _preset_response(runtime, prompt, named_parameters, generation_info)
     _publish_preset(runtime, prompt, response, source="http")
     return jsonify(response)
 
@@ -427,7 +689,8 @@ def generate():
 @app.route("/refine-preset", methods=["POST"])
 @app.route("/ai/refine-preset", methods=["POST"], endpoint="refine_preset_alias")
 def refine_preset():
-    """Génère pour le prompt, puis remet les paramètres verrouillés à leur valeur actuelle."""
+    """v1 / v2 : génère pour le prompt, puis remet les paramètres verrouillés à leur valeur actuelle.
+    harmonia_v3 : part du preset courant et le rapproche du prompt (src/v3/inference.py)."""
     data = request.get_json(silent=True)
     if data is None:
         return jsonify({"error": "Invalid or missing JSON body."}), 400
@@ -452,7 +715,10 @@ def refine_preset():
 
     print(f"Received refine request for: '{prompt}' ({len(locked_params)} locked)")
 
-    named_parameters, prediction_error = _predict_parameters(runtime, prompt)
+    if getattr(runtime, "v3", None) is not None:
+        return _refine_v3(runtime, prompt, data, locked_params)
+
+    named_parameters, generation_info, prediction_error = _predict_parameters(runtime, prompt, data)
     if prediction_error:
         return jsonify({"error": prediction_error}), 400
 
@@ -461,7 +727,7 @@ def refine_preset():
         if key in named_parameters and key in current_parameters:
             named_parameters[key] = current_parameters[key]
 
-    response = _preset_response(runtime, prompt, named_parameters)
+    response = _preset_response(runtime, prompt, named_parameters, generation_info)
     _publish_preset(runtime, prompt, response, source="http-refine")
     return jsonify(response)
 
@@ -469,6 +735,31 @@ def refine_preset():
 @app.route("/charter", methods=["GET"])
 def charter():
     return jsonify({"version": "1.0", "parameters": charter_metadata()})
+
+
+@app.route("/charter/v3", methods=["GET"])
+def charter_v3_route():
+    """La charte v3 complète (charter/harmonia_v3.json) : les 192 paramètres des presets harmonia_v3."""
+    return jsonify(charter_v3.load().raw)
+
+
+def _warm_up_v3() -> None:
+    """Charge harmonia_v3 et joue quelques sons : la première requête ne paie ni le chargement ni la compilation."""
+    try:
+        runtime = _get_runtime(V3_MODEL_KEY)
+        if runtime.ready:
+            with _V3_LOCK:
+                cost = runtime.v3.warm_up()
+            app.logger.warning("harmonia_v3 ready: %.0f ms per sound on this machine", 1000 * cost)
+        else:
+            app.logger.warning("harmonia_v3 not ready: %s", runtime.error)
+    except Exception as exc:  # pragma: no cover - never stop the server for a warm-up
+        app.logger.warning("harmonia_v3 warm-up failed: %s", exc)
+
+
+# HARMONIA_V3_WARMUP=1 (set in the Docker image): prepare harmonia_v3 in the background when the server starts.
+if os.environ.get("HARMONIA_V3_WARMUP", "").strip() in ("1", "true", "yes") and V3_MODEL_KEY in _discover_models():
+    threading.Thread(target=_warm_up_v3, name="harmonia-v3-warm-up", daemon=True).start()
 
 
 if __name__ == '__main__':

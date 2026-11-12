@@ -1,0 +1,7 @@
+[
+ {"prompt": "Porte qui claque", "judge": "door slamming"},
+ {"prompt": "Grosse basse Ronflante", "judge": "big growling bass"},
+ {"prompt": "Verre qui se casse", "judge": "glass breaking"},
+ {"prompt": "Acid Pluck Lead", "judge": "acid pluck lead"},
+ {"prompt": "Soft Pad Atmospheric", "judge": "soft atmospheric pad"}
+]

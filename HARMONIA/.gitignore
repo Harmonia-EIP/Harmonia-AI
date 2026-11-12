@@ -25,6 +25,10 @@ saved_models/train*
 saved_models/charter_smoke*
 saved_models/history_metrics.json
 
+# --- v2 model files (downloaded from the GitHub release pinned in models/release.json) ---
+models/*/
+dist/
+
 # --- Benchmarks (runtime outputs) ---
 benchmarks/history.json
 benchmarks/reports/
@@ -33,6 +37,8 @@ benchmarks/reports/
 # Big or generated files stay out of the repo;
 # curated cold-start anchors are explicitly allowed below.
 data/processed/
+data/v2/
+data/v3/
 data/cleaned_dataset.npy
 data/cleaned_dataset.charter.npy
 data/raw/drop_zone/
@@ -56,3 +62,4 @@ metrics_dashboard/index.json
 metrics_dashboard/__pycache__/
 # Allow source files of the dashboard (index.html, receiver.php, api.php,
 # .htaccess, README.md, push_metrics.*, history_metrics.json) by NOT listing them.
+.venv-judge/

@@ -1,0 +1,5 @@
+# v2 training pipeline (scripts/v2/*), on top of requirements-ci.txt
+-r requirements-ci.txt
+soundfile==0.14.0
+soxr==1.1.0
+sentencepiece==0.2.2
