@@ -7,7 +7,7 @@ Harmonia maps text prompts (for example, `"Soft Piano"` or `"Aggressive Bass"`) 
 ## Features
 
 - **v2 model (`harmonia_v2`)**: multilingual prompts (French/English), presets selected by *listening* to the synth with CLAP, ONNX-only inference. See [V2.md](V2.md).
-- **v3 research (`harmonia_v3`, branch `research/ai-v3-presets`, prerelease `ai-v3.0.0`)**: real human-made presets (DX7, Surge XT, OB-Xf), 46-parameter analog engine plus a DX7 mode, presets generated from text. See [V3.md](V3.md).
+- **v3 (`harmonia_v3`, prerelease `ai-v3.3.0`)**: real human-made presets (DX7, Surge XT, OB-Xf) and imitations of real recordings, 46-parameter analog engine plus a DX7 mode, presets generated and refined from text. Served next to the v1 models; needs the plugin with the v3 engine. See [V3.md](V3.md).
 - Text-to-parameter inference with a lightweight BERT encoder (`prajjwal1/bert-tiny`)
 - Flask API for realtime plugin integration
 - API health endpoint (`GET /health`) + payload validation on `POST /generate`
