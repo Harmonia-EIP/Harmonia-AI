@@ -8,6 +8,8 @@
 
     python scripts/v3/train_generator_v3.py      # -> data/v3/generator/{dx7,analog,prior}.pt + meta.json
     python scripts/v3/train_generator_v3.py --cond synth --out data/v3/generator_synth   # v3.1
+    python scripts/v3/train_generator_v3.py --only analog --recordings data/v3/matched_fsd/fsd.jsonl \
+        --out data/v3/generator_sfx                                                      # v3.3
 """
 
 from __future__ import annotations
@@ -36,7 +38,11 @@ from src.v3.prior import Prior, prior_loss  # noqa: E402
 BANK = BASE_DIR / "data" / "v3" / "bank"
 OUT = BASE_DIR / "data" / "v3" / "generator"
 SYNTH_SPACE = BASE_DIR / "data" / "v3" / "synth_space"
-FSD50K_DEV = BASE_DIR.parents[1] / "ai-v2" / "HARMONIA" / "data" / "v2" / "fsd50k_dev.npz"
+# CLAP embeddings of the FSD50K recordings (scripts/v2/embed_fsd50k.py): here, or in the v2 worktree
+FSD50K_DEV = next((path for path in (BASE_DIR / "data" / "v2" / "fsd50k_dev.npz",
+                                     BASE_DIR.parent / ".worktrees" / "ai-v2" / "HARMONIA" / "data" / "v2" / "fsd50k_dev.npz")
+                   if path.exists()), BASE_DIR / "data" / "v2" / "fsd50k_dev.npz")
+NOTES = (45, 69)  # the bank's notes
 COND_NOISE = 0.05  # the prior's outputs are never exactly a real preset's embedding
 LABELLED_WEIGHT = 2.0  # named presets (see the synth branch of main)
 
@@ -107,6 +113,24 @@ class SynthConditions:
         types = torch.where(self.labelled[rows][:, None], self.labels[rows], types)
         z = torch.nn.functional.normalize(z + COND_NOISE * torch.randn_like(z), dim=-1)
         return torch.cat([z, types], dim=-1)
+
+
+def load_recordings(path: Path, min_cos: float, max_distance: float):
+    """Analog presets that imitate real recordings (scripts/v3/match_recordings.py), kept when both of the
+    search's measures say the imitation is close enough. Returns (codec vectors, CLAP embedding of each
+    preset's own sound at the bank's notes, rows)."""
+    from src.synth.engine_v3 import render_batch
+    from src.v2.clap_audio import ClapEmbedder
+
+    rows = [json.loads(line) for line in open(path, encoding="utf-8")]
+    rows = [r for r in rows if r["cos"] >= min_cos and r["distance"] <= max_distance]
+    physical = np.array([r["physical"] for r in rows], dtype=np.float64)
+    audio = np.nan_to_num(render_batch(physical, np.array(NOTES), 100 / 127, 1.5, 4.0, 48000, 7))
+    audible = np.abs(audio).reshape(len(rows), -1).max(axis=1) > 1e-3
+    emb = ClapEmbedder(half=True).embed_audio(list(audio.reshape(-1, audio.shape[-1])), batch_size=64)
+    emb = normalize(emb).reshape(len(rows), len(NOTES), -1)
+    x = np.stack([codecs.analog_encode(p) for p in physical]).astype(np.float32)
+    return x[audible], emb[audible].astype(np.float32), [r for r, a in zip(rows, audible) if a]
 
 
 def train_diffusion(name: str, x: np.ndarray, conditions, steps: int, batch: int, device, seed: int,
@@ -200,6 +224,13 @@ def main() -> int:
     parser.add_argument("--cond", choices=("clap", "synth"), default="clap",
                         help="clap: v3.0 (CLAP sound + prior); synth: synth space, prompts used directly")
     parser.add_argument("--out", type=Path, default=OUT)
+    parser.add_argument("--only", choices=("analog",), default=None,
+                        help="train the analog generator alone; the prior and the DX7 generator are copied from --base")
+    parser.add_argument("--base", type=Path, default=OUT, help="with --only: the generators to keep")
+    parser.add_argument("--recordings", type=Path, default=None,
+                        help="presets imitating real recordings (match_recordings.py), added to the analog presets")
+    parser.add_argument("--min-cos", type=float, default=0.45, help="recordings: lowest CLAP similarity kept")
+    parser.add_argument("--max-distance", type=float, default=30.0, help="recordings: highest perceptual distance kept")
     args = parser.parse_args()
 
     from src.v2.clap_audio import TEACHER_ID, TEACHER_REVISION, ClapEmbedder
@@ -234,6 +265,32 @@ def main() -> int:
         print(json.dumps(meta, indent=2))
         return 0
 
+    cond_analog = emb[analog_idx]
+    recordings = 0
+    if args.recordings:
+        x_rec, emb_rec, rows = load_recordings(args.recordings, args.min_cos, args.max_distance)
+        recordings = len(rows)
+        x_analog = np.concatenate([x_analog, x_rec])
+        cond_analog = np.concatenate([cond_analog, emb_rec])
+        print(f"recordings: {recordings} imitations added to the analog presets", flush=True)
+
+    if args.only == "analog":
+        import shutil
+
+        for name in ("prior.pt", "dx7.pt"):
+            if args.base.resolve() != out.resolve():
+                shutil.copy2(args.base / name, out / name)
+        analog = train_diffusion("analog", x_analog, SoundConditions(cond_analog, device), args.analog_steps, 256,
+                                 device, args.seed)
+        torch.save(analog.model.state_dict(), out / "analog.pt")
+        meta = json.loads((args.base / "meta.json").read_text(encoding="utf-8"))
+        meta.update(analog_presets=int(len(x_analog)), analog_recordings=recordings,
+                    analog_args={"steps": args.analog_steps, "seed": args.seed, "min_cos": args.min_cos,
+                                 "max_distance": args.max_distance, "base": str(args.base)})
+        (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        print(json.dumps(meta, indent=2))
+        return 0
+
     embedder = ClapEmbedder(half=True)
     text_emb, audio_emb = prior_pairs(entries, emb, lambda t: normalize(embedder.embed_text(t)))
     del embedder
@@ -243,12 +300,12 @@ def main() -> int:
 
     dx7 = train_diffusion("dx7", x_dx7, SoundConditions(emb[dx7_idx], device), args.dx7_steps, 512, device, args.seed)
     torch.save(dx7.model.state_dict(), out / "dx7.pt")
-    analog = train_diffusion("analog", x_analog, SoundConditions(emb[analog_idx], device), args.analog_steps, 256,
+    analog = train_diffusion("analog", x_analog, SoundConditions(cond_analog, device), args.analog_steps, 256,
                              device, args.seed)
     torch.save(analog.model.state_dict(), out / "analog.pt")
 
-    meta = {"teacher": {"id": TEACHER_ID, "revision": TEACHER_REVISION}, "dx7_dim": codecs.DX7_DIM,
-            "analog_dim": codecs.ANALOG_DIM, "dx7_presets": int(len(dx7_idx)), "analog_presets": int(len(analog_idx)),
+    meta = {"analog_recordings": recordings,"teacher": {"id": TEACHER_ID, "revision": TEACHER_REVISION}, "dx7_dim": codecs.DX7_DIM,
+            "analog_dim": codecs.ANALOG_DIM, "dx7_presets": int(len(dx7_idx)), "analog_presets": int(len(x_analog)),
             "prior_pairs": int(len(text_emb)), "prior": prior_report, "cond_noise": COND_NOISE, "args": vars(args)}
     (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     print(json.dumps(meta, indent=2))
