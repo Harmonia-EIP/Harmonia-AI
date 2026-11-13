@@ -16,7 +16,7 @@ It converts natural-language prompts into normalized synthesizer parameters in t
 - `scripts/prepare_dataset.py`: parse raw dumps and build `data/processed/presets.json`
 - `scripts/train.py`: train, save model, produce benchmark history and validation metrics report
 - `scripts/generate.py`: CLI inference
-- `scripts/server.py`: Flask API (`POST /generate`, `GET /health`, `GET /metrics/latest`)
+- `scripts/server.py`: Flask API (`POST /generate`, `POST /refine-preset`, `GET /health`, `GET /metrics/latest`)
 - `scripts/auto_trainer.py`: filesystem watcher for continuous retraining
 - `scripts/benchmark_viewer.py`: print training history evolution
 
@@ -131,6 +131,7 @@ Endpoint:
 
 ```text
 POST http://127.0.0.1:5000/generate
+POST http://127.0.0.1:5000/refine-preset
 GET  http://127.0.0.1:5000/health
 GET  http://127.0.0.1:5000/metrics/latest
 ```
@@ -149,6 +150,21 @@ Validation on `POST /generate`:
 - max prompt length: `512`
 - prompts exceeding model token context (default `32` tokens) are rejected
 - if model weights are unavailable/invalid, API returns `503`
+
+`POST /refine-preset` (alias `/ai/refine-preset`) generates for the prompt, then puts the locked parameters back to their current value:
+
+```json
+{
+  "prompt": "Brighter, more attack",
+  "parameters": { "filter_cutoff": 0.42, "amp_attack": 0.1 },
+  "locked_params": ["filter_cutoff"],
+  "model_name": "charter_v1"
+}
+```
+
+- same `prompt` rules and response format as `POST /generate`
+- `parameters` (current preset, values in `0..1`) must be an object of numbers, `locked_params` a list of ids
+- a locked id unknown to the model or missing from `parameters` is ignored
 
 API traceability:
 - `GET /health` returns `model_version` and `model_hash`
@@ -180,6 +196,44 @@ Response:
   }
 }
 ```
+
+#### `harmonia_v3` (branch `research/ai-v3-presets`)
+
+With `"model_name": "harmonia_v3"` (aliases `v3`, `model-4`, `4`) both routes answer a **charter-v3** preset:
+`metadata.charter_version` `3.x`, `metadata.engine` (`analog` or `dx7`) and, in `parameters`, `engine` plus the
+normalized parameters of that engine (46 analog or 145 DX7, `charter/harmonia_v3.json`, also served by
+`GET /charter/v3`). The plugin of the same branch loads it as is. `generation` tells which engine was kept
+and how close the sound is to the prompt.
+
+- `POST /generate`: optional `variation` (integer >= 0) gives other answers to the same prompt; the same
+  request always gives the same preset.
+- `POST /refine-preset`: starts from `parameters` (the plugin's current preset: v3, or a v1/v2 preset, which
+  is converted) and moves it towards the prompt. The engine is kept, the locked parameters come back exactly
+  as sent, and the tunings stay put unless `strength` is above 0.75. Optional `strength` (0..1, default 0.5):
+  how far the sound may move. `generation.similarity_before` / `similarity` show the progress, `kept` how
+  much of the starting sound remains, `changed` whether a closer sound was found.
+
+  A comparative in the prompt ("plus sombre", "brighter", "more reverb", "attaque plus lente", "plus long",
+  French or English) is followed as a direction on a measure of the sound instead: `generation.directives`
+  lists what was read (`brightness-`, `space+`...), `measures_before` / `measures_after` the result, and
+  `unsupported` the comparatives the engine has no setting for.
+
+```json
+{
+  "prompt": "Porte qui claque dans une cathédrale",
+  "model_name": "harmonia_v3",
+  "parameters": { "engine": 0.0, "filter_cutoff": 0.42, "reverb_mix": 0.1 },
+  "locked_params": ["filter_cutoff"],
+  "strength": 0.6
+}
+```
+
+Environment: `HARMONIA_V3_MODEL_DIR` (default `models/harmonia_v3`), `HARMONIA_DEFAULT_MODEL=harmonia_v3` to make
+it the model behind `latest`, and `HARMONIA_V3_CANDIDATES` (8 per engine), `HARMONIA_V3_POLISH_ROUNDS` (2),
+`HARMONIA_V3_REFINE_ROUNDS` (3), `HARMONIA_V3_POPULATION` (8) to trade time for quality: every candidate is
+played and listened to, about 45 ms each on a laptop core. `HARMONIA_V3_TIME_BUDGET` (seconds, 0 = no limit)
+shrinks that work automatically on a slow machine, `HARMONIA_V3_WARMUP=1` prepares the model when the server
+starts. Install the model with `python scripts/v2/fetch_model.py --model harmonia_v3`. Details: [V3.md](V3.md).
 
 ### E. Auto-training
 

@@ -2,6 +2,384 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.3.3] - harmonia_v3 on the VPS (release `ai-v3.3.0`)
+`harmonia_v3` becomes one more model of the server, next to the v1 models (which stay the default): the
+plugin with the v3 engine selects it in its model menu.
+
+### Added
+- **Release `ai-v3.3.0`** (613 MB, pinned in `models/release.json`, `python scripts/v2/fetch_model.py --model
+  harmonia_v3`): what the server loads and nothing else: text encoder, prior, the two generators (the analog
+  one of v3.3) and CLAP's audio tower. With `LICENSE`, `NOTICE.md` (third-party licences) and
+  `ATTRIBUTION.json`: title, author and licence of the 388 FSD50K recordings the imitations come from (210
+  CC BY, 178 CC0). No preset, no audio.
+- **Time budget** (`HARMONIA_V3_TIME_BUDGET`, seconds; 12 in the Docker image, 0 = no limit): the run time
+  measures what playing and hearing one sound costs on the machine and draws fewer candidates / searches
+  fewer rounds when it is slow, so a request stays under the backend's 30 s on a small VPS. `generation`
+  reports `seconds` and `heard`.
+- **Warm-up** (`HARMONIA_V3_WARMUP=1`, set in the image): the model is loaded and a few sounds are played in
+  the background when the server starts; the first request no longer pays for it.
+- One v3 request at a time per process (lock): one copy of the model, an engine that is never re-entered.
+
+### Changed
+- **Docker image**: one gunicorn worker with 4 threads instead of 2 workers (`HARMONIA_WORKERS`,
+  `HARMONIA_THREADS`): harmonia_v3 holds about 1.3 GB, two workers would hold it twice. The v2 model is
+  fetched only with `--build-arg HARMONIA_FETCH_V2=1`. `numba` joins `requirement.txt`.
+- `export_model.py`: `--runtime-only`, `--recordings` (credits), `--display-name`; `package_release.py --name`.
+
+## [0.3.2] - Harmonia v3.3: sound effects learnt from real recordings (branch `research/ai-v3-presets`)
+"Porte qui claque" answered a telephone tone: the banks the generators learnt from are musical, they had
+never seen a sound-effect preset (#33). Details: [V3.md](V3.md).
+
+### Added
+- **Presets that imitate real recordings (`scripts/v3/match_recordings.py`)**: for FSD50K recordings (CC0
+  and CC BY only, human voice classes left out, up to 8 per class in turn), a search on the analog engine
+  that plays, listens and keeps what gets closer by two measures at once: CLAP similarity to the recording
+  and the perceptual distance of `src/presets/perceptual.py`. On 24 recordings, similarity to the real sound
+  for an independent judge: 0.30 with the perceptual distance alone, 0.42 with CLAP alone, 0.46 with both.
+  The recordings are never copied: one line of synthesizer settings each, with title, labels, licence and
+  author. 576 recordings imitated so far (of 1,295 chosen; the run resumes), 388 kept (CLAP similarity >=
+  0.45 and perceptual distance <= 30). Noisy textures come out best (thunder, waves, fan, tambourine), short
+  structured impacts worst (slam, knock, camera).
+- **Analog generator retrained with them** (`train_generator_v3.py --only analog --recordings ...`): 2,117
+  bank presets + 388 imitations; prior and DX7 generator unchanged.
+- **Benchmark with an independent judge** (`scripts/v3/benchmark_v3.py`, `benchmark_judge_v3.py`): Malo's 18
+  prompts and the 165 non-voice class names of FSD50K's eval split; Microsoft CLAP 2023 (never used to train
+  or to search) scores each sound against the prompt (text) and against real eval recordings of the class
+  (real). `--refine-from` measures refine clicks, `listening_prompts.py --bench` builds the blind page.
+
+### Changed
+- **Generation**: only the analog draw is polished by the search, and the engine is chosen after. On DX7
+  voices the search raised CLAP's similarity (+0.042) but not the judge's (+0.002 text, +0.004 real), and
+  holding their structure as a refine does changed nothing; on analog presets the gain is real (+0.018,
+  +0.021).
+- `export_model.py --generator data/v3/generator_sfx --version harmonia_v3.3` ships this generator.
+
+### Results (independent judge, 183 prompts)
+| System | Malo's prompts, text | FSD50K classes, text | FSD50K classes, real |
+|---|---|---|---|
+| v3.0 (release `ai-v3.0.0`: best of 8 draws per engine) | 0.125 | 0.063 | 0.303 |
+| v3.0 + search after the draw | 0.104 | 0.078 | 0.317 |
+| + 212 imitations | 0.119 | 0.097 | 0.347 |
+| + 388 imitations | 0.139 | 0.102 | 0.350 |
+| **v3.3**: 388 imitations, search on analog only | **0.168** | **0.103** | **0.352** |
+| real recordings of the class | | | 0.714 |
+
+v3.3 against v3.0, paired over the prompts: text +0.041 (95 % CI +0.028 .. +0.053), real +0.049 (+0.034 ..
++0.065). Largest gains on glass (0.44 -> 0.69), shatter (0.33 -> 0.62), knock (0.24 -> 0.49), rain (0.08 ->
+0.35); "slam" does not move (0.24 -> 0.21): a door slam is still out of reach of this engine. Three refine
+clicks with the same prompt add +0.014 text and +0.015 real (CI above 0), on DX7 voices as well.
+Malo's 18 prompts are too few to conclude alone: the blind listening round p4 (v3.0, v3.3, v3.3 after three
+refine clicks) is the judge that counts.
+
+### Fixed
+- `train_generator_v3.py` looked for the FSD50K embeddings at a path of the removed v3 worktree.
+
+## [0.3.1] - Refine follows comparatives ("plus sombre", "more reverb") (branch `research/ai-v3-presets`)
+### Fixed
+- **Relative refine prompts went the wrong way.** CLAP hears what a sound is, not how it compares with
+  another: on 8 analog presets, two refines towards "darker" made 6 of them brighter, "plus brillant" made 6
+  darker, "attaque plus lente" shortened the attack of 5. A comparative is now read as a direction
+  (`src/v3/directives.py`, French and English): brightness, attack, length, space (reverb). The settings
+  that carry it move step by step (filter cutoff, amp attack, release, reverb mix; on the DX7 the operator
+  levels and envelope rates, each operator also tried alone since their role depends on the algorithm) and
+  a step is kept only when the measure taken on the sound went the asked way. Nothing else of the preset
+  changes; locked parameters stay put. When those settings cannot move (locked, at their limit), variations
+  of the sound are searched with the same measure.
+
+  | Refine prompt (2 clicks, 8 presets) | right way before | right way now | wrong way now |
+  |---|---|---|---|
+  | plus sombre / darker | 8 / 2 | 8 / 8 | 0 |
+  | plus brillant / brighter | 2 / 7 | 8 / 8 | 0 |
+  | plus de reverb / more reverb | 7 / 6 | 8 / 8 | 0 |
+  | attaque plus lente / slower attack | 3 / 4 | 6 / 6 | 0 |
+
+- "un peu", "slightly" halve the move, "beaucoup", "much" make it 1.6 times larger. `generation` reports
+  `directives` and the measures before and after; a comparative the engine has no setting for (reverb on
+  the DX7 mode, which plays dry) is listed in `unsupported`.
+- A prompt without comparative ("grosse basse ronflante") is a description: the refine of 0.3.0 is unchanged.
+
+## [0.3.0] - Harmonia v3 in the server: generation and refine (branch `research/ai-v3-presets`)
+The v3 models were only used by offline scripts. The server now answers with them, in the charter-v3
+format the plugin of the same branch plays (#32). Details: [V3.md](V3.md).
+
+### Added
+- **v3 run time (`src/v3/inference.py`)**: prompt -> charter-v3 preset with trained weights only (no preset
+  bank, no recording). Each generator (analog engine, DX7 mode) draws candidates for the sound the prompt
+  asks for, Harmonia plays them, CLAP listens, and the closest one is polished by a short search around it
+  (variations drawn by the generator and small moves of the settings, each played and heard; a variation is
+  kept only when it is closer to the prompt). About 2 s per prompt on a laptop CPU, no GPU.
+- **`harmonia_v3` in `scripts/server.py`**: `model_name` `harmonia_v3` (aliases `v3`, `model-4`, `4`), listed
+  by `GET /models` when its files are installed. `/generate` takes `variation`; `GET /charter/v3` serves the
+  charter. `HARMONIA_DEFAULT_MODEL=harmonia_v3` makes it the model behind `latest`.
+- **Refine for v3 (`/refine-preset`)**: instead of generating again and putting the locks back (v1, #26), it
+  starts from the plugin's current preset and searches around it: a variation is kept when it is closer to
+  the prompt and still sounds like the preset it started from. The engine is kept, locked parameters come
+  back exactly as sent, tunings / algorithm / ratios are held unless `strength` (0..1, default 0.5) is above
+  0.75. A v1/v2 preset is accepted and converted with the charter's rules. About 1.5 s per click.
+- **Locked values in the generator (`src/v3/diffusion.py`)**: `sample(..., keep=mask)` draws the free
+  values so that they fit the kept ones.
+- **CLAP audio tower alone (`src/v3/listener.py`)**: the server only listens; same embeddings as the
+  training embedder (cosine 1.0000), read from the model directory when present.
+
+### Tests
+- `tests/test_v3_inference.py`, `tests/test_server_v3.py` with a tiny offline model (`tests/v3_fixtures.py`):
+  valid charter-v3 presets, repeatable generations, variations, locks returned exactly (analog and DX7),
+  pitch structure held, v2 presets accepted, invalid options (400), missing files (503), default-model
+  override.
+
+## [0.2.0] - Harmonia v3 research (prerelease `ai-v3.0.0`, branch `research/ai-v3-presets`, not to be merged)
+Goal: generate presets from text with an AI trained only on real, human-made presets and human-written
+text (no generated training data), on a richer engine. Progress is checked by ear on a listening page
+where Malo rates each sound. Details: [V3.md](V3.md).
+
+### Added
+- **Real preset banks** (`scripts/v3/fetch_presets.py`, `presets_to_json.py`): DX7 (27,471 unique voices
+  from Dexed's cartridge collection and built-in programs), Surge XT factory + third-party (3,555, GPL-3),
+  OB-Xf (492, CC0). Fetched from their sources (pinned commit / sha256), never redistributed.
+- **Feature-usage analysis** (`scripts/v3/analyze_presets.py`): which synthesis features real presets use;
+  it chose the new engine parameters (e.g. 72 % of OB-Xf presets set an oscillator interval, 63 % use
+  unison, 94 % of DX7 voices use 5-6 operators).
+- **v3 analog engine** (`src/synth/engine_v3.py`, `v3_params.py`), 46 parameters: the 20 of v2 plus
+  coarse tuning per oscillator, pulse width, sync, OB-X style cross-modulation, ring mod, unison (1-16
+  voices), stereo width, 12/24 dB filter, keyboard tracking, full filter envelope, pitch envelope,
+  velocity to amp, LFO shape/delay/amp/PWM, chorus, delay, reverb size. Band-limited saw/pulse,
+  exponential decays, 2x oversampling, analog drift, feedback-delay-network reverb.
+- **DX7 mode** (`native/dx7`, `scripts/v3/build_dx7.py`, `src/presets/dx7_render.py`): Dexed's msfa FM
+  core (Apache-2.0, embeddable in the app) plays DX7 voices as they are, ~2 ms per note.
+- **Original-synth rendering** (`src/presets/originals.py`): OB-Xf and Surge XT presets played by the
+  official plugins through pedalboard, to compare every conversion with its original.
+- **Converters** (`src/presets/convert_obxf.py`, `convert_surge.py`) using each synth's real scalings, and
+  **sound matching** (`src/presets/matching.py`, `perceptual.py`, `scripts/v3/match_presets.py`): CMA-ES
+  refines the conversion so it sounds like the original.
+- **Listening page with ratings** (`scripts/v3/listening_v3.py`): original / conversion / Harmonia side by
+  side, 1-5 ratings and remarks stored in the page's database and read back.
+- **v3 bank builder** (`scripts/v3/build_bank_v3.py`) and readable preset text from names/categories
+  (`src/presets/labels.py`); `src/presets/filters.py` leaves out arpeggios, step sequences and templates.
+
+### Listening rounds (Malo's ratings, 1-5)
+| Round | What changed | OB-Xf | Surge XT | DX7 |
+|---|---|---|---|---|
+| 1 | first conversions, log-mel matching | 2.5 | 1.9 | 2.8 |
+| 2 | perceptual metric, no added modules, stereo, 16-voice unison | 3.3 (17 better, 1 worse) | 3.1 (23 better, 0 worse) | — |
+| 3 | fixes below (octave, cross-mod, oversampling, reverb, DX7 velocity) | 3.4 (9 better, 4 worse) | 3.3 (8 better, 6 worse) | 3.2 (8 better, 1 worse vs round 1) |
+
+Round 3 is the frozen v3 sound: 82 ratings, 38 of them 4 or 5, 5 at 1. Remaining remarks are about some
+saw-based Surge sounds still "metallic" or lacking depth/clarity ("Church", "Newton was evil", "Fuji"),
+and "Tek stab" not resembling its original at all. More engine and matching work goes to a later version.
+
+Round 1 showed the first optimizer "cheated": it lowered its log-mel distance by adding distortion (69 %
+of presets), noise (50 %), LFO and effects the originals do not have. The perceptual metric (1/3-octave
+timbre, envelope, movement, stereo width) follows the ratings better (Spearman -0.52 vs -0.32) and the
+optimizer may no longer add absent modules.
+
+### Fixed after round 2
+- Surge scene octave (`a_octave`, 31 % of presets) and OB-Xf global transpose (33 %) were ignored:
+  "one octave too high".
+- Cross-modulation now works like OB-Xf's (osc1 bends osc2's pitch, harmonic with sync) instead of the
+  reverse phase modulation, which turned synced presets inharmonic ("metallic").
+- Grit/"metallic" character: 2x oversampling against aliasing of sync, cross-mod and distortion; the
+  Freeverb reverb replaced by a modulated feedback delay network (tail spectral ripple 11.8 dB vs 19.0);
+  slight analog pitch drift per oscillator.
+- DX7 velocity follows the DX7 keyboard range (Dexed's option): E.PIANO 1 was played too hard.
+- DX7 voices no longer depend on uninitialized memory (bit-exact repeat renders).
+- Pitch envelope is exponential; OB-Xf pitch envelopes on sustained filter envelopes no longer detune.
+- Matching weighs attack/impact more and tries the whole preset an octave up/down.
+
+### Step 4: generating presets from text
+- **v3 bank** (`scripts/v3/build_bank_v3.py`): 29,531 real presets heard by CLAP (27,414 DX7 voices,
+  425 OB-Xf and 1,692 Surge presets whose Harmonia version scored <= 13, the threshold that separated
+  round-2 ratings: 3.6/5 kept vs 2.4/5 dropped).
+- **Human-only text corpus** (`scripts/v3/build_text_corpus_v3.py`): FSD50K titles/tags/labels and the
+  presets' own names and categories (54,192 sentences, French by `opus-mt` except preset proper names);
+  v2's template sentences are gone. The multilingual encoder retrained on it reaches a cosine to the CLAP
+  teacher of 0.82 (EN) / 0.79 (FR) on held-out sentences (v2, with templates: 0.84 / 0.80).
+- **Generators** (`src/v3/`, `scripts/v3/train_generator_v3.py`): diffusion models that draw DX7 voices or
+  analog presets for a CLAP sound embedding, and a text -> sound prior trained on 97,883 human pairs
+  (validation: cosine to the true sound 0.62 vs 0.23 for the raw text embedding, right sound in the top 10
+  of 2,000 for 63 %). `scripts/v3/generate_v3.py` draws 8 candidates per engine, plays them, keeps the one
+  CLAP hears closest; 1-2 s per prompt including rendering. `scripts/v3/listening_prompts.py` builds a blind
+  A/B page (generated vs selected from the bank) for Malo's prompts.
+- **First run on Malo's prompts** (`benchmarks/v3_prompts_p1.json`, 13 prompts, never used for training;
+  "Piano", "Electric Piano", "Soft Piano" and "Soft Pad" are also names of real presets the prior learned
+  from). CLAP similarity to the prompt's target sound, before listening:
+
+  | Prompt | Generated | Selected from the bank |
+  |---|---|---|
+  | Piano | DX7 0.80 | SOFT-PIANO 0.91 |
+  | Electric Piano | DX7 0.84 | E.PIANO 58 0.88 |
+  | Soft Piano | DX7 0.67 | Steel 11 0.74 |
+  | Piano in a big room | analog 0.30 | MIRop4ff 0.39 |
+  | Techno Lead | DX7 0.75 | Need'sWork 0.81 |
+  | Melencholic House Pad | analog 0.59 | Hardstyle Lead 1 0.59 |
+  | Emotional old pluck | analog 0.72 | JP80x0 Pluck 0.71 |
+  | Lead from melancholic hill of Gorillaz | analog 0.73 | Like Old Analog 0.74 |
+  | Glass breaking | analog 0.33 | Glasscrush 0.49 |
+  | Bongo Percussion | analog 0.40 | K SNARE 7 0.48 |
+  | Soft Pad | analog 0.50 | SawPW1 0.54 |
+  | Minimoog bass | analog 0.73 | Ignitor 0.79 |
+  | Hypnotic Futuristic Pluck | analog 0.56 | Utopia 0.58 |
+
+  Generation is within 0.05 of selection on 6 of 13 prompts and weakest on non-instrument sounds (glass,
+  percussion) and on a place ("big room"), which the bank barely covers.
+- **Blind A/B listening on those prompts** (Malo, 1-5 "matches the description"): **generation 2.0,
+  selection 2.8**; generation better on 2 prompts, equal on 2, worse on 9. Remarks: generated glass and
+  bongos "wtf", "Soft Piano" "bizarre"; selection's glass (DX7 "Glasscrush") and percussion rated 4, but
+  "Soft Pad" got a saw lead and "Melencholic House Pad" a hardstyle lead; nothing sounds like Gorillaz.
+- **Why** (1,433 OB-Xf/Surge presets whose category names a type: bass, pad, lead, pluck, keys, drums,
+  brass, strings, fx):
+  - CLAP's text side barely knows synth words: "a synthesizer pad sound" etc. finds the right type for
+    25 % of presets (chance 18 %). Its audio side groups them better (5-NN type vote 56 %).
+  - Through the v3 encoder and prior, type precision of the 20 nearest presets is 44 % for a bare type
+    word ("lead" 5 %, "strings" 5 %, "fx" 0 %) and drops to 24 % with an adjective ("soft pad": 15 %).
+  - The generator is then asked for the wrong sound, and keeping the candidate CLAP scores highest picks
+    sounds that fool CLAP (as the first matching optimizer did) rather than good ones.
+  - 93 % of the bank is unlabelled DX7 cartridge voices; only 2,117 analog presets.
+
+### v3.1: understanding synth words, fairer choices, variations (after the blind test)
+- **Synth vocabulary** (`src/v3/vocabulary.py`): 14 types (bass, pad, lead, pluck, keys, organ, bell, brass,
+  strings, winds, voice, guitar, drums, fx) read from the presets' own categories and names and from FSD50K
+  class labels; the table only groups their synonyms. 14,050 bank presets get a type (12,303 DX7 voices by
+  name, 1,747 analog presets).
+- **Synth space** (`src/v3/synth_space.py`, `scripts/v3/train_synth_space.py`): two small adapters on CLAP's
+  sound embedding and on the multilingual text encoder, trained so a preset's sound sits next to its own
+  name, category and comment (and their opus-mt French versions), with FSD50K for everyday sounds and a
+  type head on both sides. A sound matches a prompt when it is close to it and of the type the prompt
+  names. Held-out presets (10 %, never trained on):
+
+  | Measure | v3.0 | v3.1 |
+  |---|---|---|
+  | type of the 20 closest presets, one word ("pad") | 56 % | 78 % |
+  | same with an adjective ("soft pad", "dark lead"...) | 47 % | 64 % |
+  | French, one word / with an adjective | 53 % / 47 % | 79 % / 69 % |
+  | a preset's name finds its own sound in the top 10 of 2,972 | 20 % | 37 % |
+
+  "lead" (30 %), "pluck" (40 %) and "fx" (5 %) stay weak: telling them apart from the sound alone is hard
+  even in the training labels (Surge "Keys" are often plucks).
+- **Tried and dropped**: measured attack/decay/sustain/brightness next to CLAP (type recognition 64.6 % ->
+  65.3 %, CLAP already hears them); an engine chooser (trained on sounds, applied to text it was
+  overconfident and contradicted the type).
+- **Generators v3.1** (`scripts/v3/train_generator_v3.py --cond synth`): conditioned on the synth space plus
+  the type, half the time from the preset's sound and half from its own texts, so a prompt is used directly
+  (no text -> sound prior). DX7 voices whose names say what they are come up twice as often.
+- **Variations** (`src/v3/diffusion.py`, `start`/`strength`): the generator starts from the real presets
+  closest to the prompt, noised to 40 % of the schedule, and walks back towards the prompt.
+- **Fairer choice of the candidate** (`scripts/v3/generate_v31.py`): close to the prompt with the right
+  type, plus how typical it is of the generator's draws for that prompt (the best match alone favours
+  sounds that fool the judge); both engines compete with no engine preference.
+- **Blind listening round 2** on the same 13 prompts (Malo: "vraiment nul"): generation 2.0, variation 1.5,
+  selection 1.7 (v3.0's selection: 2.8). The synth space learned to put a preset's sound next to its own
+  name, so it picks presets whose *names* match the prompt (GlassBreak, MOOG BASS, Tabla 2), mostly amateur
+  DX7 cartridge voices that sound poor (v3.0's choices by sound - Glasscrush, Ignitor, K SNARE 7 - had 4/5).
+  Renders are identical to the round-3 page (checked on "Fuji"): the gap with that page is which presets
+  are played, not the engine.
+
+### v3.2 test: a curated library inside Harmonia, chosen by sound
+- 13,002 of the 27,471 DX7 voices appear in a single cartridge of the community collection; the round-3
+  page played Yamaha's factory voices and factory OB-Xf / Surge presets.
+- `scripts/v3/curated_v32.py`: library of professional presets only (2,941 voices from Yamaha's own DX7
+  cartridges - ROM1-4, VRC, TX816, DX5, DX7II - and the 2,110 OB-Xf / Surge presets Harmonia reproduces
+  faithfully, minus 17 rated 2 or less in round 3), a few MB with their embeddings, shipped inside the model
+  data; chosen by sound (v3.0 target) within the type the prompt names; a light variation (15 % of the
+  noise schedule) of the chosen preset.
+- Blind round 3 on the same prompts: curated choice 2.5, v3.0's choice in the whole bank 2.6, light
+  variation 2.1. Curating the library does not beat choosing by sound in the whole bank, and the best
+  choices stay around 3-4/5. Malo: even good presets "feel off" next to professional instruments: the
+  next limit is the sound Harmonia makes, not the choice.
+
+### Release `ai-v3.0.0` (GitHub prerelease, models only)
+- `scripts/v3/export_model.py` gathers the trained models into `models/harmonia_v3/` with a manifest
+  (sha256 per file); packaged by `scripts/v2/package_release.py` and pinned in `models/release.json`;
+  `python scripts/v2/fetch_model.py --model harmonia_v3` downloads and verifies it.
+- Contents (538 MB): multilingual text encoder (FR/EN), v3.0 prior and generators, v3.1 synth space and
+  generators. No preset and no audio: the repository is public and the banks are not ours to
+  redistribute; the bank and the curated library are rebuilt locally from their sources.
+- Summary of the listening results the release stands on:
+
+  | Listening | Question | Result |
+  |---|---|---|
+  | Round 3 (presets) | Harmonia vs original | OB-Xf 3.4, Surge 3.3, DX7 mode 3.2 |
+  | Prompts 1 | matches the description | v3.0 generation 2.0, selection 2.8 |
+  | Prompts 2 | idem | v3.1 generation 2.0, variation 1.5, selection 1.7 |
+  | Prompts 3 | idem | curated choice 2.5, v3.0 choice 2.6, light variation 2.1 |
+
+### The v3 engine in the plugin (Harmonia-EIP/Harmonia-App#48, #49)
+- Charter additions for the port: the 20 v2 ranges (a v2 preset, what the v1/v2 models return, is read
+  correctly once the plugin uses the v3 layout), `HarmoniaCharter::analog::Index` and
+  `HarmoniaParamsV3::ParameterRefs` in the generated C++.
+- **`scripts/v3/engine_parity.py`**: builds the plugin's C++ engine (Harmonia-App, `src/engine`) and compares
+  it with `src/synth/engine_v3.py` on real bank presets (C2, C3, C4, perceptual distance). On 80 analog presets:
+  median distance 2.55 plugin vs Python, 2.57 between two Python renders (random unison phases, drift, noise);
+  all 80 within that spread; level 0.0 dB median, 2.3 dB at worst.
+- Readable values in the plugin: the generated JUCE layout formats every parameter (2, 1 or 0 decimals by
+  magnitude, short units: kHz, ms, s, ct, oct, st; a sign on bipolar ones) and reads typed values ("1.2 kHz").
+- DX7 mode (Harmonia-App#50): `engine_parity.py --dx7 N` rebuilds bank voices from the charter's DX7 values
+  through the plugin and renders them with its msfa voice: 300/300 voices byte-identical, samples within 3e-5
+  of `src/presets/dx7_render.py` (-90 dB; the plugin frees a voice once it is silent after the release).
+
+### Charter v3: one source for the plugin, the backend and the AI
+- **`charter/harmonia_v3.json`**: every v3 parameter: `engine`, the 46 analog ones in the AI's vector order, and
+  the 145 DX7 ones described once per operator. For each: module, range, curve (`centre`), default, choices,
+  unit, English and French labels, description. Also the preset format, the v2 upgrade rules and a draft sound
+  brief (family, attack, brightness, length, movement, width, space, references) whose bins are quantiles of
+  measures on the real presets (charter/README.md).
+- **`src/charter_v3.py`** reads it (standard library only): presets made, read and validated, DX7 voice <->
+  parameters, v2 -> v3 upgrade. `src/synth/v3_params.py` now builds its 46 specs from it: same ranges, same
+  vectors, renders bit-exact with before.
+- **`scripts/v3/charter_cpp.py`** generates the plugin's headers into `charter/generated/`:
+  `HarmoniaCharterV3.h` (plain C++17 table and normalization) and `HarmoniaParametersV3.h` (JUCE layout, one
+  group per module and per DX7 operator, `applyV2State`). Checked against JUCE 8.0.8 (Harmonia-APP's
+  submodule): the generated layout creates the 192 parameters, and JUCE's conversions match the charter's
+  on all of them.
+- That check found that JUCE rounds int and choice parameters half to even (`juce::roundToInt`: 8.5 -> 8),
+  where v3_params rounded halves up. The charter now rounds as JUCE does, in Python and C++, so a
+  normalized value plays the same in the plugin as in the AI. Only exact halves change; no training vector
+  is affected.
+- Tests (`tests/test_charter_v3.py`): unique ids in the vector order, DX7 layout equal to the codec's,
+  normalization and rounding, preset round trips and validation, v2 rules, generated headers up to date,
+  and the C++ table compiled and compared with Python.
+
+## [0.1.0] - Harmonia v2: Listened Presets and French Prompts
+### Added
+- **Offline synth renderer (`src/synth/`)**: numba port of the app's `Synth.cpp`, reverb settings and JUCE parameter conversions, validated sample by sample against the real C++ compiled with JUCE (relative RMS error: median 4e-4). `ENGINE_APP_1_0` reproduces the current app, `ENGINE_APP_1_1` the fixed engine (Harmonia-App#40). ~1000 notes/s on 14 cores.
+- **v2 training pipeline (`scripts/v2/`, `make v2-train`)**:
+  - preset bank: 200,000 presets (concepts, envelope/timbre archetypes, uniform) rendered at A2 and A4 and embedded with CLAP (`laion/larger_clap_general`);
+  - FSD50K (51,197 real recordings) embedded with CLAP, used to train and to tune;
+  - 66,000-sentence English corpus (FSD50K titles/tags/labels, concepts, compositional templates) translated to French with `opus-mt-en-fr` plus a sound-design glossary;
+  - multilingual text encoder (`paraphrase-multilingual-MiniLM-L12-v2`) distilled into the CLAP text space: cosine to teacher 0.84 (EN) / 0.80 (FR);
+  - parameter predictor trained on text -> closest-sounding bank preset pairs;
+  - retrieval priors: near-inaudible presets excluded, CSLS hub penalty tuned on FSD50K eval;
+  - ONNX export with per-channel int8 quantization (160 MB total, encoder cosine to fp32 ≥ 0.999).
+- **`harmonia_v2` model served by `scripts/server.py`** (`model_name` `harmonia_v2`, aliases `model-3`, `v2`, `3`) with ONNX Runtime only: 0.4 s load, ~8 ms per request on CPU. Modes `retrieval` (default), `hybrid`, `neural`; `variation` for alternative presets. Same response format as v1 plus `generation`.
+- **`/refine-preset` with `harmonia_v2`**: the route added on `dev` (0.0.21) also answers for the v2 model, with the same `mode` / `variation` options as `/generate`.
+- **Release distribution**: `scripts/v2/package_release.py` and `scripts/v2/fetch_model.py` (GitHub release asset pinned by tag + sha256 in `models/release.json`); the Dockerfile fetches it at build time.
+- **Benchmark with an independent judge** (`scripts/v2/benchmark_*.py`): 70 prompts in English and hand-written French, held out of all training data, scored by Microsoft CLAP 2023 against the text and against real FSD50K eval recordings. Listening page generator (`scripts/v2/listening_page.py`).
+
+### Results
+| System | Text EN | Text FR | Real EN | Real FR |
+|---|---|---|---|---|
+| v2 retrieval (default) | 0.234 | 0.225 | 0.387 | 0.370 |
+| v2 hybrid | 0.214 | 0.216 | 0.376 | 0.374 |
+| v1 synthetic, current app | 0.058 | -0.006 | 0.236 | 0.191 |
+| random preset | 0.014 | 0.025 | 0.193 | 0.200 |
+
+v2 beats today's v1 by +0.18 (EN) and +0.23 (FR) on the text score (95% CI excludes 0) and wins on 91-93% of the prompts. See [V2.md](V2.md).
+
+### Changed
+- Requirements: `onnxruntime==1.30.0` and `tokenizers==0.23.2` for serving; `onnx` and `numba` for CI; new `requirements-train.txt`.
+
+## [0.0.21] - Refine Preset Endpoint
+### Added
+- **`POST /refine-preset` (alias `/ai/refine-preset`)**: the plugin's "refine" mode called this route through the backend, but the AI service did not implement it, so every refine request failed. The route generates a preset for the prompt with the requested model, then puts each locked parameter back to its current value, in `parameters` and in `values`. The response uses the same charter format as `/generate`.
+  - Body: `prompt`, `parameters` (current preset, `{id: 0..1}`), `locked_params` (list of ids, optional), `model_name` / `model_id` (optional, same resolution as `/generate`: an unknown id falls back to the default model).
+  - Returns `400` for an empty prompt, a `parameters` that is not an object of numbers, or a `locked_params` that is not a list of strings. A locked id that the model does not know, or that is missing from `parameters`, is ignored.
+  - Dashboard events from this route use `source: "http-refine"`.
+
+### Changed
+- `scripts/server.py`: the prediction and the response format of `/generate` moved to helpers shared with `/refine-preset`. `/generate` responses are unchanged.
+
+### Tests
+- `tests/test_server.py`: locked parameters are kept and the others match `/generate`, the alias answers in the charter format, unknown locked ids are ignored, empty prompt and malformed payloads return `400`, an unknown model falls back to the default, and an unavailable model returns `503`.
+
 ## [0.0.20] - Preset Generation Outage Fix (transformers v5)
 ### Fixed
 - **AI service returned HTTP 500 on every request since 2026-09-25**: the dependency bump to `transformers==5.10.0` broke encoder loading, because transformers v5 no longer infers the model type from the repo name and `prajjwal1/bert-tiny` ships a `config.json` without `model_type`. Preset generation in the app failed as a result.
