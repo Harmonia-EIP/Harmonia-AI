@@ -1,0 +1,35 @@
+{
+  "salamander": {
+    "name": "Salamander Grand Piano V3 (2020-06-02)",
+    "author": "Alexander Holm",
+    "license": "CC-BY-3.0",
+    "license_url": "https://creativecommons.org/licenses/by/3.0/",
+    "homepage": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html",
+    "url": "https://freepats.zenvoid.org/Piano/SalamanderGrandPiano/SalamanderGrandPiano-SFZ+FLAC-V3+20200602.tar.gz",
+    "archive_suffix": ".tar.gz",
+    "sha256": "b7760e168494cf095344e217b0af013fc449ad033abbbdf1c65211cf11dc038b",
+    "bytes": 741757374
+  },
+  "vsco2": {
+    "name": "VSCO 2 Community Edition 1.1.0",
+    "author": "Versilian Studios (Sam Gossner, Simon Dalzell)",
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "homepage": "https://versilian-studios.com/vsco-community/",
+    "url": "https://codeload.github.com/sgossner/VSCO-2-CE/tar.gz/440300901dfe9275fd84e0b7763af1f8443ae62e",
+    "archive_suffix": ".tar.gz",
+    "sha256": "2050dfd58513fd8058765c3a567636b148206da297a35c8b52f2ec4344035316",
+    "bytes": 2302119553
+  },
+  "vcsl": {
+    "name": "Versilian Community Sample Library (VCSL)",
+    "author": "Versilian Studios (Sam Gossner)",
+    "license": "CC0-1.0",
+    "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "homepage": "https://github.com/sgossner/VCSL",
+    "url": "https://codeload.github.com/sgossner/VCSL/tar.gz/c1ea7bcc3c7309650ab0da9d15c9cd1fbc4a4c7e",
+    "archive_suffix": ".tar.gz",
+    "sha256": "e4f9ed1fd698306627bc4911c7b7c8db2506cf3d00d486b630723855cc4ed529",
+    "bytes": 4052372898
+  }
+}
