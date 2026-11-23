@@ -60,7 +60,16 @@ elle a besoin des sons, mais pas en qualité studio. Le petit paquet `listen` su
 télécharge les paquets complets.
 
 Chaque archive fait moins de 1,9 Go (la limite d'un fichier de release GitHub est 2 Go) et contient
-`catalog.json` et `CREDITS.md`. Les paquets ne sont pas encore publiés : ils le seront quand le plugin saura
+`catalog.json` et `CREDITS.md`.
+
+**Volume** : les bibliothèques n'ont pas été enregistrées au même niveau. Chaque instrument reçoit un gain
+(`gain` dans `catalog.json`) qui amène sa nuance moyenne à l'énergie d'un oscillateur, sans que sa prise la plus
+forte dépasse le double d'un oscillateur à fond (les attaques d'un piano sont bien plus pointues) ni que le gain
+dépasse +24 dB (sinon le souffle des enregistrements très faibles remonterait avec eux). Les instruments sonnent
+donc un peu moins fort qu'une dent de scie pleine, sans jamais saturer.
+
+**Dans le moteur** (charte 3.1, `charter/README.md`) : `sample_instrument` choisit l'instrument, `sample_level`
+le mélange aux oscillateurs avant le filtre, `sample_tune` le transpose, `sample_start` saute son attaque. Les paquets ne sont pas encore publiés : ils le seront quand le plugin saura
 les lire (#58).
 
 ## Commandes
