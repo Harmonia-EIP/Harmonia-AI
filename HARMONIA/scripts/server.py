@@ -43,6 +43,12 @@ V2_MODES = ("retrieval", "hybrid", "neural")
 
 V3_MODEL_KEY = "harmonia_v3"
 V3_MODEL_DIR = Path(os.environ.get("HARMONIA_V3_MODEL_DIR", str(BASE_DIR / "models" / V3_MODEL_KEY)))
+V4_MODEL_KEY = "harmonia_v4"
+V4_MODEL_DIR = Path(os.environ.get("HARMONIA_V4_MODEL_DIR", str(BASE_DIR / "models" / V4_MODEL_KEY)))
+# Models run by src/v3/inference.py (text -> generators -> listening), newest last; they answer charter-v3
+# presets. harmonia_v4 is the same run time with weights trained on more human text and imitations (V4.md).
+GENERATIVE_KEYS = (V3_MODEL_KEY, V4_MODEL_KEY)
+GENERATIVE_NAMES = {V3_MODEL_KEY: "Harmonia V3", V4_MODEL_KEY: "Harmonia V4"}
 
 # Seuls ces mots désignent le modèle par défaut (le dernier déployé).
 # Tous les autres modèles sont découverts dans saved_models/.
@@ -56,7 +62,8 @@ DEFAULT_MODEL_OVERRIDE = os.environ.get("HARMONIA_DEFAULT_MODEL", "").strip().lo
 V2_ALIASES = {V2_MODEL_KEY, "model-3", "v2", "3"}
 # harmonia_v3 is a directory of torch weights (V3_MODEL_DIR); it answers with charter-v3 presets.
 V3_ALIASES = {V3_MODEL_KEY, "model-4", "v3", "4"}
-# One v3 request at a time in a process: the model is loaded once and its engine is not re-entrant.
+V4_ALIASES = {V4_MODEL_KEY, "model-5", "v4", "5"}
+# One v3 / v4 request at a time in a process: each model is loaded once and the engine is not re-entrant.
 _V3_LOCK = threading.Lock()
 
 
@@ -101,23 +108,29 @@ def _discover_models() -> dict:
             "model_version": str(manifest.get("model_version", V2_MODEL_KEY)),
             "model_hash": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
         }
-    manifest_path = V3_MODEL_DIR / "manifest.json"
-    manifest = _load_json_file(manifest_path)
-    if manifest:
-        models[V3_MODEL_KEY] = {
-            "id": V3_MODEL_KEY,
-            "name": manifest.get("display_name") or "Harmonia V3",
-            "model_path": manifest_path,
-            "metadata_path": manifest_path,
-            "model_version": str(manifest.get("model_version", V3_MODEL_KEY)),
-            "model_hash": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
-        }
+    for key in GENERATIVE_KEYS:
+        manifest_path = _generative_dir(key) / "manifest.json"
+        manifest = _load_json_file(manifest_path)
+        if manifest:
+            models[key] = {
+                "id": key,
+                "name": manifest.get("display_name") or GENERATIVE_NAMES[key],
+                "model_path": manifest_path,
+                "metadata_path": manifest_path,
+                "model_version": str(manifest.get("model_version", key)),
+                "model_hash": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+            }
     return models
+
+
+def _generative_dir(model_key: str) -> Path:
+    """Folder of a v3-family model (read at call time: the tests point these at temporary folders)."""
+    return V4_MODEL_DIR if model_key == V4_MODEL_KEY else V3_MODEL_DIR
 
 
 def _default_model_key() -> str:
     """The model behind "default" / "latest": HARMONIA_DEFAULT_MODEL when it is installed, else the latest .pth."""
-    if DEFAULT_MODEL_OVERRIDE in (V2_MODEL_KEY, V3_MODEL_KEY) and DEFAULT_MODEL_OVERRIDE in _discover_models():
+    if DEFAULT_MODEL_OVERRIDE in (V2_MODEL_KEY, *GENERATIVE_KEYS) and DEFAULT_MODEL_OVERRIDE in _discover_models():
         return DEFAULT_MODEL_OVERRIDE
     return DEFAULT_MODEL_KEY
 
@@ -145,6 +158,8 @@ def _resolve_model_key(data: dict) -> str:
         return V2_MODEL_KEY
     if raw in V3_ALIASES:
         return V3_MODEL_KEY
+    if raw in V4_ALIASES:
+        return V4_MODEL_KEY
     if raw in _discover_models():
         return raw
     return _default_model_key()  # id inconnu -> modèle par défaut
@@ -220,26 +235,43 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
-def _build_v3_runtime() -> InferenceRuntime:
-    manifest_path = V3_MODEL_DIR / "manifest.json"
+# CLAP's audio tower, shared by the v3-family models that ship the same one (about 140 MB each in memory).
+_LISTENERS: dict = {}
+
+
+def _shared_listener(model_dir: Path, manifest: dict):
+    """The listener of `model_dir`, or the one already loaded from identical files."""
+    from src.v3.listener import ClapListener
+
+    files = manifest.get("files", {})
+    key = files.get("clap_audio/model.safetensors", {}).get("sha256") or str(model_dir)
+    if key not in _LISTENERS:
+        _LISTENERS[key] = ClapListener(model_dir)
+    return _LISTENERS[key]
+
+
+def _build_v3_runtime(model_key: str = V3_MODEL_KEY) -> InferenceRuntime:
+    model_dir = _generative_dir(model_key)
+    manifest_path = model_dir / "manifest.json"
     manifest = _load_json_file(manifest_path)
     if not manifest:
         return InferenceRuntime(
             model=None,
             tokenizer=None,
             ready=False,
-            error="v3 model files not found. Run scripts/v2/fetch_model.py --model harmonia_v3.",
-            model_version=V3_MODEL_KEY,
-            model_path=str(V3_MODEL_DIR),
+            error=f"{model_key} model files not found. Run scripts/v2/fetch_model.py --model {model_key}.",
+            model_version=model_key,
+            model_path=str(model_dir),
         )
     model_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    model_version = str(manifest.get("model_version", V3_MODEL_KEY))
+    model_version = str(manifest.get("model_version", model_key))
     try:
         from src.v3.inference import HarmoniaV3, Settings
 
         defaults = Settings()
         engine = HarmoniaV3(
-            V3_MODEL_DIR,
+            model_dir,
+            listener=_shared_listener(model_dir, manifest),
             settings=Settings(
                 candidates=max(1, _env_int("HARMONIA_V3_CANDIDATES", defaults.candidates)),
                 polish_rounds=_env_int("HARMONIA_V3_POLISH_ROUNDS", defaults.polish_rounds),
@@ -253,10 +285,10 @@ def _build_v3_runtime() -> InferenceRuntime:
             model=None,
             tokenizer=None,
             ready=False,
-            error=f"Invalid v3 model: {exc}",
+            error=f"Invalid {model_key} model: {exc}",
             model_version=model_version,
             model_hash=model_hash,
-            model_path=str(V3_MODEL_DIR),
+            model_path=str(model_dir),
         )
     return InferenceRuntime(
         model=None,
@@ -264,7 +296,7 @@ def _build_v3_runtime() -> InferenceRuntime:
         ready=True,
         model_version=model_version,
         model_hash=model_hash,
-        model_path=str(V3_MODEL_DIR),
+        model_path=str(model_dir),
         model_metadata_path=str(manifest_path),
         param_keys=tuple(p.id for p in charter_v3.load().params),
         tokenizer_max_length=engine.max_tokens,
@@ -275,8 +307,8 @@ def _build_v3_runtime() -> InferenceRuntime:
 def _build_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
     if model_key == V2_MODEL_KEY:
         return _build_v2_runtime()
-    if model_key == V3_MODEL_KEY:
-        return _build_v3_runtime()
+    if model_key in GENERATIVE_KEYS:
+        return _build_v3_runtime(model_key)
     try:
         if model_key == DEFAULT_MODEL_KEY:
             artifact = resolve_latest_model(
@@ -377,7 +409,7 @@ def _get_runtime_cached(model_key: str, _mtime: float) -> InferenceRuntime:
 
 def _get_runtime(model_key: str = DEFAULT_MODEL_KEY) -> InferenceRuntime:
     """Le mtime du fichier fait partie de la clé de cache : un nouveau .pth est rechargé tout seul."""
-    if model_key == V3_MODEL_KEY:
+    if model_key in GENERATIVE_KEYS:
         with _V3_LOCK:  # un seul chargement, même si le préchauffage et une requête arrivent ensemble
             return _get_runtime_unlocked(model_key)
     return _get_runtime_unlocked(model_key)
@@ -743,22 +775,30 @@ def charter_v3_route():
     return jsonify(charter_v3.load().raw)
 
 
-def _warm_up_v3() -> None:
-    """Charge harmonia_v3 et joue quelques sons : la première requête ne paie ni le chargement ni la compilation."""
+def _warm_up_key() -> Optional[str]:
+    """The newest installed v3-family model: the one prepared at start-up (the others load on first use)."""
+    installed = _discover_models()
+    return next((key for key in reversed(GENERATIVE_KEYS) if key in installed), None)
+
+
+def _warm_up_v3(model_key: Optional[str] = None) -> None:
+    """Charge le modèle et joue quelques sons : la première requête ne paie ni le chargement ni la compilation."""
+    model_key = model_key or _warm_up_key() or V3_MODEL_KEY
     try:
-        runtime = _get_runtime(V3_MODEL_KEY)
+        runtime = _get_runtime(model_key)
         if runtime.ready:
             with _V3_LOCK:
                 cost = runtime.v3.warm_up()
-            app.logger.warning("harmonia_v3 ready: %.0f ms per sound on this machine", 1000 * cost)
+            app.logger.warning("%s ready: %.0f ms per sound on this machine", model_key, 1000 * cost)
         else:
-            app.logger.warning("harmonia_v3 not ready: %s", runtime.error)
+            app.logger.warning("%s not ready: %s", model_key, runtime.error)
     except Exception as exc:  # pragma: no cover - never stop the server for a warm-up
-        app.logger.warning("harmonia_v3 warm-up failed: %s", exc)
+        app.logger.warning("%s warm-up failed: %s", model_key, exc)
 
 
-# HARMONIA_V3_WARMUP=1 (set in the Docker image): prepare harmonia_v3 in the background when the server starts.
-if os.environ.get("HARMONIA_V3_WARMUP", "").strip() in ("1", "true", "yes") and V3_MODEL_KEY in _discover_models():
+# HARMONIA_V3_WARMUP=1 (set in the Docker image): prepare the newest v3-family model in the background when
+# the server starts.
+if os.environ.get("HARMONIA_V3_WARMUP", "").strip() in ("1", "true", "yes") and _warm_up_key():
     threading.Thread(target=_warm_up_v3, name="harmonia-v3-warm-up", daemon=True).start()
 
 

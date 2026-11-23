@@ -11,6 +11,7 @@ def v2_client(tmp_path, monkeypatch):
     monkeypatch.setenv("HARMONIA_PUSH_METRICS", "0")
     monkeypatch.setattr(server_module, "V2_MODEL_DIR", tmp_path / "harmonia_v2")
     monkeypatch.setattr(server_module, "V3_MODEL_DIR", tmp_path / "no_v3")  # a locally installed v3 is not part of these tests
+    monkeypatch.setattr(server_module, "V4_MODEL_DIR", tmp_path / "no_v4")
     server_module._get_runtime_cached.cache_clear()
     yield server_module.app.test_client()
     server_module._get_runtime_cached.cache_clear()
@@ -111,6 +112,7 @@ def test_models_lists_v2(v2_client, tmp_path, monkeypatch):
 def test_models_without_v2_files(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "V2_MODEL_DIR", tmp_path / "missing")
     monkeypatch.setattr(server_module, "V3_MODEL_DIR", tmp_path / "missing_v3")
+    monkeypatch.setattr(server_module, "V4_MODEL_DIR", tmp_path / "missing_v4")
     monkeypatch.setattr(server_module, "SAVED_MODELS_DIR", tmp_path / "saved_models")
     body = server_module.app.test_client().get("/models").get_json()
     assert body == {"count": 0, "models": []}
