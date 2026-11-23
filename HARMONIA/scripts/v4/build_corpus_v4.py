@@ -33,6 +33,15 @@ def free(licence: str) -> bool:
     return any(k in licence for k in FREE)
 
 
+def benchmark_texts() -> set:
+    """Malo's benchmark prompts and their judge wording: never trained on."""
+    texts = set()
+    for name in ("v3_prompts_p1.json", "v3_prompts_p2.json"):
+        for p in json.loads((BASE_DIR / "benchmarks" / name).read_text(encoding="utf-8")):
+            texts |= {p.lower()} if isinstance(p, str) else {p["prompt"].lower(), p["judge"].lower()}
+    return texts
+
+
 def descriptions(fsd50k: Path):
     """One row per CC0 / CC BY development recording whose description says something about the sound."""
     import csv
@@ -42,10 +51,11 @@ def descriptions(fsd50k: Path):
         labels = {r["fname"]: r["labels"] for r in csv.DictReader(f)}
     cleaned = {fname: clean_description(v.get("description")) for fname, v in info.items() if free(v["license"])}
     shared = shared_sentences(cleaned.values())
+    held_out = benchmark_texts()
     rows = []
     for fname, text in sorted(cleaned.items(), key=lambda kv: int(kv[0])):
         text = without(text, shared)
-        if usable(text):
+        if usable(text) and text.lower() not in held_out:
             v = info[fname]
             rows.append({"fname": fname, "en": text, "labels": labels.get(fname, ""), "license": v["license"],
                          "uploader": v["uploader"]})
