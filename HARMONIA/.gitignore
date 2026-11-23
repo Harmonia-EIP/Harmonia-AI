@@ -39,6 +39,7 @@ benchmarks/reports/
 data/processed/
 data/v2/
 data/v3/
+data/v4/
 data/cleaned_dataset.npy
 data/cleaned_dataset.charter.npy
 data/raw/drop_zone/

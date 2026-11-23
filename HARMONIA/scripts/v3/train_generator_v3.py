@@ -10,6 +10,10 @@
     python scripts/v3/train_generator_v3.py --cond synth --out data/v3/generator_synth   # v3.1
     python scripts/v3/train_generator_v3.py --only analog --recordings data/v3/matched_fsd/fsd.jsonl \
         --out data/v3/generator_sfx                                                      # v3.3
+
+With --recording-cond both (v4, V4.md), each imitation is learnt twice: conditioned on the sound of the preset
+itself, and on the sound of the recording it imitates. At run time the target comes from the prior, which
+learnt real recordings: the generator then also learns "this real sound -> the preset closest to it".
 """
 
 from __future__ import annotations
@@ -133,6 +137,14 @@ def load_recordings(path: Path, min_cos: float, max_distance: float):
     return x[audible], emb[audible].astype(np.float32), [r for r, a in zip(rows, audible) if a]
 
 
+def recording_conditions(rows) -> np.ndarray:
+    """CLAP embedding of the recording each imitation imitates, at every note: (n, notes, 512)."""
+    fsd = np.load(FSD50K_DEV)
+    index = {str(f): i for i, f in enumerate(fsd["fname"])}
+    emb = normalize(fsd["emb"][[index[r["fname"]] for r in rows]].astype(np.float32))
+    return np.repeat(emb[:, None, :], len(NOTES), axis=1)
+
+
 def train_diffusion(name: str, x: np.ndarray, conditions, steps: int, batch: int, device, seed: int,
                     weights: np.ndarray | None = None):
     torch.manual_seed(seed)
@@ -231,6 +243,8 @@ def main() -> int:
                         help="presets imitating real recordings (match_recordings.py), added to the analog presets")
     parser.add_argument("--min-cos", type=float, default=0.45, help="recordings: lowest CLAP similarity kept")
     parser.add_argument("--max-distance", type=float, default=30.0, help="recordings: highest perceptual distance kept")
+    parser.add_argument("--recording-cond", choices=("own", "recording", "both"), default="own",
+                        help="recordings: condition on the preset's own sound (v3.3), the recording's, or both (v4)")
     args = parser.parse_args()
 
     from src.v2.clap_audio import TEACHER_ID, TEACHER_REVISION, ClapEmbedder
@@ -270,6 +284,10 @@ def main() -> int:
     if args.recordings:
         x_rec, emb_rec, rows = load_recordings(args.recordings, args.min_cos, args.max_distance)
         recordings = len(rows)
+        if args.recording_cond in ("recording", "both"):
+            heard = recording_conditions(rows)
+            x_rec, emb_rec = ((np.concatenate([x_rec, x_rec]), np.concatenate([emb_rec, heard]))
+                              if args.recording_cond == "both" else (x_rec, heard))
         x_analog = np.concatenate([x_analog, x_rec])
         cond_analog = np.concatenate([cond_analog, emb_rec])
         print(f"recordings: {recordings} imitations added to the analog presets", flush=True)
@@ -286,7 +304,8 @@ def main() -> int:
         meta = json.loads((args.base / "meta.json").read_text(encoding="utf-8"))
         meta.update(analog_presets=int(len(x_analog)), analog_recordings=recordings,
                     analog_args={"steps": args.analog_steps, "seed": args.seed, "min_cos": args.min_cos,
-                                 "max_distance": args.max_distance, "base": str(args.base)})
+                                 "max_distance": args.max_distance, "base": str(args.base),
+                                 "recording_cond": args.recording_cond})
         (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
         print(json.dumps(meta, indent=2))
         return 0

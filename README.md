@@ -6,6 +6,7 @@ Start here:
 - `HARMONIA/README.md` for setup and quickstart
 - `HARMONIA/DOC.md` for technical documentation
 - `HARMONIA/V3.md` for v3 (`harmonia_v3`: 46-parameter analog engine plus a DX7 mode, model in prerelease `ai-v3.3.0`; research continues on `research/ai-v3-presets`)
+- `HARMONIA/V4.md` for v4 (`harmonia_v4`: same run time and plugin as v3, weights trained on better-chosen data)
 
 Quick run from repository root:
 
