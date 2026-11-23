@@ -1,0 +1,33 @@
+{
+  "tag": "samples-1.0.0",
+  "packs": {
+    "full": [
+      {
+        "asset": "harmonia-samples-full-salamander-samples-1.0.0.tar",
+        "sha256": "0d7c3b6399286ec08a6ee2c8469b31570fd2e9fc607d829ff69b9e4e87273b80",
+        "bytes": 724480000,
+        "files": 641
+      },
+      {
+        "asset": "harmonia-samples-full-vsco2-samples-1.0.0.tar",
+        "sha256": "86cad2c11ed1f7515f5891252e0eb87db319659f357422fc9a7a55e557767415",
+        "bytes": 621936640,
+        "files": 1957
+      },
+      {
+        "asset": "harmonia-samples-full-vcsl-samples-1.0.0.tar",
+        "sha256": "d1f5901a08d5facb877f4b53553904f6b61c3cc3127d53fd7c729aadd14e4def",
+        "bytes": 1574717440,
+        "files": 2115
+      }
+    ],
+    "listen": [
+      {
+        "asset": "harmonia-samples-listen-samples-1.0.0.tar",
+        "sha256": "1e50f4c3e6b023ad270f2d5235da4c1280be287dc76e8453ed868372ea8812c4",
+        "bytes": 142632960,
+        "files": 1904
+      }
+    ]
+  }
+}
