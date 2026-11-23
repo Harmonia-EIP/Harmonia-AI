@@ -4,7 +4,10 @@
 Prompts:
 - Malo's (benchmarks/v3_prompts_p1.json and v3_prompts_p2.json, never used for training);
 - the class names of FSD50K's eval split, as their annotators wrote them ("Slam", "Walk and footsteps"...),
-  human voice classes left out: each has real recordings to compare the generated sound with.
+  human voice classes left out: each has real recordings to compare the generated sound with;
+- with --sets ...,desc,desc_fr (v4, #35): sentences in everyday language, the uploaders' own descriptions of
+  100 eval recordings (scripts/v4/text_gap.py cleans and picks them), in English and in French; the judge
+  compares the sound with the description and with the recording it describes.
 
 One system per run (a name and its settings); scripts/v3/benchmark_judge_v3.py then scores the folders with
 an independent judge.
@@ -38,7 +41,22 @@ OUT_DIR = BASE_DIR / "data" / "v3" / "bench"
 NOTE, HOLD_SECONDS, TOTAL_SECONDS, SR = 57, 1.5, 4.0, 48000  # A3: not one of the notes the run time listens to
 
 
-def prompts(fsd50k: Path, limit_classes: int = 0):
+DESCRIPTIONS = 100
+
+
+def description_prompts(fsd50k: Path):
+    """The first DESCRIPTIONS held-out descriptions of scripts/v4/text_gap.py, English then French."""
+    from scripts.v4.text_gap import eval_set, french
+
+    texts, _, _, _, fnames = eval_set(fsd50k, with_fnames=True)
+    texts, fnames = texts[:DESCRIPTIONS], fnames[:DESCRIPTIONS]
+    rows = [{"set": "desc", "prompt": t, "judge": t, "fsd_fname": f} for t, f in zip(texts, fnames)]
+    rows += [{"set": "desc_fr", "prompt": fr, "judge": t, "fsd_fname": f}
+             for t, fr, f in zip(texts, french(texts), fnames)]
+    return rows
+
+
+def prompts(fsd50k: Path, limit_classes: int = 0, sets=("malo", "fsd")):
     rows = [{"set": "malo", "prompt": p, "judge": p} for p in
             json.loads((BASE_DIR / "benchmarks" / "v3_prompts_p1.json").read_text(encoding="utf-8"))]
     rows += [{"set": "malo", **p} for p in
@@ -50,7 +68,9 @@ def prompts(fsd50k: Path, limit_classes: int = 0):
     for name in classes:
         text = name.replace("_", " ").lower()
         rows.append({"set": "fsd", "prompt": text, "judge": text, "fsd_class": name})
-    return rows
+    if "desc" in sets or "desc_fr" in sets:
+        rows += description_prompts(fsd50k)
+    return [row for row in rows if row["set"] in sets]
 
 
 def play(preset: dict) -> np.ndarray:
@@ -79,7 +99,9 @@ def main() -> int:
     parser.add_argument("--refine-from", default=None,
                         help="instead of generating: refine each preset of that system with its own prompt")
     parser.add_argument("--clicks", type=int, default=3, help="with --refine-from: refine requests in a row")
-    parser.add_argument("--only-set", choices=("malo", "fsd"), default=None, help="one set of prompts only")
+    parser.add_argument("--only-set", choices=("malo", "fsd", "desc", "desc_fr"), default=None,
+                        help="one set of prompts only")
+    parser.add_argument("--sets", default="malo,fsd", help="prompt sets, comma-separated (malo,fsd,desc,desc_fr)")
     args = parser.parse_args()
 
     from src.v3.inference import HarmoniaV3, Settings
@@ -89,7 +111,7 @@ def main() -> int:
     out = args.out / args.name
     out.mkdir(parents=True, exist_ok=True)
     rows, t0 = [], time.time()
-    todo = prompts(args.fsd50k, args.classes)
+    todo = prompts(args.fsd50k, args.classes, tuple(args.sets.split(",")))
     if args.refine_from:
         todo = json.loads((args.out / args.refine_from / "generations.json").read_text(encoding="utf-8"))
     if args.only_set:
@@ -101,7 +123,7 @@ def main() -> int:
             for _ in range(args.clicks):
                 result = model.refine(row["prompt"], parameters)
                 parameters = result.preset["parameters"]
-            row = {k: row[k] for k in ("set", "prompt", "judge", "fsd_class") if k in row}
+            row = {k: row[k] for k in ("set", "prompt", "judge", "fsd_class", "fsd_fname") if k in row}
         else:
             result = model.generate(row["prompt"])
         audio = np.nan_to_num(play(result.preset)).astype(np.float32)

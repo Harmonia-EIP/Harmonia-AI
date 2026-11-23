@@ -43,8 +43,8 @@ def normalize(x: np.ndarray) -> np.ndarray:
     return x / np.maximum(np.linalg.norm(x, axis=-1, keepdims=True), 1e-8)
 
 
-def eval_set(fsd50k: Path):
-    """(texts, recording embeddings, class names, class centroids) of the eval split."""
+def eval_set(fsd50k: Path, with_fnames: bool = False):
+    """(texts, recording embeddings, class names, class centroids[, recording names]) of the eval split."""
     from scripts.v3.match_recordings import VOICE
 
     z = np.load(FSD50K_EVAL)
@@ -59,7 +59,8 @@ def eval_set(fsd50k: Path):
     names = sorted(set(leaf.values()) - VOICE)
     own = np.array([leaf.get(f, "") for f in fnames])
     centroids = normalize(np.stack([emb[own == n].mean(0) for n in names]))
-    return [texts[i] for i in pick], emb[pick], names, centroids
+    picked = ([texts[i] for i in pick], emb[pick], names, centroids)
+    return (*picked, [fnames[i] for i in pick]) if with_fnames else picked
 
 
 def french(texts):
