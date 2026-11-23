@@ -7,7 +7,11 @@
   candidate): per instrument and recorded note, one middle-velocity take, mono, LISTEN_RATE, the first
   LISTEN_SECONDS. Small enough for a small VPS; the plugin never uses it.
 
-Each archive carries catalog.json (which file answers which key and velocity) and CREDITS.md. The archives,
+Each archive carries catalog.json (which file answers which key and velocity, and each instrument's `gain`:
+the level that brings its middle dynamic to the loudness of an oscillator (TARGET_RMS over its first second),
+without its loudest recording passing PEAK_LIMIT nor the gain GAIN_LIMIT; instruments recorded at different
+levels then sit with the synthesizer's own sounds, a little below a full-level saw since their attacks peak
+higher) and CREDITS.md. The archives,
 their sha256 and size are written to samples/release.json, like the models (models/release.json); nothing is
 uploaded by this script.
 
@@ -35,6 +39,9 @@ from scripts.samples.fetch_samples import ROOT, SOURCES  # noqa: E402
 
 RELEASE = BASE_DIR / "samples" / "release.json"
 LISTEN_RATE, LISTEN_SECONDS, FADE_SECONDS = 32000, 4.0, 0.05
+TARGET_RMS = 0.4   # a full-level saw is 0.58, through a typical filter less
+PEAK_LIMIT = 2.0   # transients (a piano's hammer) may peak twice a full oscillator, never more
+GAIN_LIMIT = 16.0  # +24 dB at most: a very quiet recording would otherwise bring its hiss up with it
 MAX_ARCHIVE = 1_900_000_000
 DEPTHS = {"PCM_16": "PCM_16", "PCM_S8": "PCM_16", "PCM_U8": "PCM_16"}  # anything else becomes 24-bit
 
@@ -75,6 +82,42 @@ def _convert(task) -> int:
     sf.write(str(tmp), audio, rate, format="FLAC", subtype=subtype)
     os.replace(tmp, target)
     return target.stat().st_size
+
+
+def _levels(path: str):
+    """(peak, RMS of the first second after the onset) of a recording."""
+    import soundfile as sf
+
+    audio, rate = sf.read(path, dtype="float32", always_2d=True)
+    if not audio.size:
+        return 0.0, 0.0
+    mono = audio.mean(axis=1)
+    peak = float(np.abs(audio).max())
+    onset = int(np.argmax(np.abs(mono) > 0.1 * max(peak, 1e-9)))
+    head = mono[onset:onset + rate]
+    return peak, float(np.sqrt(np.mean(head ** 2))) if len(head) else 0.0
+
+
+def gains(instruments: list, folder: Path, workers: int) -> dict:
+    """Instrument id -> gain: its middle velocity layer at TARGET_RMS, its loudest recording under PEAK_LIMIT."""
+    files = sorted({f"{i['library']}/{flac_name(r['file'])}" for i in instruments for r in i["regions"]
+                    if r["trigger"] == "attack"})
+    with ProcessPoolExecutor(workers) as pool:
+        levels = dict(zip(files, pool.map(_levels, [str(folder / f) for f in files], chunksize=16)))
+    out = {}
+    for instrument in instruments:
+        def level(region):
+            return levels[f"{instrument['library']}/{flac_name(region['file'])}"]
+
+        attack = [r for r in instrument["regions"] if r["trigger"] == "attack"]
+        loudest = max(level(r)[0] for r in attack)
+        # the middle velocity layer of every recorded note (the takes of the listening pack)
+        rms = float(np.median([level(r)[1] for r in listen_regions({"regions": attack})]))
+        if loudest <= 1e-6 or rms <= 1e-6:
+            out[instrument["id"]] = 1.0
+            continue
+        out[instrument["id"]] = round(min(TARGET_RMS / rms, PEAK_LIMIT / loudest, GAIN_LIMIT), 4)
+    return out
 
 
 def listen_regions(instrument: dict) -> list:
@@ -142,6 +185,7 @@ def main() -> int:
     (out / "CREDITS.md").write_text(CREDITS.format(libraries=credits), encoding="utf-8")
 
     release = {"tag": args.tag, "packs": {}}
+    level = None
     for kind in ("full", "listen"):
         listen = kind == "listen"
         instruments, tasks, files = [], [], []
@@ -159,6 +203,10 @@ def main() -> int:
         tasks = list({t[1]: t for t in tasks}.values())
         with ProcessPoolExecutor(args.workers) as pool:
             total = sum(pool.map(_convert, tasks, chunksize=16))
+        if level is None:  # measured on the full recordings, used by both packs
+            level = gains(catalog["instruments"], out / "full", args.workers)
+        for instrument in instruments:
+            instrument["gain"] = level[instrument["id"]]
         if listen:  # frames of the shortened copies
             import soundfile as sf
 

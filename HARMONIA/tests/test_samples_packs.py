@@ -59,3 +59,25 @@ def test_archives_are_split(tmp_path):
     assert written[0]["asset"] == "harmonia-samples-full-lib-samples-0-part1.tar"
     with tarfile.open(tmp_path / written[2]["asset"]) as tar:
         assert tar.getnames() == ["catalog.json", "lib/4.flac"]
+
+
+# Loudness: the middle layer is brought to TARGET_RMS unless the loudest take would pass PEAK_LIMIT or the gain
+# GAIN_LIMIT (a very quiet recording would bring its hiss up).
+def test_gains(tmp_path):
+    rate = 8000
+    t = np.arange(rate * 2) / rate
+
+    def write(name, level):
+        sf.write(tmp_path / "lib" / name, (level * np.sin(2 * np.pi * 220 * t)).astype(np.float32), rate)
+
+    (tmp_path / "lib").mkdir()
+    write("soft.flac", 0.1)
+    write("loud.flac", 0.9)
+    write("tiny.flac", 0.001)
+    quiet = {"id": "a", "library": "lib", "regions": [region(60, 1, 63) | {"file": "soft.wav"},
+                                                      region(60, 64, 127) | {"file": "loud.wav"}]}
+    hiss = {"id": "b", "library": "lib", "regions": [region(60, 1, 127) | {"file": "tiny.wav"}]}
+    gains = B.gains([quiet, hiss], tmp_path, workers=1)
+    # middle layer of note 60 = the loud take (RMS 0.64): 0.4 / 0.64, under PEAK_LIMIT / 0.9
+    assert gains["a"] == pytest.approx(B.TARGET_RMS / (0.9 / np.sqrt(2)), rel=0.02)
+    assert gains["b"] == B.GAIN_LIMIT

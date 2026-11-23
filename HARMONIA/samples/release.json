@@ -4,19 +4,19 @@
     "full": [
       {
         "asset": "harmonia-samples-full-salamander-samples-1.0.0.tar",
-        "sha256": "0d7c3b6399286ec08a6ee2c8469b31570fd2e9fc607d829ff69b9e4e87273b80",
-        "bytes": 724480000,
+        "sha256": "1498be9f0da14d251f5420c9efb24aebdf550969f7bc9321cfe4ef6f0b0dbf40",
+        "bytes": 724490240,
         "files": 641
       },
       {
         "asset": "harmonia-samples-full-vsco2-samples-1.0.0.tar",
-        "sha256": "86cad2c11ed1f7515f5891252e0eb87db319659f357422fc9a7a55e557767415",
+        "sha256": "2c7e385f838a4cc4129667715ab4f67ebfb785c762e7b45fbe2aecfcf5732ddb",
         "bytes": 621936640,
         "files": 1957
       },
       {
         "asset": "harmonia-samples-full-vcsl-samples-1.0.0.tar",
-        "sha256": "d1f5901a08d5facb877f4b53553904f6b61c3cc3127d53fd7c729aadd14e4def",
+        "sha256": "27b3c10b12091d211e7888ff556bebaaf5f2fa5296a5c2fa2974cd6c0b776215",
         "bytes": 1574717440,
         "files": 2115
       }
@@ -24,7 +24,7 @@
     "listen": [
       {
         "asset": "harmonia-samples-listen-samples-1.0.0.tar",
-        "sha256": "1e50f4c3e6b023ad270f2d5235da4c1280be287dc76e8453ed868372ea8812c4",
+        "sha256": "6f7bee0a2a82da55d3088bf2fd11afc66717162bb926ca14150c8c3367881aca",
         "bytes": 142632960,
         "files": 1904
       }
