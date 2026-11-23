@@ -2,6 +2,37 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [0.4.0] - Harmonia v4: better-chosen data, same run time (branch `research/ai-v4`)
+`harmonia_v4` keeps the charter v3, the engines and the run time of `harmonia_v3`: the plugin plays it
+unchanged and a request costs the same time. Only the weights change (#35, #37, #38). Details: [V4.md](V4.md).
+
+### Added
+- **Where v3.3 lost, measured first**: on held-out human descriptions its text target found the real sound
+  in the top 10 of 2,000 only 44 % of the time (CLAP's own text encoder: 53 %); with a perfect target, the
+  generation barely moved (judge, classes real 0.352 -> 0.370), so the generator was the main limit.
+- **Uploaders' descriptions as training text** (`src/v4/descriptions.py`, `scripts/v4/build_corpus_v4.py`):
+  13,465 CC0 / CC BY FSD50K development recordings keep the sentences of their description that are about
+  the sound (gear, software, links, licences, thanks, other languages and pack boilerplate dropped), word for
+  word, translated to French locally. Malo's benchmark prompts are never trained on.
+- **Text encoder and prior v4** (`scripts/v4/train_prior_v4.py`): held-out descriptions, top 10 44.4 ->
+  51.2 % (English), 65.0 -> 72.8 % (French), class names unchanged. The prior learns from CC0 / CC BY
+  recordings only (v3 also used CC BY-NC and Sampling+).
+- **Analog generator v4**: the 1,295 chosen FSD50K recordings all imitated, 879 kept (v3.3: 388), each
+  learnt from the preset's own sound and from the recording's (`train_generator_v3.py --recording-cond both`).
+- **Result, independent judge, 383 prompts**: all prompts text +0.013 (95 % CI +0.002 .. +0.024), FSD50K
+  classes real 0.353 -> 0.380, French descriptions real 0.204 -> 0.232, no significant regression; same
+  3.49 s per prompt on 2 threads. Blind listening round p5 (v3.3 vs v4) published for Malo.
+- **Server**: `harmonia_v4` (aliases `v4`, `model-5`, `5`, `HARMONIA_V4_MODEL_DIR`) next to `harmonia_v3`, one
+  shared CLAP listener in memory, warm-up of the newest installed model.
+- **Tools**: `scripts/v4/text_gap.py` (text side without playing anything), `benchmark_v3.py --sets
+  ...,desc,desc_fr` (everyday sentences, scored against the recording described), `scripts/v4/time_models.py`;
+  `export_model.py --text-student --descriptions` (`ATTRIBUTION_DESCRIPTIONS.json`: authors of the 6,914 CC BY
+  descriptions).
+
+### Not used
+- Clotho (captions mainly non-commercial, 15-30 s scenes), generated captions (human text only), unclear
+  SFX bundles; NSynth left for a separate trial validated by ear; the Freesound API for later.
+
 ## [0.3.3] - harmonia_v3 on the VPS (release `ai-v3.3.0`)
 `harmonia_v3` becomes one more model of the server, next to the v1 models (which stay the default): the
 plugin with the v3 engine selects it in its model menu.
