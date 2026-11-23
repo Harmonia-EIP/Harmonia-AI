@@ -11,7 +11,12 @@ presets without randomness that matters (one voice, no noise, no sample & hold),
 DX7 mode: both sides run the same msfa code, so the plugin must build the same voice from the charter's DX7
 parameters and render the same samples as the AI's renderer (src/presets/dx7_render.py).
 
-    python scripts/v3/engine_parity.py --app ~/Harmonia-APP/.worktrees/ai-v3 --presets 80 --dx7 200
+Sample source (charter 3.1, Harmonia-EIP/Harmonia-App#58): bank presets with a recorded instrument of the installed
+pack (src/samples/player.py) at full level, rendered by both engines with the same recording (the plugin stores it
+in 16 bits). Without oscillators nothing is random, so the two must match sample for sample: the correlation and the
+largest difference are reported.
+
+    python scripts/v3/engine_parity.py --app ~/Harmonia-APP/.worktrees/ai-v3 --presets 80 --dx7 200 --samples 60
 """
 
 from __future__ import annotations
@@ -47,7 +52,9 @@ def build(app: Path) -> Path:
     BUILD.mkdir(parents=True, exist_ok=True)
     library = BUILD / ("libharmonia_engine.dylib" if sys.platform == "darwin" else "libharmonia_engine.so")
     command = ["c++", "-std=c++17", "-O2", "-DNDEBUG", "-shared", "-fPIC", f"-I{engine / 'dx7'}",
-               str(engine / "HarmoniaEngineV3.cpp"), str(engine / "HarmoniaDx7.cpp"), *map(str, msfa), "-o", str(library)]
+               str(engine / "HarmoniaEngineV3.cpp"), str(engine / "HarmoniaDx7.cpp"),
+               *[str(engine / "HarmoniaSamples.cpp")] * (engine / "HarmoniaSamples.cpp").exists(),
+               *map(str, msfa), "-o", str(library)]
     subprocess.run(command, check=True)  # nosec B603 - fixed arguments
     return library
 
@@ -63,6 +70,13 @@ class CppEngine:
         g.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
                       ctypes.POINTER(ctypes.c_float)]
         g.restype = ctypes.c_int
+        if hasattr(self.lib, "harmonia_render_analog_note_sampled"):
+            s = self.lib.harmonia_render_analog_note_sampled
+            s.argtypes = [ctypes.POINTER(ctypes.c_double), ctypes.c_int, ctypes.c_int, ctypes.c_double, ctypes.c_double,
+                          ctypes.c_double, ctypes.c_int, ctypes.c_ulonglong, ctypes.POINTER(ctypes.c_float),
+                          ctypes.POINTER(ctypes.c_float), ctypes.c_longlong, ctypes.c_double, ctypes.c_double,
+                          ctypes.c_double, ctypes.POINTER(ctypes.c_float), ctypes.c_int]
+            s.restype = ctypes.c_int
         h = self.lib.harmonia_dx7_patch_from_values
         h.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.c_int, ctypes.c_char_p]
         h.restype = ctypes.c_int
@@ -92,6 +106,54 @@ class CppEngine:
         if got != n:
             raise RuntimeError(f"C++ engine refused the render ({got})")
         return out.reshape(2, n)
+
+
+    def render_sampled(self, physical: np.ndarray, note: int, seed: int, recording: np.ndarray, rate: float, key: float,
+                       gain: float) -> np.ndarray:
+        """recording: (2, frames) float32, as the reference plays it."""
+        p = np.ascontiguousarray(physical, dtype=np.float64)
+        left = np.ascontiguousarray(recording[0], dtype=np.float32)
+        right = np.ascontiguousarray(recording[1], dtype=np.float32)
+        n = int(TOTAL * SR)
+        out = np.zeros(2 * n, dtype=np.float32)
+        f32 = ctypes.POINTER(ctypes.c_float)
+        got = self.lib.harmonia_render_analog_note_sampled(
+            p.ctypes.data_as(ctypes.POINTER(ctypes.c_double)), len(p), note, VELOCITY, HOLD, TOTAL, SR, seed,
+            left.ctypes.data_as(f32), right.ctypes.data_as(f32), recording.shape[1], rate, key, gain,
+            out.ctypes.data_as(f32), len(out))
+        if got != n:
+            raise RuntimeError(f"C++ engine refused the sampled render ({got})")
+        return out.reshape(2, n)
+
+
+def compare_samples(cpp: CppEngine, z, count: int, rng) -> dict:
+    """Bank presets playing a recorded instrument alone: the same recording in both engines."""
+    from src.samples.player import default_bank
+    from src.synth.engine_v3 import S_INSTRUMENT, S_LEVEL, S_START, S_TUNE, sample_for
+
+    bank = default_bank()
+    if bank is None:
+        raise SystemExit("no sample pack installed (models/samples or $HARMONIA_SAMPLES_DIR)")
+    installed = [c for c in range(1, len(bank.instruments)) if bank.has(c)]
+    analog = np.flatnonzero(z["kind"] == "analog")
+    worst, corr, levels = 0.0, [], []
+    for k in range(count):
+        p = P.complete(z["analog"][rng.choice(analog)].astype(np.float64))
+        p[P.INDEX["lfo_waveform"]] = min(p[P.INDEX["lfo_waveform"]], 3)  # no sample & hold: nothing random left
+        p[S_INSTRUMENT], p[S_LEVEL] = rng.choice(installed), 1.0
+        p[S_TUNE], p[S_START] = rng.choice([-12, -5, 0, 0, 7]), rng.choice([0.0, 0.0, 120.0])
+        for note in NOTES:
+            ref = render(p, note, VELOCITY, HOLD, TOTAL, SR, 4000 + k, bank=bank)
+            smp, rate, key, gain = sample_for(p, note, VELOCITY, 4000 + k, bank)
+            plug = cpp.render_sampled(p, note, 4000 + k, smp, rate, key, gain)
+            a, b = ref.ravel(), plug.ravel()
+            if a.std() > 1e-6 and b.std() > 1e-6:
+                corr.append(float(np.corrcoef(a, b)[0, 1]))
+            worst = max(worst, float(np.abs(a - b).max()))
+            levels.append(level_db([plug]) - level_db([ref]))
+    return {"presets": count, "renders": len(corr), "correlation_min": min(corr) if corr else None,
+            "correlation_median": float(np.median(corr)) if corr else None, "max_abs_difference": worst,
+            "level_db_max_abs": float(np.abs(levels).max()) if levels else None}
 
 
 def level_db(notes) -> float:
@@ -127,6 +189,7 @@ def main() -> int:
     parser.add_argument("--app", type=Path, default=Path.home() / "Harmonia-APP")
     parser.add_argument("--presets", type=int, default=80)
     parser.add_argument("--dx7", type=int, default=0, help="DX7 voices to compare (0: skip)")
+    parser.add_argument("--samples", type=int, default=0, help="presets with a recorded instrument (0: skip)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, default=OUT)
     args = parser.parse_args()
@@ -139,6 +202,9 @@ def main() -> int:
     chosen = rng.choice(analog, min(args.presets, len(analog)), replace=False)
 
     dx7_summary = compare_dx7(cpp, z, entries, args.dx7, rng) if args.dx7 else None
+    samples_summary = compare_samples(cpp, z, args.samples, rng) if args.samples else None
+    if samples_summary:
+        print("samples", json.dumps(samples_summary), flush=True)
     rows = []
     for k, i in enumerate(chosen):
         p = z["analog"][i].astype(np.float64)
@@ -170,7 +236,7 @@ def main() -> int:
         "plugin_within_reference_spread": float(np.mean(rp <= rr * 1.5 + 0.5)),
         "level_db_median": float(np.median(levels)), "level_db_max_abs": float(np.abs(levels).max()),
         "deterministic_presets": len(corr), "correlation_100ms_min": float(min(corr)) if corr else None,
-        "dx7": dx7_summary,
+        "dx7": dx7_summary, "samples": samples_summary,
         "worst": sorted(rows, key=lambda r: r["reference_vs_reference"] - r["reference_vs_plugin"])[:8],
     }
     args.out.mkdir(parents=True, exist_ok=True)
