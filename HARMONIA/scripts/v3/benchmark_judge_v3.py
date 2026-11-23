@@ -157,7 +157,8 @@ def main() -> int:
     if len(runs) >= 2:
         first, *others = list(runs)
         for other in others:
-            assert [r["prompt"] for r in runs[first]] == [r["prompt"] for r in runs[other]], "runs on other prompts"
+            if [r["prompt"] for r in runs[first]] != [r["prompt"] for r in runs[other]]:
+                raise SystemExit(f"{other} was run on other prompts than {first}: run both with the same --sets")
             for key, subset in [("text_score", None)] + [(k, part) for part in SETS for k in ("text_score", "real_score")]:
                 pairs = [(a[key], b[key]) for a, b in zip(runs[first], runs[other])
                          if a[key] is not None and (subset is None or a["set"] == subset)]
