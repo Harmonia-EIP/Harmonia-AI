@@ -1,0 +1,2480 @@
+{
+ "version": 1,
+ "libraries": {
+  "salamander": {
+   "name": "Salamander Grand Piano V3 (2020-06-02)",
+   "author": "Alexander Holm",
+   "license": "CC-BY-3.0",
+   "license_url": "https://creativecommons.org/licenses/by/3.0/",
+   "homepage": "https://freepats.zenvoid.org/Piano/acoustic-grand-piano.html"
+  },
+  "vsco2": {
+   "name": "VSCO 2 Community Edition 1.1.0",
+   "author": "Versilian Studios (Sam Gossner, Simon Dalzell)",
+   "license": "CC0-1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "homepage": "https://versilian-studios.com/vsco-community/"
+  },
+  "vcsl": {
+   "name": "Versilian Community Sample Library (VCSL)",
+   "author": "Versilian Studios (Sam Gossner)",
+   "license": "CC0-1.0",
+   "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+   "homepage": "https://github.com/sgossner/VCSL"
+  }
+ },
+ "instruments": [
+  {
+   "id": "salamander/salamander-grand-piano",
+   "name": "Salamander Grand Piano",
+   "library": "salamander",
+   "family": "keys",
+   "range": [
+    21,
+    108
+   ],
+   "notes": 30,
+   "layers": 20,
+   "regions": 641
+  },
+  {
+   "id": "vsco2/brass/f-horn/mute",
+   "name": "F Horn · mute",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    46,
+    77
+   ],
+   "notes": 9,
+   "layers": 3,
+   "regions": 17
+  },
+  {
+   "id": "vsco2/brass/f-horn/stac",
+   "name": "F Horn · stac",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    33,
+    77
+   ],
+   "notes": 11,
+   "layers": 3,
+   "regions": 54
+  },
+  {
+   "id": "vsco2/brass/f-horn",
+   "name": "Brass · F Horn",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    33,
+    77
+   ],
+   "notes": 11,
+   "layers": 4,
+   "regions": 29
+  },
+  {
+   "id": "vsco2/brass/oldtrombone/buzz",
+   "name": "OldTrombone · Buzz",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    41,
+    62
+   ],
+   "notes": 13,
+   "layers": 2,
+   "regions": 25
+  },
+  {
+   "id": "vsco2/brass/oldtrombone/short",
+   "name": "OldTrombone · Short",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    41,
+    65
+   ],
+   "notes": 15,
+   "layers": 3,
+   "regions": 191
+  },
+  {
+   "id": "vsco2/brass/oldtrombone",
+   "name": "Brass · OldTrombone",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    41,
+    67
+   ],
+   "notes": 16,
+   "layers": 5,
+   "regions": 127
+  },
+  {
+   "id": "vsco2/brass/oldtrombone/vibrato",
+   "name": "OldTrombone · Vibrato",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    46,
+    65
+   ],
+   "notes": 12,
+   "layers": 1,
+   "regions": 23
+  },
+  {
+   "id": "vsco2/brass/tenor-trombone/stac",
+   "name": "Tenor Trombone · stac",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    34,
+    65
+   ],
+   "notes": 7,
+   "layers": 4,
+   "regions": 56
+  },
+  {
+   "id": "vsco2/brass/tenor-trombone",
+   "name": "Brass · Tenor Trombone",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    34,
+    65
+   ],
+   "notes": 11,
+   "layers": 3,
+   "regions": 31
+  },
+  {
+   "id": "vsco2/brass/tenor-trombone/vib",
+   "name": "Tenor Trombone · vib",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    41,
+    63
+   ],
+   "notes": 11,
+   "layers": 1,
+   "regions": 12
+  },
+  {
+   "id": "vsco2/brass/trumpet/harmonm-sus",
+   "name": "Trumpet · harmonM-sus",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    58,
+    81
+   ],
+   "notes": 8,
+   "layers": 2,
+   "regions": 16
+  },
+  {
+   "id": "vsco2/brass/trumpet/stac",
+   "name": "Trumpet · stac",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    53,
+    84
+   ],
+   "notes": 11,
+   "layers": 3,
+   "regions": 66
+  },
+  {
+   "id": "vsco2/brass/trumpet/straightm-sus",
+   "name": "Trumpet · straightM-sus",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    58,
+    81
+   ],
+   "notes": 8,
+   "layers": 2,
+   "regions": 16
+  },
+  {
+   "id": "vsco2/brass/trumpet",
+   "name": "Brass · Trumpet",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    53,
+    84
+   ],
+   "notes": 10,
+   "layers": 2,
+   "regions": 20
+  },
+  {
+   "id": "vsco2/brass/trumpet/susvib",
+   "name": "Trumpet · susvib",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    53,
+    84
+   ],
+   "notes": 11,
+   "layers": 2,
+   "regions": 22
+  },
+  {
+   "id": "vsco2/brass/tuba/stac",
+   "name": "Tuba · stac",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    34,
+    62
+   ],
+   "notes": 8,
+   "layers": 2,
+   "regions": 64
+  },
+  {
+   "id": "vsco2/brass/tuba",
+   "name": "Brass · Tuba",
+   "library": "vsco2",
+   "family": "brass",
+   "range": [
+    29,
+    62
+   ],
+   "notes": 9,
+   "layers": 3,
+   "regions": 23
+  },
+  {
+   "id": "vsco2/keys/upright-nr1",
+   "name": "Keys · Upright Nr1",
+   "library": "vsco2",
+   "family": "keys",
+   "range": [
+    24,
+    103
+   ],
+   "notes": 14,
+   "layers": 3,
+   "regions": 79
+  },
+  {
+   "id": "vsco2/percussion/marimba",
+   "name": "Percussion · Marimba",
+   "library": "vsco2",
+   "family": "mallets",
+   "range": [
+    41,
+    96
+   ],
+   "notes": 10,
+   "layers": 1,
+   "regions": 10
+  },
+  {
+   "id": "vsco2/strings/cello-section/pizzt",
+   "name": "Cello Section · pizzT",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    36,
+    77
+   ],
+   "notes": 13,
+   "layers": 2,
+   "regions": 52
+  },
+  {
+   "id": "vsco2/strings/cello-section/spic",
+   "name": "Cello Section · spic",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    36,
+    77
+   ],
+   "notes": 13,
+   "layers": 2,
+   "regions": 52
+  },
+  {
+   "id": "vsco2/strings/cello-section/susvib",
+   "name": "Cello Section · susvib",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    36,
+    77
+   ],
+   "notes": 13,
+   "layers": 2,
+   "regions": 27
+  },
+  {
+   "id": "vsco2/strings/cello-section/trem",
+   "name": "Cello Section · trem",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    36,
+    77
+   ],
+   "notes": 14,
+   "layers": 2,
+   "regions": 25
+  },
+  {
+   "id": "vsco2/strings/harp",
+   "name": "Strings · Harp",
+   "library": "vsco2",
+   "family": "plucked",
+   "range": [
+    28,
+    101
+   ],
+   "notes": 23,
+   "layers": 1,
+   "regions": 23
+  },
+  {
+   "id": "vsco2/strings/solo-contrabass/pizz",
+   "name": "Solo Contrabass · Pizz",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    28,
+    59
+   ],
+   "notes": 14,
+   "layers": 2,
+   "regions": 40
+  },
+  {
+   "id": "vsco2/strings/solo-contrabass/spic",
+   "name": "Solo Contrabass · Spic",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    28,
+    59
+   ],
+   "notes": 14,
+   "layers": 2,
+   "regions": 42
+  },
+  {
+   "id": "vsco2/strings/solo-contrabass/susnv",
+   "name": "Solo Contrabass · SusNV",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    28,
+    59
+   ],
+   "notes": 14,
+   "layers": 2,
+   "regions": 28
+  },
+  {
+   "id": "vsco2/strings/solo-contrabass/susvib",
+   "name": "Solo Contrabass · SusVib",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    30,
+    59
+   ],
+   "notes": 13,
+   "layers": 2,
+   "regions": 26
+  },
+  {
+   "id": "vsco2/strings/solo-contrabass/trem",
+   "name": "Solo Contrabass · Trem",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    28,
+    59
+   ],
+   "notes": 8,
+   "layers": 2,
+   "regions": 16
+  },
+  {
+   "id": "vsco2/strings/solo-violin/arco-vib",
+   "name": "Solo Violin · Arco Vib",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    55,
+    96
+   ],
+   "notes": 15,
+   "layers": 2,
+   "regions": 30
+  },
+  {
+   "id": "vsco2/strings/solo-violin/pizz",
+   "name": "Solo Violin · Pizz",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    55,
+    96
+   ],
+   "notes": 13,
+   "layers": 2,
+   "regions": 44
+  },
+  {
+   "id": "vsco2/strings/solo-violin/trem",
+   "name": "Solo Violin · Trem",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    55,
+    96
+   ],
+   "notes": 14,
+   "layers": 2,
+   "regions": 27
+  },
+  {
+   "id": "vsco2/strings/solo-violin/spic",
+   "name": "Solo Violin · spic",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    55,
+    96
+   ],
+   "notes": 15,
+   "layers": 2,
+   "regions": 60
+  },
+  {
+   "id": "vsco2/strings/viola-section/pizz",
+   "name": "Viola Section · pizz",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    48,
+    86
+   ],
+   "notes": 12,
+   "layers": 2,
+   "regions": 46
+  },
+  {
+   "id": "vsco2/strings/viola-section/spic",
+   "name": "Viola Section · spic",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    48,
+    86
+   ],
+   "notes": 12,
+   "layers": 2,
+   "regions": 48
+  },
+  {
+   "id": "vsco2/strings/viola-section/susvib",
+   "name": "Viola Section · susvib",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    48,
+    86
+   ],
+   "notes": 13,
+   "layers": 2,
+   "regions": 26
+  },
+  {
+   "id": "vsco2/strings/viola-section/trem",
+   "name": "Viola Section · trem",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    48,
+    86
+   ],
+   "notes": 12,
+   "layers": 2,
+   "regions": 24
+  },
+  {
+   "id": "vsco2/strings/violin-section/pizz",
+   "name": "Violin Section · Pizz",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    55,
+    86
+   ],
+   "notes": 11,
+   "layers": 2,
+   "regions": 44
+  },
+  {
+   "id": "vsco2/strings/violin-section/spic",
+   "name": "Violin Section · Spic",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    55,
+    86
+   ],
+   "notes": 11,
+   "layers": 2,
+   "regions": 44
+  },
+  {
+   "id": "vsco2/strings/violin-section/trem",
+   "name": "Violin Section · Trem",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    55,
+    86
+   ],
+   "notes": 11,
+   "layers": 2,
+   "regions": 21
+  },
+  {
+   "id": "vsco2/strings/violin-section/susvib",
+   "name": "Violin Section · susVib",
+   "library": "vsco2",
+   "family": "strings",
+   "range": [
+    55,
+    86
+   ],
+   "notes": 11,
+   "layers": 2,
+   "regions": 22
+  },
+  {
+   "id": "vsco2/woodwinds/bassoon/stac",
+   "name": "Bassoon · stac",
+   "library": "vsco2",
+   "family": "woodwinds",
+   "range": [
+    34,
+    72
+   ],
+   "notes": 13,
+   "layers": 2,
+   "regions": 46
+  },
+  {
+   "id": "vsco2/woodwinds/bassoon",
+   "name": "Woodwinds · Bassoon",
+   "library": "vsco2",
+   "family": "woodwinds",
+   "range": [
+    34,
+    75
+   ],
+   "notes": 13,
+   "layers": 2,
+   "regions": 25
+  },
+  {
+   "id": "vsco2/woodwinds/bassoon/vib",
+   "name": "Bassoon · vib",
+   "library": "vsco2",
+   "family": "woodwinds",
+   "range": [
+    43,
+    72
+   ],
+   "notes": 10,
+   "layers": 2,
+   "regions": 21
+  },
+  {
+   "id": "vsco2/woodwinds/clarinet/stac",
+   "name": "Clarinet · stac",
+   "library": "vsco2",
+   "family": "woodwinds",
+   "range": [
+    50,
+    89
+   ],
+   "notes": 11,
+   "layers": 3,
+   "regions": 64
+  },
+  {
+   "id": "vsco2/woodwinds/clarinet/suslong",
+   "name": "Clarinet · susLong",
+   "library": "vsco2",
+   "family": "woodwinds",
+   "range": [
+    50,
+    90
+   ],
+   "notes": 11,
+   "layers": 3,
+   "regions": 33
+  },
+  {
+   "id": "vsco2/woodwinds/flute/expvib",
+   "name": "Flute · expvib",
+   "library": "vsco2",
+   "family": "woodwinds",
+   "range": [
+    60,
+    96
+   ],
+   "notes": 10,
+   "layers": 1,
+   "regions": 14
+  },
+  {
+   "id": "vsco2/woodwinds/flute/susnv",
+   "name": "Flute · susNV",
+   "library": "vsco2",
+   "family": "woodwinds",
+   "range": [
+    60,
+    96
+   ],
+   "notes": 10,
+   "layers": 2,
+   "regions": 19
+  },
+  {
+   "id": "vsco2/woodwinds/oboe/stacc",
+   "name": "Oboe · Stacc",
+   "library": "vsco2",
+   "family": "woodwinds",
+   "range": [
+    58,
+    89
+   ],
+   "notes": 9,
+   "layers": 3,
+   "regions": 51
+  },
+  {
+   "id": "vsco2/woodwinds/oboe",
+   "name": "Woodwinds · Oboe",
+   "library": "vsco2",
+   "family": "woodwinds",
+   "range": [
+    58,
+    89
+   ],
+   "notes": 9,
+   "layers": 2,
+   "regions": 18
+  },
+  {
+   "id": "vsco2/woodwinds/oboe/vib",
+   "name": "Oboe · Vib",
+   "library": "vsco2",
+   "family": "woodwinds",
+   "range": [
+    58,
+    89
+   ],
+   "notes": 9,
+   "layers": 2,
+   "regions": 18
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-alto-recorder/staccato",
+   "name": "Baroque Alto Recorder · Staccato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    66,
+    88
+   ],
+   "notes": 12,
+   "layers": 1,
+   "regions": 12
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-alto-recorder/susvib",
+   "name": "Baroque Alto Recorder · SusVib",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    65,
+    88
+   ],
+   "notes": 12,
+   "layers": 1,
+   "regions": 12
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-alto-recorder",
+   "name": "Edge-blown Aerophones · Baroque Alto Recorder",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    65,
+    88
+   ],
+   "notes": 12,
+   "layers": 1,
+   "regions": 12
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-bass-recorder/staccato",
+   "name": "Baroque Bass Recorder · Staccato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    53,
+    77
+   ],
+   "notes": 15,
+   "layers": 1,
+   "regions": 15
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-bass-recorder/susvib",
+   "name": "Baroque Bass Recorder · SusVib",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    53,
+    76
+   ],
+   "notes": 14,
+   "layers": 1,
+   "regions": 14
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-bass-recorder",
+   "name": "Edge-blown Aerophones · Baroque Bass Recorder",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    54,
+    76
+   ],
+   "notes": 12,
+   "layers": 1,
+   "regions": 12
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-soprano-recorder/staccato",
+   "name": "Baroque Soprano Recorder · Staccato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    72,
+    94
+   ],
+   "notes": 12,
+   "layers": 1,
+   "regions": 12
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-soprano-recorder",
+   "name": "Edge-blown Aerophones · Baroque Soprano Recorder",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    72,
+    96
+   ],
+   "notes": 13,
+   "layers": 1,
+   "regions": 13
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-tenor-recorder/staccato",
+   "name": "Baroque Tenor Recorder · Staccato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    60,
+    83
+   ],
+   "notes": 12,
+   "layers": 1,
+   "regions": 12
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-tenor-recorder/susvib",
+   "name": "Baroque Tenor Recorder · SusVib",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    60,
+    83
+   ],
+   "notes": 14,
+   "layers": 1,
+   "regions": 14
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/baroque-tenor-recorder",
+   "name": "Edge-blown Aerophones · Baroque Tenor Recorder",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    60,
+    84
+   ],
+   "notes": 13,
+   "layers": 1,
+   "regions": 13
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/ocarina-small/staccato",
+   "name": "Ocarina, Small · Staccato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    81,
+    96
+   ],
+   "notes": 13,
+   "layers": 1,
+   "regions": 13
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/ocarina-small",
+   "name": "Edge-blown Aerophones · Ocarina, Small",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    82,
+    95
+   ],
+   "notes": 10,
+   "layers": 1,
+   "regions": 10
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/ocarina-typical",
+   "name": "Edge-blown Aerophones · Ocarina, Typical",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    69,
+    85
+   ],
+   "notes": 11,
+   "layers": 1,
+   "regions": 11
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/ocarina-typical/susvib",
+   "name": "Ocarina, Typical · SusVib",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    69,
+    84
+   ],
+   "notes": 10,
+   "layers": 1,
+   "regions": 10
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/pipe-organ/loud",
+   "name": "Pipe Organ · Loud",
+   "library": "vcsl",
+   "family": "organ",
+   "range": [
+    24,
+    84
+   ],
+   "notes": 21,
+   "layers": 1,
+   "regions": 21
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/pipe-organ/loud-pedal",
+   "name": "Pipe Organ · Loud Pedal",
+   "library": "vcsl",
+   "family": "organ",
+   "range": [
+    12,
+    42
+   ],
+   "notes": 11,
+   "layers": 1,
+   "regions": 11
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/pipe-organ/quiet",
+   "name": "Pipe Organ · Quiet",
+   "library": "vcsl",
+   "family": "organ",
+   "range": [
+    36,
+    96
+   ],
+   "notes": 21,
+   "layers": 1,
+   "regions": 21
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/pipe-organ/quiet-pedal",
+   "name": "Pipe Organ · Quiet Pedal",
+   "library": "vcsl",
+   "family": "organ",
+   "range": [
+    36,
+    66
+   ],
+   "notes": 11,
+   "layers": 1,
+   "regions": 11
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/renaissance-organ/4",
+   "name": "Renaissance Organ · 4'",
+   "library": "vcsl",
+   "family": "organ",
+   "range": [
+    48,
+    100
+   ],
+   "notes": 27,
+   "layers": 1,
+   "regions": 27
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/renaissance-organ/8",
+   "name": "Renaissance Organ · 8'",
+   "library": "vcsl",
+   "family": "organ",
+   "range": [
+    36,
+    88
+   ],
+   "notes": 27,
+   "layers": 1,
+   "regions": 27
+  },
+  {
+   "id": "vcsl/aerophones/edge-blown-aerophones/renaissance-organ/full",
+   "name": "Renaissance Organ · Full",
+   "library": "vcsl",
+   "family": "organ",
+   "range": [
+    36,
+    88
+   ],
+   "notes": 27,
+   "layers": 1,
+   "regions": 27
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-special20-c/normal",
+   "name": "Harmonica-Hohner-Special20-C · Normal",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    60,
+    96
+   ],
+   "notes": 9,
+   "layers": 1,
+   "regions": 9
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-special20-c/soft",
+   "name": "Harmonica-Hohner-Special20-C · Soft",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    60,
+    96
+   ],
+   "notes": 10,
+   "layers": 1,
+   "regions": 10
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-special20-c/vib",
+   "name": "Harmonica-Hohner-Special20-C · Vib",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    60,
+    96
+   ],
+   "notes": 10,
+   "layers": 1,
+   "regions": 10
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-special20-f/accented",
+   "name": "Harmonica-Hohner-Special20-F · Accented",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    65,
+    101
+   ],
+   "notes": 10,
+   "layers": 1,
+   "regions": 10
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-special20-f/handvib",
+   "name": "Harmonica-Hohner-Special20-F · HandVib",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    65,
+    101
+   ],
+   "notes": 10,
+   "layers": 1,
+   "regions": 10
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-special20-f/normal",
+   "name": "Harmonica-Hohner-Special20-F · Normal",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    65,
+    96
+   ],
+   "notes": 8,
+   "layers": 1,
+   "regions": 8
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-special20-f/stac",
+   "name": "Harmonica-Hohner-Special20-F · Stac",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    65,
+    101
+   ],
+   "notes": 10,
+   "layers": 1,
+   "regions": 20
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-special20-f/vib",
+   "name": "Harmonica-Hohner-Special20-F · Vib",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    65,
+    101
+   ],
+   "notes": 9,
+   "layers": 1,
+   "regions": 9
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-super64/accented",
+   "name": "Harmonica-Hohner-Super64 · Accented",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    48,
+    96
+   ],
+   "notes": 13,
+   "layers": 1,
+   "regions": 13
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-super64/normal",
+   "name": "Harmonica-Hohner-Super64 · Normal",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    48,
+    96
+   ],
+   "notes": 13,
+   "layers": 1,
+   "regions": 13
+  },
+  {
+   "id": "vcsl/aerophones/free-aerophones/harmonica-hohner-super64/vib",
+   "name": "Harmonica-Hohner-Super64 · Vib",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    48,
+    96
+   ],
+   "notes": 13,
+   "layers": 1,
+   "regions": 13
+  },
+  {
+   "id": "vcsl/aerophones/reed-aerophones/saxello/non-vibrato",
+   "name": "Saxello · Non-Vibrato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    58,
+    88
+   ],
+   "notes": 8,
+   "layers": 1,
+   "regions": 16
+  },
+  {
+   "id": "vcsl/aerophones/reed-aerophones/saxello/staccato",
+   "name": "Saxello · Staccato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    58,
+    86
+   ],
+   "notes": 8,
+   "layers": 1,
+   "regions": 15
+  },
+  {
+   "id": "vcsl/aerophones/reed-aerophones/saxello/vibrato",
+   "name": "Saxello · Vibrato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    58,
+    87
+   ],
+   "notes": 8,
+   "layers": 1,
+   "regions": 8
+  },
+  {
+   "id": "vcsl/aerophones/reed-aerophones/tenor-saxophone/non-vibrato",
+   "name": "Tenor Saxophone · Non-Vibrato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    44,
+    88
+   ],
+   "notes": 23,
+   "layers": 2,
+   "regions": 46
+  },
+  {
+   "id": "vcsl/aerophones/reed-aerophones/tenor-saxophone/staccato",
+   "name": "Tenor Saxophone · Staccato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    44,
+    88
+   ],
+   "notes": 23,
+   "layers": 2,
+   "regions": 40
+  },
+  {
+   "id": "vcsl/aerophones/reed-aerophones/tenor-saxophone/vibrato",
+   "name": "Tenor Saxophone · Vibrato",
+   "library": "vcsl",
+   "family": "woodwinds",
+   "range": [
+    46,
+    86
+   ],
+   "notes": 19,
+   "layers": 1,
+   "regions": 19
+  },
+  {
+   "id": "vcsl/chordophones/composite-chordophones/concert-harp",
+   "name": "Composite Chordophones · Concert Harp",
+   "library": "vcsl",
+   "family": "plucked",
+   "range": [
+    28,
+    101
+   ],
+   "notes": 23,
+   "layers": 2,
+   "regions": 45
+  },
+  {
+   "id": "vcsl/chordophones/composite-chordophones/folk-harp",
+   "name": "Composite Chordophones · Folk Harp",
+   "library": "vcsl",
+   "family": "plucked",
+   "range": [
+    36,
+    92
+   ],
+   "notes": 29,
+   "layers": 2,
+   "regions": 58
+  },
+  {
+   "id": "vcsl/chordophones/composite-chordophones/strumstick/finger",
+   "name": "Strumstick · Finger",
+   "library": "vcsl",
+   "family": "plucked",
+   "range": [
+    50,
+    81
+   ],
+   "notes": 19,
+   "layers": 3,
+   "regions": 57
+  },
+  {
+   "id": "vcsl/chordophones/zithers/dan-tranh/normal",
+   "name": "Dan Tranh · Normal",
+   "library": "vcsl",
+   "family": "plucked",
+   "range": [
+    47,
+    83
+   ],
+   "notes": 16,
+   "layers": 3,
+   "regions": 48
+  },
+  {
+   "id": "vcsl/chordophones/zithers/dan-tranh/tremolo",
+   "name": "Dan Tranh · Tremolo",
+   "library": "vcsl",
+   "family": "plucked",
+   "range": [
+    47,
+    83
+   ],
+   "notes": 16,
+   "layers": 1,
+   "regions": 16
+  },
+  {
+   "id": "vcsl/chordophones/zithers/dan-tranh/vibrato",
+   "name": "Dan Tranh · Vibrato",
+   "library": "vcsl",
+   "family": "plucked",
+   "range": [
+    47,
+    83
+   ],
+   "notes": 16,
+   "layers": 2,
+   "regions": 32
+  },
+  {
+   "id": "vcsl/chordophones/zithers/grand-piano-kawai",
+   "name": "Zithers · Grand Piano, Kawai",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    22,
+    108
+   ],
+   "notes": 38,
+   "layers": 4,
+   "regions": 144
+  },
+  {
+   "id": "vcsl/chordophones/zithers/grand-piano-kawai-legacy",
+   "name": "Zithers · Grand Piano, Kawai - Legacy",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    24,
+    108
+   ],
+   "notes": 19,
+   "layers": 4,
+   "regions": 74
+  },
+  {
+   "id": "vcsl/chordophones/zithers/grand-piano-steinway-b/nosus",
+   "name": "Grand Piano, Steinway B · NoSus",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    22,
+    104
+   ],
+   "notes": 42,
+   "layers": 3,
+   "regions": 126
+  },
+  {
+   "id": "vcsl/chordophones/zithers/grand-piano-steinway-b",
+   "name": "Zithers · Grand Piano, Steinway B",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    22,
+    104
+   ],
+   "notes": 42,
+   "layers": 3,
+   "regions": 126
+  },
+  {
+   "id": "vcsl/chordophones/zithers/harpsichord-english/lute",
+   "name": "Harpsichord, English · Lute",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    34,
+    88
+   ],
+   "notes": 27,
+   "layers": 1,
+   "regions": 28
+  },
+  {
+   "id": "vcsl/chordophones/zithers/harpsichord-english/normal",
+   "name": "Harpsichord, English · Normal",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    34,
+    88
+   ],
+   "notes": 28,
+   "layers": 1,
+   "regions": 28
+  },
+  {
+   "id": "vcsl/chordophones/zithers/harpsichord-flemish/high",
+   "name": "Harpsichord, Flemish · High",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    42,
+    96
+   ],
+   "notes": 26,
+   "layers": 1,
+   "regions": 26
+  },
+  {
+   "id": "vcsl/chordophones/zithers/harpsichord-flemish/low",
+   "name": "Harpsichord, Flemish · Low",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    30,
+    84
+   ],
+   "notes": 28,
+   "layers": 1,
+   "regions": 28
+  },
+  {
+   "id": "vcsl/chordophones/zithers/harpsichord-french",
+   "name": "Zithers · Harpsichord, French",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    26,
+    84
+   ],
+   "notes": 28,
+   "layers": 1,
+   "regions": 30
+  },
+  {
+   "id": "vcsl/chordophones/zithers/harpsichord-italian/stop1",
+   "name": "Harpsichord, Italian · stop1",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    30,
+    83
+   ],
+   "notes": 32,
+   "layers": 1,
+   "regions": 32
+  },
+  {
+   "id": "vcsl/chordophones/zithers/harpsichord-unk",
+   "name": "Zithers · Harpsichord, Unk",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    29,
+    89
+   ],
+   "notes": 61,
+   "layers": 1,
+   "regions": 61
+  },
+  {
+   "id": "vcsl/chordophones/zithers/psaltery-bowed-and-plucked/longbow",
+   "name": "Psaltery, Bowed and Plucked · LongBow",
+   "library": "vcsl",
+   "family": "plucked",
+   "range": [
+    70,
+    90
+   ],
+   "notes": 11,
+   "layers": 1,
+   "regions": 11
+  },
+  {
+   "id": "vcsl/chordophones/zithers/psaltery-bowed-and-plucked/pluck",
+   "name": "Psaltery, Bowed and Plucked · Pluck",
+   "library": "vcsl",
+   "family": "plucked",
+   "range": [
+    70,
+    90
+   ],
+   "notes": 11,
+   "layers": 1,
+   "regions": 11
+  },
+  {
+   "id": "vcsl/chordophones/zithers/psaltery-bowed-and-plucked/spiccato",
+   "name": "Psaltery, Bowed and Plucked · Spiccato",
+   "library": "vcsl",
+   "family": "plucked",
+   "range": [
+    70,
+    90
+   ],
+   "notes": 11,
+   "layers": 1,
+   "regions": 11
+  },
+  {
+   "id": "vcsl/chordophones/zithers/upright-piano-knight",
+   "name": "Zithers · Upright Piano, Knight",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    21,
+    108
+   ],
+   "notes": 45,
+   "layers": 2,
+   "regions": 90
+  },
+  {
+   "id": "vcsl/chordophones/zithers/upright-piano-yamaha",
+   "name": "Zithers · Upright Piano, Yamaha",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    24,
+    96
+   ],
+   "notes": 13,
+   "layers": 3,
+   "regions": 71
+  },
+  {
+   "id": "vcsl/electrophones/tx81z/clavisynth",
+   "name": "TX81Z · Clavisynth",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    24,
+    96
+   ],
+   "notes": 19,
+   "layers": 3,
+   "regions": 57
+  },
+  {
+   "id": "vcsl/electrophones/tx81z/fm-piano",
+   "name": "TX81Z · FM Piano",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    12,
+    96
+   ],
+   "notes": 22,
+   "layers": 3,
+   "regions": 66
+  },
+  {
+   "id": "vcsl/electrophones/tx81z/piano-1",
+   "name": "TX81Z · Piano 1",
+   "library": "vcsl",
+   "family": "keys",
+   "range": [
+    24,
+    108
+   ],
+   "notes": 22,
+   "layers": 3,
+   "regions": 66
+  },
+  {
+   "id": "vcsl/idiophones/plucked-idiophones/nyunga-nyunga-mozambique-low-f",
+   "name": "Plucked Idiophones · Nyunga Nyunga, Mozambique, Low F",
+   "library": "vcsl",
+   "family": "mallets",
+   "range": [
+    53,
+    77
+   ],
+   "notes": 14,
+   "layers": 0,
+   "regions": 19
+  },
+  {
+   "id": "vcsl/idiophones/struck-idiophones/glockenspiel",
+   "name": "Struck Idiophones · Glockenspiel",
+   "library": "vcsl",
+   "family": "mallets",
+   "range": [
+    79,
+    108
+   ],
+   "notes": 7,
+   "layers": 3,
+   "regions": 18
+  },
+  {
+   "id": "vcsl/idiophones/struck-idiophones/hand-chimes",
+   "name": "Struck Idiophones · Hand Chimes",
+   "library": "vcsl",
+   "family": "mallets",
+   "range": [
+    60,
+    96
+   ],
+   "notes": 19,
+   "layers": 1,
+   "regions": 19
+  },
+  {
+   "id": "vcsl/idiophones/struck-idiophones/marimba",
+   "name": "Struck Idiophones · Marimba",
+   "library": "vcsl",
+   "family": "mallets",
+   "range": [
+    41,
+    96
+   ],
+   "notes": 10,
+   "layers": 3,
+   "regions": 30
+  },
+  {
+   "id": "vcsl/idiophones/struck-idiophones/tubular-bells-2",
+   "name": "Struck Idiophones · Tubular Bells 2",
+   "library": "vcsl",
+   "family": "mallets",
+   "range": [
+    60,
+    77
+   ],
+   "notes": 11,
+   "layers": 2,
+   "regions": 22
+  },
+  {
+   "id": "vcsl/idiophones/struck-idiophones/vibraphone/bowed",
+   "name": "Vibraphone · Bowed",
+   "library": "vcsl",
+   "family": "mallets",
+   "range": [
+    57,
+    88
+   ],
+   "notes": 6,
+   "layers": 1,
+   "regions": 6
+  },
+  {
+   "id": "vcsl/idiophones/struck-idiophones/vibraphone/hard-mallets",
+   "name": "Vibraphone · Hard Mallets",
+   "library": "vcsl",
+   "family": "mallets",
+   "range": [
+    53,
+    88
+   ],
+   "notes": 11,
+   "layers": 2,
+   "regions": 22
+  },
+  {
+   "id": "vcsl/idiophones/struck-idiophones/vibraphone/soft-mallets",
+   "name": "Vibraphone · Soft Mallets",
+   "library": "vcsl",
+   "family": "mallets",
+   "range": [
+    53,
+    88
+   ],
+   "notes": 11,
+   "layers": 2,
+   "regions": 22
+  },
+  {
+   "id": "vcsl/idiophones/struck-idiophones/xylophone/soft-mallets",
+   "name": "Xylophone · Soft Mallets",
+   "library": "vcsl",
+   "family": "mallets",
+   "range": [
+    67,
+    108
+   ],
+   "notes": 8,
+   "layers": 2,
+   "regions": 16
+  }
+ ],
+ "left_out": [
+  {
+   "folder": "vsco2/Brass/OldTrombone/Fall",
+   "files": 22,
+   "why": "octave in doubt (22 clear of 22: [12, 24])"
+  },
+  {
+   "folder": "vsco2/Keys/Organ",
+   "files": 1,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Keys/Organ/Loud",
+   "files": 32,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Keys/Organ/Quiet",
+   "files": 32,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Keys/Upright Piano",
+   "files": 69,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Miscellania Raw/Misc 1",
+   "files": 80,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Miscellania Raw/Misc 2",
+   "files": 33,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Miscellania Raw/Misc 2/NepaleseBells",
+   "files": 25,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Miscellania Raw/Misc 2/glock_glisses",
+   "files": 20,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Percussion",
+   "files": 220,
+   "why": "only 4 of 220 recordings name a note (several instruments)"
+  },
+  {
+   "folder": "vsco2/Percussion/Glock",
+   "files": 6,
+   "why": "octave in doubt (0 clear of 6: [])"
+  },
+  {
+   "folder": "vsco2/Percussion/Timpani",
+   "files": 28,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Percussion/Timpani/Rolls",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Percussion/Xylo",
+   "files": 8,
+   "why": "octave in doubt (1 clear of 8: [12])"
+  },
+  {
+   "folder": "vsco2/Percussion/temp",
+   "files": 47,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/bass",
+   "files": 39,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/other/Bongos",
+   "files": 4,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/other/ethnic/congo/muted",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/other/ethnic/congo/open",
+   "files": 12,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/other/ethnic/giant",
+   "files": 3,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/other/ethnic/giant/hand",
+   "files": 17,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/other/ethnic/giant/mallet",
+   "files": 5,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/other/ethnic/giant/sticks",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/snare/OldSnare",
+   "files": 15,
+   "why": "2 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/snare/drum1",
+   "files": 40,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/snare/drum2",
+   "files": 36,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/snare/drum3_marching",
+   "files": 17,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/tenor/tenor_higher",
+   "files": 22,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/drums/tenor/tenor_lower",
+   "files": 19,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varMetal/Cymbals/clash",
+   "files": 7,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varMetal/Cymbals/susp",
+   "files": 29,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varMetal/Gong",
+   "files": 29,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varMetal/triangle/1",
+   "files": 9,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varMetal/triangle/2",
+   "files": 5,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varMetal/triangle/3",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varMetal/triangle/4",
+   "files": 4,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varMetal/various",
+   "files": 59,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varWood",
+   "files": 57,
+   "why": "1 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varWood/Camo's Shaker",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/VSCO 1 Percussion/varWood/log_drum",
+   "files": 47,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vsco2/Woodwinds/Flute/stac",
+   "files": 48,
+   "why": "octave in doubt (42 clear of 48: [0, 12])"
+  },
+  {
+   "folder": "vsco2/Woodwinds/Flute/susvib",
+   "files": 13,
+   "why": "octave in doubt (11 clear of 13: [0, 12])"
+  },
+  {
+   "folder": "vsco2/Woodwinds/Piccolo/Stac",
+   "files": 5,
+   "why": "octave in doubt (3 clear of 5: [0, 12])"
+  },
+  {
+   "folder": "vsco2/Woodwinds/Piccolo/Sus",
+   "files": 5,
+   "why": "octave in doubt (5 clear of 5: [0, 12])"
+  },
+  {
+   "folder": "vcsl/Aerophones/Edge-blown Aerophones/Ball Whistle",
+   "files": 2,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Edge-blown Aerophones/Ocarina, Typical/Releases/Sus",
+   "files": 11,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Edge-blown Aerophones/Ocarina, Typical/Releases/SusVib",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Edge-blown Aerophones/Pipe Organ",
+   "files": 1,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Edge-blown Aerophones/Train Whistle, Toy",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Normal",
+   "files": 9,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Soft",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Harmonica-Hohner-Special20-C/Releases/Vib",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Harmonica-Hohner-Special20-F/Releases/Accented",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Harmonica-Hohner-Special20-F/Releases/HandVib",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Harmonica-Hohner-Special20-F/Releases/Normal",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Harmonica-Hohner-Special20-F/Releases/Vib",
+   "files": 9,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Harmonica-Hohner-Super64/Releases/Accented",
+   "files": 13,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Harmonica-Hohner-Super64/Releases/Normal",
+   "files": 13,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Harmonica-Hohner-Super64/Releases/Vib",
+   "files": 13,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Free Aerophones/Siren",
+   "files": 5,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Aerophones/Lip Aerophones/Didgeridoo",
+   "files": 12,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Dan Tranh/FX",
+   "files": 7,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Dan Tranh/Gliss",
+   "files": 12,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Grand Piano, Kawai/Releases",
+   "files": 84,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Grand Piano, Kawai - Legacy/Releases",
+   "files": 60,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Grand Piano, Steinway B/Rel",
+   "files": 99,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Harpsichord, English/Releases/Lute",
+   "files": 26,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Harpsichord, English/Releases/Normal",
+   "files": 28,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Harpsichord, Flemish/Releases/High",
+   "files": 26,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Harpsichord, Flemish/Releases/Low",
+   "files": 28,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Harpsichord, French/Releases",
+   "files": 28,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Harpsichord, Italian/Releases/stop1",
+   "files": 31,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Harpsichord, Unk/Releases",
+   "files": 61,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Upright Piano, Knight/Pedal/Off",
+   "files": 4,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Upright Piano, Knight/Pedal/On",
+   "files": 4,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Upright Piano, Knight/Releases",
+   "files": 45,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Chordophones/Zithers/Upright Piano, Yamaha/Releases",
+   "files": 71,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Friction Idiophones/Wine Glasses/Releases/Fast",
+   "files": 4,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Friction Idiophones/Wine Glasses/Releases/Slow",
+   "files": 4,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Friction Idiophones/Wine Glasses/Sustains/Fast",
+   "files": 4,
+   "why": "octave in doubt (3 clear of 4: [12])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Friction Idiophones/Wine Glasses/Sustains/Slow",
+   "files": 4,
+   "why": "octave in doubt (3 clear of 4: [12])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Plucked Idiophones/Kalimba, Kenya",
+   "files": 15,
+   "why": "octave in doubt (0 clear of 15: [])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Plucked Idiophones/Kalimba, Tanzania",
+   "files": 27,
+   "why": "octave in doubt (8 clear of 27: [-12, 0, 12, 24])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Plucked Idiophones/Mbira Mavembe (Gandanga), Zimbabwe, Low G",
+   "files": 24,
+   "why": "octave in doubt (7 clear of 24: [-12, 0, 12])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Plucked Idiophones/Mbira dzaVadzimu Nyamaropa, Zimbabwe, Low B",
+   "files": 24,
+   "why": "octave in doubt (7 clear of 24: [-12, 0])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Agogo Bells",
+   "files": 5,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Agogo Bells/Legacy",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Anvil",
+   "files": 9,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Balafon/Hard Mallet",
+   "files": 18,
+   "why": "octave in doubt (1 clear of 18: [0])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Balafon/Soft Mallet",
+   "files": 18,
+   "why": "octave in doubt (4 clear of 18: [0, 12])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Balafon/Traditional Mallet",
+   "files": 18,
+   "why": "octave in doubt (2 clear of 18: [12])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Bell Tree/Individual",
+   "files": 6,
+   "why": "octave in doubt (0 clear of 6: [])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Bell Tree/Stroke",
+   "files": 5,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Bell Tree - Legacy",
+   "files": 5,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Brake Drum",
+   "files": 17,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Cabasa",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Cajon",
+   "files": 18,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Claps",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Clash Cymbals 1",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Clash Cymbals 2",
+   "files": 5,
+   "why": "1 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Claves",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Claves/Legacy",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Cowbells",
+   "files": 13,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Finger Cymbals",
+   "files": 1,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Flexatone",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Gong 1",
+   "files": 7,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Guiro",
+   "files": 5,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Guiro/Legacy",
+   "files": 9,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Hand Bells, Nepalese",
+   "files": 3,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Hi-Hat Cymbal",
+   "files": 15,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Mark Trees/Legacy",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Ratchet",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Shaker - Legacy",
+   "files": 2,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Shaker, Large",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Shaker, Small",
+   "files": 16,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Slapstick",
+   "files": 5,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Sleigh Bells",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Slit Drum",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 1",
+   "files": 25,
+   "why": "1 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Suspended Cymbal 2",
+   "files": 23,
+   "why": "1 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Tambourine 1",
+   "files": 7,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Tambourine 2",
+   "files": 7,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Tambourine 3 - Legacy",
+   "files": 4,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Tambourine 4 - Legacy",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Tambourine 5 - Legacy",
+   "files": 9,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Triangles",
+   "files": 37,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Triangles/Legacy/1",
+   "files": 9,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Triangles/Legacy/2",
+   "files": 5,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Triangles/Legacy/3",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Triangles/Legacy/4",
+   "files": 4,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Tubular Bells 1",
+   "files": 18,
+   "why": "octave in doubt (1 clear of 18: [12])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Tubular Glockenspiel",
+   "files": 27,
+   "why": "octave in doubt (0 clear of 27: [])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Vibraslap/Legacy",
+   "files": 4,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Woodblock",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Xylophone/Hard Mallets",
+   "files": 16,
+   "why": "octave in doubt (4 clear of 16: [0, 12])"
+  },
+  {
+   "folder": "vcsl/Idiophones/Struck Idiophones/Xylophone/Medium Mallets",
+   "files": 16,
+   "why": "octave in doubt (3 clear of 16: [12])"
+  },
+  {
+   "folder": "vcsl/Membranophones/Other Membranophones/Ocean Drum",
+   "files": 3,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Bass Drum 1",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Bass Drum 2",
+   "files": 30,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Bass Drum 3 - Legacy",
+   "files": 39,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Bongos",
+   "files": 28,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Conga",
+   "files": 34,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Darbuka",
+   "files": 20,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Frame Drum",
+   "files": 18,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Legacy Snares/OldSnare",
+   "files": 15,
+   "why": "3 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Legacy Snares/drum1",
+   "files": 40,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Legacy Snares/drum2",
+   "files": 36,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Legacy Snares/drum3_marching",
+   "files": 17,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Legacy Toms/tenor_higher",
+   "files": 22,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Legacy Toms/tenor_lower",
+   "files": 19,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 1",
+   "files": 29,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 2",
+   "files": 24,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Snare Drum, Modern 3",
+   "files": 19,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension",
+   "files": 4,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Hi",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Snare Drum, Rope Tension/Low",
+   "files": 20,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Timpani 1/Hit",
+   "files": 30,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Timpani 1/Roll",
+   "files": 10,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Timpani 2/Hit",
+   "files": 204,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Tom 1",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Tom 1/Mallet",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Tom 1/Stick",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Tom 2",
+   "files": 6,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Tom 2/Mallet",
+   "files": 8,
+   "why": "0 named notes"
+  },
+  {
+   "folder": "vcsl/Membranophones/Struck Membranophones/Tom 2/Stick",
+   "files": 8,
+   "why": "0 named notes"
+  }
+ ]
+}
