@@ -87,7 +87,7 @@ def test_normalized_mapping_round_trips_and_midpoints():
     back = P.denormalize(P.normalize(physical))
     np.testing.assert_allclose(back, physical, rtol=1e-6, atol=1e-6)
     assert abs(P.to_normalized(P.BY_NAME["filter_cutoff"], 1000) - 0.5) < 1e-6
-    assert len(P.NAMES) == 46 and len(set(P.NAMES)) == 46
+    assert len(P.NAMES) == 50 and len(set(P.NAMES)) == 50
 
 
 def test_cross_mod_with_sync_stays_harmonic():
