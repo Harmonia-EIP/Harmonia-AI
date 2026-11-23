@@ -265,3 +265,35 @@ def test_no_time_budget_means_no_limit(tmp_path):
     engine = build_engine(tmp_path / "m", candidates=3, polish_rounds=1, population=4)
     engine.cost = 1000.0
     assert engine.generate("door slam").info["heard"] >= 3 * len(engine.engines)
+
+
+# A generator of charter 3.0 (46 analog values, like the deployed v3 and v4) keeps working with charter 3.1:
+# it makes presets without the sample source, and a refine keeps (and plays) the sample of the preset it starts from.
+def test_charter_30_generator_with_charter_31(tmp_path):
+    from src.v3 import codecs
+
+    engine = build_engine(tmp_path / "m", analog_dim=codecs.ANALOG_DIM_V3)
+    assert engine.dims["analog"] == 46
+    result = engine.generate("soft pad")
+    assert charter_v3.validate_preset(result.preset) == []
+    params = result.preset["parameters"]
+    if result.engine == "analog":
+        assert params["sample_level"] == 0.0 and params["sample_instrument"] == 0.0
+    spec = {p.id: p for p in charter_v3.load().params}
+    current = {p.id: p.to_normalized(p.default) for p in charter_v3.load().params}
+    current.update(engine=0.0, sample_instrument=spec["sample_instrument"].to_normalized(3),
+                   sample_level=spec["sample_level"].to_normalized(0.7), sample_tune=spec["sample_tune"].to_normalized(5))
+    heard = []
+    original = engine._physical
+
+    def spy(vector):
+        physical = original(vector)
+        heard.append(physical[P.INDEX["sample_level"]])
+        return physical
+
+    engine._physical = spy
+    refined = engine.refine("plus brillant", current).preset["parameters"]
+    for name in ("sample_instrument", "sample_level", "sample_tune"):
+        assert refined[name] == pytest.approx(current[name], abs=1e-6), name
+    assert heard and all(level == pytest.approx(0.7) for level in heard)  # the sample was played while searching
+    assert engine._context is None

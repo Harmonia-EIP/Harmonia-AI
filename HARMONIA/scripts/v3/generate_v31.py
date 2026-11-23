@@ -74,9 +74,8 @@ class SynthGenerator:
         self.space.load_state_dict(torch.load(SPACE / "synth_space.pt", map_location="cpu", weights_only=True))
         self.space.eval()
         self.models = {}
-        for kind, dim in (("dx7", codecs.DX7_DIM), ("analog", codecs.ANALOG_DIM)):
-            diffusion = Diffusion.create(dim, cond_dim=self.space.types.in_features + len(TYPES))
-            diffusion.model.load_state_dict(torch.load(GEN / f"{kind}.pt", map_location="cpu", weights_only=True))
+        for kind in ("dx7", "analog"):  # shaped like their saved weights (46 analog values for v3)
+            diffusion = Diffusion.from_weights(torch.load(GEN / f"{kind}.pt", map_location="cpu", weights_only=True))
             diffusion.model.to(device).eval()
             self.models[kind] = diffusion
         self.clap = ClapEmbedder(half=True)

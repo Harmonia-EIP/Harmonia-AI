@@ -160,12 +160,12 @@ def main() -> int:
     if args.max_new:
         clips = clips[:args.max_new]
 
-    diffusion = Diffusion.create(codecs.ANALOG_DIM)
-    diffusion.model.load_state_dict(torch.load(args.generator, map_location="cpu", weights_only=True))
-    diffusion.model.eval()
+    diffusion = Diffusion.from_weights(torch.load(args.generator, map_location="cpu", weights_only=True))
     clap = ClapEmbedder(half=True)
-    continuous = np.array([spec.interval == 0.0 for spec in P.SPECS])
-    discrete = [(i, int(round(spec.end - spec.start)) + 1) for i, spec in enumerate(P.SPECS) if spec.interval > 0]
+    # the 46 parameters of charter 3.0: the sample source is not searched here
+    core = P.SPECS[:P.CORE_PARAMS]
+    continuous = np.array([spec.interval == 0.0 for spec in core])
+    discrete = [(i, int(round(spec.end - spec.start)) + 1) for i, spec in enumerate(core) if spec.interval > 0]
     pop, mu = args.population, max(2, args.population // 4)
     rng = np.random.default_rng(args.seed)
     t0 = time.time()
@@ -185,11 +185,11 @@ def main() -> int:
                 dist = np.array([p[1] for p in played]).reshape(len(group), pop)
                 return cos - PERCEPTUAL_WEIGHT * dist, cos, dist
 
-            first = np.zeros((len(group), pop, P.N_PARAMS))
+            first = np.zeros((len(group), pop, P.CORE_PARAMS))
             for c in range(len(group)):
                 cond = torch.from_numpy(np.repeat(target[c][None], pop, axis=0))
                 drawn = diffusion.sample(cond, guidance=2.0, generator=torch.Generator().manual_seed(b + c)).numpy()
-                first[c] = np.stack([P.normalize(codecs.analog_decode(v)) for v in drawn])
+                first[c] = np.stack([P.normalize(codecs.analog_decode(v))[:P.CORE_PARAMS] for v in drawn])
             s, cos, dist = score(first)
             order = np.argsort(-s, axis=1)[:, :mu]
             elite = np.take_along_axis(first, order[:, :, None], axis=1)
@@ -197,7 +197,7 @@ def main() -> int:
             sigma = 0.15
             rows = np.arange(len(group))[:, None]
             for _ in range(args.generations):
-                kids = np.where(rng.random((len(group), pop, P.N_PARAMS)) < 0.3,
+                kids = np.where(rng.random((len(group), pop, P.CORE_PARAMS)) < 0.3,
                                 elite[rows, rng.integers(0, mu, (len(group), pop))],
                                 elite[rows, rng.integers(0, mu, (len(group), pop))])
                 moves = sigma * rng.standard_normal(kids.shape) * (rng.random(kids.shape) < 0.5)

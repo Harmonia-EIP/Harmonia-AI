@@ -169,15 +169,17 @@ class HarmoniaV3:
                                               weights_only=True))
         self.prior.eval()
         self.models: Dict[str, Diffusion] = {}
-        for engine, dim in (("analog", codecs.ANALOG_DIM), ("dx7", codecs.DX7_DIM)):
+        self.dims: Dict[str, int] = {}
+        for engine in ("analog", "dx7"):
             if engine == "dx7" and not self._dx7_available():
                 continue  # without the compiled DX7 renderer the server answers with the analog engine only
             weights = torch.load(self.model_dir / "generator" / f"{engine}.pt", map_location="cpu", weights_only=True)
-            diffusion = Diffusion.create(dim, width=weights["inp.weight"].shape[0],
-                                         depth=len({k.split(".")[1] for k in weights if k.startswith("blocks.")}))
-            diffusion.model.load_state_dict(weights)
-            diffusion.model.eval()
-            self.models[engine] = diffusion
+            self.models[engine] = Diffusion.from_weights(weights)
+            # the v3 / v4 analog generators make the 46 parameters of charter 3.0, newer ones the sample source too
+            self.dims[engine] = int(weights["inp.weight"].shape[1])
+        # during a refine: physical values of the analog parameters the generator does not make (the sample
+        # source for a charter 3.0 generator), taken from the preset being refined; None: their defaults
+        self._context: Optional[np.ndarray] = None
         if listener is None:
             from src.v3.listener import ClapListener
 
@@ -215,8 +217,15 @@ class HarmoniaV3:
                                                          sample_rate=SR) for n in NOTES]) for v in vectors])
         from src.synth.engine_v3 import render_batch
 
-        physical = np.stack([codecs.analog_decode(v) for v in vectors])
+        physical = np.stack([self._physical(v) for v in vectors])
         return render_batch(physical, np.array(NOTES), VELOCITY / 127, HOLD_SECONDS, TOTAL_SECONDS, SR, 7)
+
+    def _physical(self, vector: np.ndarray) -> np.ndarray:
+        """Every analog parameter of a generator's vector; those it does not make come from the context."""
+        physical = codecs.analog_decode(vector)
+        if self._context is not None and len(vector) < P.N_PARAMS:
+            physical[len(vector):] = self._context[len(vector):]
+        return physical
 
     def hear(self, engine: str, vectors: np.ndarray, measures: Optional[List[Dict[str, float]]] = None
              ) -> Tuple[np.ndarray, np.ndarray]:
@@ -237,12 +246,10 @@ class HarmoniaV3:
         """Play and hear two sounds per engine: compiles the engine, loads every weight and measures what a
         sound costs here, so the first request is not the one that pays for it. Returns that cost (seconds)."""
         for engine in self.engines:
-            dim = codecs.ANALOG_DIM if engine == "analog" else codecs.DX7_DIM
-            self.hear(engine, np.zeros((2, dim), dtype=np.float32))
+            self.hear(engine, np.zeros((2, self.dims[engine]), dtype=np.float32))
         self.cost = 0.0  # the first calls include compilation: measure again
         for engine in self.engines:
-            dim = codecs.ANALOG_DIM if engine == "analog" else codecs.DX7_DIM
-            self.hear(engine, np.zeros((2, dim), dtype=np.float32))
+            self.hear(engine, np.zeros((2, self.dims[engine]), dtype=np.float32))
         self.target("warm up")
         return self.cost
 
@@ -269,7 +276,7 @@ class HarmoniaV3:
         """n copies of `start` with small random moves of the settings a search may touch."""
         out = np.repeat(start[None, :], n, axis=0).astype(np.float32)
         if engine == "analog":
-            movable = np.array([spec.interval == 0.0 for spec in P.SPECS]) & ~keep
+            movable = np.array([spec.interval == 0.0 for spec in P.SPECS[:len(start)]]) & ~keep
             moves = sigma * 2.0 * rng.standard_normal(out.shape) * (rng.random(out.shape) < 0.5)
             out = np.where(movable[None, :], np.clip(out + moves, -1.0, 1.0), out)
             for index, values in self._discrete.items():
@@ -407,7 +414,7 @@ class HarmoniaV3:
         if engine == "dx7":
             values = charter_v3.dx7_values(codecs.dx7_decode(vector))
         else:
-            values = dict(zip(P.NAMES, (float(v) for v in codecs.analog_decode(vector))))
+            values = dict(zip(P.NAMES, (float(v) for v in self._physical(vector))))
         return charter_v3.make_preset(engine, values, name)
 
     @staticmethod
@@ -500,8 +507,18 @@ class HarmoniaV3:
         engine, start = self.read_current(parameters)
         if engine not in self.models:
             raise RuntimeError(f"the {engine} engine is not available on this server")
-        locks = lock_mask(engine, locked)
-        keep = locks if strength > STRUCTURE_FREE else locks | structure_mask(engine)
+        dim = self.dims[engine]
+        if engine == "analog":  # what this generator does not make stays as in the preset, and is played
+            self._context = codecs.analog_decode(start)
+        try:
+            return self._refine(prompt, parameters, locked, strength, engine, start[:dim], started)
+        finally:
+            self._context = None
+
+    def _refine(self, prompt: str, parameters: Mapping[str, float], locked: Sequence[str], strength: float,
+                engine: str, start: np.ndarray, started: float) -> Result:
+        locks = lock_mask(engine, locked)[:len(start)]
+        keep = locks if strength > STRUCTURE_FREE else locks | structure_mask(engine)[:len(start)]
         target = self.target(prompt)
         seed = self.seed_of(prompt, sorted(parameters.items()), sorted(locked))
         asked = D.read(prompt)

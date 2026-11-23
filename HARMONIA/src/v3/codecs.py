@@ -1,6 +1,8 @@
 """Presets <-> vectors in [-1, 1] for the v3 generators.
 
-Analog presets use the 46 normalized v3 parameters. DX7 voices use ordinal fields scaled to [-1, 1]
+Analog presets use the normalized analog parameters: the 46 of charter 3.0 (the v3 and v4 generators), or all
+of them with the sample source of charter 3.1 (newer generators). A shorter vector decodes with the missing
+parameters at their default, so an older generator still makes a valid, unchanged-sounding preset. DX7 voices use ordinal fields scaled to [-1, 1]
 and one-hot vectors for the categorical ones (algorithm, keyboard curves, LFO wave), so the generator
 never has to "interpolate" between two unrelated algorithms. Decoding always yields a valid preset.
 """
@@ -16,14 +18,19 @@ from src.synth import v3_params as P
 # --- analog -----------------------------------------------------------------------------------------------
 
 ANALOG_DIM = P.N_PARAMS
+ANALOG_DIM_V3 = P.CORE_PARAMS
 
 
-def analog_encode(physical: np.ndarray) -> np.ndarray:
-    return P.normalize(physical) * 2.0 - 1.0
+def analog_encode(physical: np.ndarray, dim: int = ANALOG_DIM) -> np.ndarray:
+    """The first `dim` normalized parameters (a 46-value physical vector is completed with defaults first)."""
+    return P.normalize(P.complete(physical))[:dim] * 2.0 - 1.0
 
 
 def analog_decode(vector: np.ndarray) -> np.ndarray:
-    return P.denormalize((np.clip(vector, -1.0, 1.0) + 1.0) / 2.0)
+    """Physical values of every analog parameter; those past the vector's length take their default."""
+    normalized = (np.clip(np.asarray(vector, dtype=np.float64), -1.0, 1.0) + 1.0) / 2.0
+    return P.complete(P.denormalize(normalized) if len(normalized) == P.N_PARAMS else
+                      np.array([P.from_normalized(spec, v) for spec, v in zip(P.SPECS, normalized)]))
 
 
 # --- DX7 --------------------------------------------------------------------------------------------------

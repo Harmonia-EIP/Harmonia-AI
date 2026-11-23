@@ -65,6 +65,16 @@ class Diffusion:
     def create(cls, dim: int, cond_dim: int = 512, width: int = 512, depth: int = 4) -> "Diffusion":
         return cls(Denoiser(dim, cond_dim, width, depth), cosine_alphas_cumprod())
 
+    @classmethod
+    def from_weights(cls, weights) -> "Diffusion":
+        """A model shaped like the saved weights (vector size, condition size, width, depth), weights loaded."""
+        depth = len({k.split(".")[1] for k in weights if k.startswith("blocks.")})
+        model = cls.create(weights["inp.weight"].shape[1], cond_dim=weights["null"].shape[0],
+                           width=weights["inp.weight"].shape[0], depth=depth)
+        model.model.load_state_dict(weights)
+        model.model.eval()
+        return model
+
     def loss(self, x0: torch.Tensor, cond: torch.Tensor, drop: float = 0.1) -> torch.Tensor:
         b = x0.shape[0]
         device = x0.device
