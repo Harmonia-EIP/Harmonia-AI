@@ -135,7 +135,14 @@ def test_dx7_lock_mask_matches_the_codec():
 
 def test_masks_cover_the_right_analog_parameters():
     assert [P.NAMES[i] for i in np.nonzero(lock_mask("analog", ["reverb_mix", "dx7_feedback", "nope"]))[0]] == ["reverb_mix"]
-    assert {P.NAMES[i] for i in np.nonzero(structure_mask("analog"))[0]} == {"osc_1_coarse", "osc_2_coarse", "unison_voices"}
+    assert {P.NAMES[i] for i in np.nonzero(structure_mask("analog"))[0]} == {
+        "osc_1_coarse", "osc_2_coarse", "unison_voices", "sample_instrument", "sample_tune"}
+    # on a codec vector, the instrument's timbre coordinates follow the instrument
+    timbre = np.arange(codecs.ANALOG_DIM) >= P.N_PARAMS
+    assert lock_mask("analog", ["sample_instrument"], codecs.ANALOG_DIM)[timbre].all()
+    assert not lock_mask("analog", ["sample_level"], codecs.ANALOG_DIM)[timbre].any()
+    assert structure_mask("analog", codecs.ANALOG_DIM)[timbre].all()
+    assert len(structure_mask("analog", codecs.ANALOG_DIM_V3)) == 46
 
 
 # Kept values of a variation come out exactly as they went in; the others are drawn again.
@@ -297,3 +304,51 @@ def test_charter_30_generator_with_charter_31(tmp_path):
         assert refined[name] == pytest.approx(current[name], abs=1e-6), name
     assert heard and all(level == pytest.approx(0.7) for level in heard)  # the sample was played while searching
     assert engine._context is None
+
+
+def sample_current(choice: int = 3, level: float = 0.7, tune: int = 5) -> dict:
+    spec = {p.id: p for p in charter_v3.load().params}
+    return full_preset({"engine": 0.0, "sample_instrument": spec["sample_instrument"].to_normalized(choice),
+                        "sample_level": spec["sample_level"].to_normalized(level),
+                        "sample_tune": spec["sample_tune"].to_normalized(tune)})
+
+
+# A generator with the sample source: a light refine keeps the recorded instrument (structure), a locked one
+# comes back exactly as sent, and what it plays while searching is that instrument.
+def test_refine_keeps_the_recorded_instrument(engine):
+    current = sample_current()
+    for locked in ((), ("sample_instrument", "sample_level")):
+        refined = engine.refine("plus brillant", current, locked=list(locked), strength=0.3).preset["parameters"]
+        assert refined["sample_instrument"] == pytest.approx(current["sample_instrument"], abs=1e-9)
+        assert refined["sample_tune"] == pytest.approx(current["sample_tune"], abs=1e-9)
+    assert engine._context is None
+
+
+# An instrument the model's timbre table does not describe (added to the charter after the model was trained)
+# cannot be written by coordinates: a refine keeps it, and plays it while searching.
+def test_refine_holds_an_instrument_the_model_does_not_know(tmp_path):
+    import json
+
+    from src.samples import descriptors
+
+    model = tmp_path / "m"
+    engine = build_engine(model)
+    raw = json.loads(descriptors.PATH.read_text(encoding="utf-8"))
+    unknown = charter_v3.load().raw["sample_instruments"]["ids"][2]  # choice 3
+    del raw["instruments"][unknown]
+    (model / "generator" / "descriptors.json").write_text(json.dumps(raw), encoding="utf-8")
+    engine = HarmoniaV3(model, settings=engine.settings, listener=engine.listener, text_encoder=engine.text_encoder)
+    assert np.isnan(engine.timbres.table[3, 0])
+    heard = []
+    original = engine._physical
+
+    def spy(vector):
+        physical = original(vector)
+        heard.append(int(physical[P.INDEX["sample_instrument"]]))
+        return physical
+
+    engine._physical = spy
+    current = sample_current(choice=3)
+    refined = engine.refine("soft pad", current, strength=1.0).preset["parameters"]
+    assert refined["sample_instrument"] == pytest.approx(current["sample_instrument"], abs=1e-9)
+    assert heard and set(heard) == {3}
