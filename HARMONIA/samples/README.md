@@ -92,6 +92,10 @@ python scripts/samples/fetch_samples.py      # ~/Datasets/harmonia-samples/<bibl
 python scripts/samples/build_catalog.py      # catalog.json + samples/instruments.json
 python scripts/samples/build_packs.py --tag samples-1.0.0   # dist/samples/*.tar + samples/release.json
 python scripts/samples/instrument_descriptors.py            # samples/descriptors.json (paquet listen dans models/samples)
+python scripts/samples/fetch_pack.py --pack listen          # installe le paquet du serveur depuis la release (models/samples)
 ```
+
+Un modèle dont le générateur joue des instruments enregistrés (`"samples"` dans son `manifest.json`) n'est pas
+servi sans le paquet `listen` : il entendrait ses instruments comme du silence.
 
 La CI ne télécharge jamais d'échantillons : les tests fabriquent leurs propres petits sons.

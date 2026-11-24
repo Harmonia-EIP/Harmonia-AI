@@ -265,6 +265,20 @@ def _build_v3_runtime(model_key: str = V3_MODEL_KEY) -> InferenceRuntime:
         )
     model_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     model_version = str(manifest.get("model_version", model_key))
+    if manifest.get("samples"):
+        from src.samples.player import default_bank
+
+        if default_bank() is None:  # it would hear its recorded instruments as silence and choose blindly
+            return InferenceRuntime(
+                model=None,
+                tokenizer=None,
+                ready=False,
+                error=f"{model_key} plays recorded instruments: install the listen sample pack "
+                      "(python scripts/samples/fetch_pack.py --pack listen, or set HARMONIA_SAMPLES_DIR).",
+                model_version=model_version,
+                model_hash=model_hash,
+                model_path=str(model_dir),
+            )
     try:
         from src.v3.inference import HarmoniaV3, Settings
 

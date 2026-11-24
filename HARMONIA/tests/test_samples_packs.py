@@ -81,3 +81,30 @@ def test_gains(tmp_path):
     # middle layer of note 60 = the loud take (RMS 0.64): 0.4 / 0.64, under PEAK_LIMIT / 0.9
     assert gains["a"] == pytest.approx(B.TARGET_RMS / (0.9 / np.sqrt(2)), rel=0.02)
     assert gains["b"] == B.GAIN_LIMIT
+
+
+# A pack installs from the release: checked, unpacked, and skipped once installed.
+def test_fetch_pack_installs_once(tmp_path):
+    import hashlib
+    import json
+
+    from scripts.samples import fetch_pack
+
+    source = tmp_path / "src"
+    (source / "lib").mkdir(parents=True)
+    (source / "catalog.json").write_text(json.dumps({"version": 1, "instruments": []}))
+    (source / "lib" / "a.flac").write_bytes(b"flac")
+    archive = tmp_path / "release" / "pack.tar"
+    archive.parent.mkdir()
+    with tarfile.open(archive, "w") as tar:
+        tar.add(source / "catalog.json", arcname="catalog.json")
+        tar.add(source / "lib" / "a.flac", arcname="lib/a.flac")
+    release = {"tag": "samples-test", "packs": {"listen": [
+        {"asset": "pack.tar", "sha256": hashlib.sha256(archive.read_bytes()).hexdigest()}]}}
+    out = tmp_path / "out"
+    assert fetch_pack.install("listen", out, archive.parent.as_uri(), release) == 1
+    assert (out / "catalog.json").exists() and (out / "lib" / "a.flac").read_bytes() == b"flac"
+    assert fetch_pack.install("listen", out, archive.parent.as_uri(), release) == 0
+    release["packs"]["listen"][0]["sha256"] = "0" * 64
+    with pytest.raises(SystemExit):
+        fetch_pack.install("listen", tmp_path / "other", archive.parent.as_uri(), release)

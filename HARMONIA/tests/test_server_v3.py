@@ -203,3 +203,20 @@ def test_listener_is_shared(tmp_path, monkeypatch):
     assert server_module._shared_listener(tmp_path / "v4", same) is first
     other = server_module._shared_listener(tmp_path / "v5", {"files": {"clap_audio/model.safetensors": {"sha256": "bb"}}})
     assert other is not first and len(loaded) == 2
+
+
+# A model whose generator plays recorded instruments is not served without the listen pack: it would hear
+# them as silence.
+def test_model_with_samples_needs_the_listen_pack(tmp_path, monkeypatch):
+    import json
+
+    from src.samples import player
+
+    folder = tmp_path / "harmonia_v3"
+    folder.mkdir()
+    (folder / "manifest.json").write_text(json.dumps({"model_version": "harmonia_v3.9", "files": {},
+                                                      "samples": {"pack": "listen", "release": "samples-1.0.0"}}))
+    monkeypatch.setattr(server_module, "V3_MODEL_DIR", folder)
+    monkeypatch.setattr(player, "default_bank", lambda: None)
+    runtime = server_module._build_v3_runtime(server_module.V3_MODEL_KEY)
+    assert not runtime.ready and "fetch_pack.py --pack listen" in runtime.error
