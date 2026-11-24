@@ -10,6 +10,8 @@ The page only carries opaque ids; which sound is which stays in <out>/key_<round
     python scripts/v3/generate_v31.py --prompts prompts.json --out data/v3/generations_v31
     python scripts/v3/listening_prompts.py --generations data/v3/generations_v31 --round p2
     python scripts/v3/listening_prompts.py --bench v3.0 v3.3 v3.3+refine3 --round p4   # systems of benchmark_v3.py
+
+Recorded instruments (#43) play from --play-samples, the full pack the plugin plays (default: the installed one).
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ BENCH = BASE_DIR / "data" / "v3" / "bench"
 BENCH_NOTE = ("Écoute à l'aveugle : pour chaque description, {count} sons joués sur trois notes (do2, do3, do4), créés par "
               "des versions différentes de l'IA, dans un ordre caché. Note chacun de 1 à 5 selon qu'il correspond à la "
               "description.")
+PLAY_BANK = None  # main: --play-samples
 WHAT = {2: "l'un créé par l'IA (génération), l'autre un vrai preset choisi dans la banque (sélection)",
         "v32": "de vrais presets choisis par l'IA et une légère variation créée par l'IA",
         3: "un créé par l'IA de zéro (génération), un créé par l'IA à partir de vrais presets (variation) et un vrai "
@@ -55,7 +58,7 @@ def notes_audio(kind: str, preset) -> list:
         return [dx7_render.render(preset, note=n, velocity=M.VELOCITY, hold_seconds=M.HOLD_SECONDS,
                                   total_seconds=M.TOTAL_SECONDS) for n in M.NOTES]
     return [render_physical(np.asarray(preset, dtype=np.float64), n, M.VELOCITY / 127, M.HOLD_SECONDS,
-                            M.TOTAL_SECONDS, M.SR, 7) for n in M.NOTES]
+                            M.TOTAL_SECONDS, M.SR, 7, PLAY_BANK) for n in M.NOTES]
 
 
 def bench_page(args) -> int:
@@ -109,7 +112,14 @@ def main() -> int:
     parser.add_argument("--round", default="p1")
     parser.add_argument("--bench", nargs="+", default=None,
                         help="systems of scripts/v3/benchmark_v3.py to compare on Malo's prompts")
+    parser.add_argument("--play-samples", type=Path, default=None, help="sample pack folder the sounds play")
+    parser.add_argument("--play-catalog", type=Path, default=None, help="its catalogue, if not catalog.json in it")
     args = parser.parse_args()
+    if args.play_samples:
+        from src.samples.player import SampleBank
+
+        global PLAY_BANK
+        PLAY_BANK = SampleBank(args.play_samples, args.play_catalog)
     if args.bench:
         return bench_page(args)
 
