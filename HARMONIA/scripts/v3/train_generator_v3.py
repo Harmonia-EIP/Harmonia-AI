@@ -14,12 +14,22 @@
 With --recording-cond both (v4, V4.md), each imitation is learnt twice: conditioned on the sound of the preset
 itself, and on the sound of the recording it imitates. At run time the target comes from the prior, which
 learnt real recordings: the generator then also learns "this real sound -> the preset closest to it".
+
+The analog generator makes the full codec vector (src/v3/codecs.py): the 46 parameters of charter 3.0, the
+sample source and the timbre of its instrument (#46). Presets that play a recorded instrument are heard with
+the "listen" pack (models/samples or $HARMONIA_SAMPLES_DIR), like the server hears them. Several imitation
+files can be given (--recordings a.jsonl b.jsonl): a recording imitated twice keeps the last file's imitation.
+The timbre table the generator learnt is copied next to it (descriptors.json): it decodes only with that table.
+
+    python scripts/v3/train_generator_v3.py --only analog --base data/v4/generator --recording-cond both \
+        --recordings data/v3/matched_fsd/fsd.jsonl data/samples/matched_fsd/fsd.jsonl --out data/samples/generator
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -34,6 +44,7 @@ if str(BASE_DIR) not in sys.path:
 from scripts.v2.build_text_corpus import clean_title, label_phrase  # noqa: E402
 from src.presets import dx7_render  # noqa: E402
 from src.presets.labels import preset_text  # noqa: E402
+from src.samples import descriptors as timbres  # noqa: E402
 from src.v2.clap_audio import best_device  # noqa: E402
 from src.v3 import codecs  # noqa: E402
 from src.v3.diffusion import Diffusion  # noqa: E402
@@ -119,15 +130,15 @@ class SynthConditions:
         return torch.cat([z, types], dim=-1)
 
 
-def load_recordings(path: Path, min_cos: float, max_distance: float):
+def load_recordings(paths, min_cos: float, max_distance: float):
     """Analog presets that imitate real recordings (scripts/v3/match_recordings.py), kept when both of the
     search's measures say the imitation is close enough. Returns (codec vectors, CLAP embedding of each
     preset's own sound at the bank's notes, rows)."""
+    from scripts.v3.match_recordings import read_imitations
     from src.synth.engine_v3 import render_batch
     from src.v2.clap_audio import ClapEmbedder
 
-    rows = [json.loads(line) for line in open(path, encoding="utf-8")]
-    rows = [r for r in rows if r["cos"] >= min_cos and r["distance"] <= max_distance]
+    rows = read_imitations(paths, min_cos, max_distance)
     physical = np.array([r["physical"] for r in rows], dtype=np.float64)
     audio = np.nan_to_num(render_batch(physical, np.array(NOTES), 100 / 127, 1.5, 4.0, 48000, 7))
     audible = np.abs(audio).reshape(len(rows), -1).max(axis=1) > 1e-3
@@ -239,7 +250,7 @@ def main() -> int:
     parser.add_argument("--only", choices=("analog",), default=None,
                         help="train the analog generator alone; the prior and the DX7 generator are copied from --base")
     parser.add_argument("--base", type=Path, default=OUT, help="with --only: the generators to keep")
-    parser.add_argument("--recordings", type=Path, default=None,
+    parser.add_argument("--recordings", type=Path, nargs="+", default=None,
                         help="presets imitating real recordings (match_recordings.py), added to the analog presets")
     parser.add_argument("--min-cos", type=float, default=0.45, help="recordings: lowest CLAP similarity kept")
     parser.add_argument("--max-distance", type=float, default=30.0, help="recordings: highest perceptual distance kept")
@@ -293,19 +304,19 @@ def main() -> int:
         print(f"recordings: {recordings} imitations added to the analog presets", flush=True)
 
     if args.only == "analog":
-        import shutil
-
         for name in ("prior.pt", "dx7.pt"):
             if args.base.resolve() != out.resolve():
                 shutil.copy2(args.base / name, out / name)
         analog = train_diffusion("analog", x_analog, SoundConditions(cond_analog, device), args.analog_steps, 256,
                                  device, args.seed)
         torch.save(analog.model.state_dict(), out / "analog.pt")
+        shutil.copy2(timbres.PATH, out / "descriptors.json")
         meta = json.loads((args.base / "meta.json").read_text(encoding="utf-8"))
-        meta.update(analog_presets=int(len(x_analog)), analog_recordings=recordings,
+        meta.update(analog_presets=int(len(x_analog)), analog_recordings=recordings, analog_dim=int(x_analog.shape[1]),
                     analog_args={"steps": args.analog_steps, "seed": args.seed, "min_cos": args.min_cos,
                                  "max_distance": args.max_distance, "base": str(args.base),
-                                 "recording_cond": args.recording_cond})
+                                 "recording_cond": args.recording_cond,
+                                 "recordings": [str(r) for r in args.recordings or ()]})
         (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
         print(json.dumps(meta, indent=2))
         return 0
@@ -322,6 +333,7 @@ def main() -> int:
     analog = train_diffusion("analog", x_analog, SoundConditions(cond_analog, device), args.analog_steps, 256,
                              device, args.seed)
     torch.save(analog.model.state_dict(), out / "analog.pt")
+    shutil.copy2(timbres.PATH, out / "descriptors.json")
 
     meta = {"analog_recordings": recordings,"teacher": {"id": TEACHER_ID, "revision": TEACHER_REVISION}, "dx7_dim": codecs.DX7_DIM,
             "analog_dim": codecs.ANALOG_DIM, "dx7_presets": int(len(dx7_idx)), "analog_presets": int(len(x_analog)),

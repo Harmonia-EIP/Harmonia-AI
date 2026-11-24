@@ -135,6 +135,18 @@ def pick_clips(fsd50k: Path, embeddings: Path, per_class: int, seed: int, cache:
     return clips
 
 
+def read_imitations(paths, min_cos: float = 0.0, max_distance: float = float("inf")) -> list:
+    """The imitations of several runs (match_recordings.py outputs), kept when both of the search's measures say
+    they are close enough. A recording imitated by several runs keeps the imitation of the last file given
+    (the sample-source run after the one without)."""
+    rows: dict = {}
+    for path in paths:
+        for line in open(path, encoding="utf-8"):
+            row = json.loads(line)
+            rows[row["fname"]] = row
+    return [r for r in rows.values() if r["cos"] >= min_cos and r["distance"] <= max_distance]
+
+
 def candidate_instruments(targets: np.ndarray, clap: Path = INSTRUMENTS_CLAP, count: int = CANDIDATES) -> np.ndarray:
     """(clips, count) charter choices of the instruments whose sound is closest to each recording's (CLAP)."""
     from src.samples.player import instrument_ids

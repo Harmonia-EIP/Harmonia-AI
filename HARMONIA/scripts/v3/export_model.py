@@ -45,6 +45,8 @@ FILES = {
     "generator/dx7.pt": "generator/dx7.pt",
     "generator/analog.pt": "generator/analog.pt",
     "generator/meta.json": "generator/meta.json",
+    # charter 3.1 generators: the instruments' timbre coordinates they learnt (src/samples/descriptors.py)
+    "generator/descriptors.json": "generator/descriptors.json",
     # v3.1: synth space (types, text <-> sound) and generators conditioned on it
     "synth_space/synth_space.pt": "synth_space/synth_space.pt",
     "synth_space/report.json": "synth_space/report.json",
@@ -82,11 +84,18 @@ Third-party parts in this archive:
 - clap_audio: the audio tower of laion/larger_clap_general (Apache-2.0), unchanged, in half precision.
 
 No preset of the banks the generators learnt from (DX7 cartridges, Surge XT, OB-Xf) and no audio are in
-this archive. {recordings}{descriptions}
+this archive. {recordings}{descriptions}{samples}
 """
 RECORDINGS_NOTE = ("The analog generator also learnt from synthesizer settings that imitate {count} FSD50K recordings "
                    "(Freesound, CC0 and CC BY only); the recordings themselves are not included. Their titles, "
                    "authors and licences are listed in ATTRIBUTION.json.")
+
+
+SAMPLES_NOTE = ("\n\nThe analog generator writes presets that may play recorded instruments of the Harmonia sample "
+                "packs (Salamander Grand Piano by Alexander Holm, CC BY 3.0; VSCO 2 Community Edition and the "
+                "Versilian Community Sample Library, CC0). The recordings are not in this archive: the server "
+                "hears them from the packs' \"listen\" version, the plugin plays the full packs; their credits "
+                "are in each pack's CREDITS.md.")
 
 
 DESCRIPTIONS_NOTE = ("\n\nThe text encoder and the prior also learnt from the descriptions that Freesound uploaders wrote for "
@@ -94,8 +103,8 @@ DESCRIPTIONS_NOTE = ("\n\nThe text encoder and the prior also learnt from the de
                      "the CC BY ones are listed in ATTRIBUTION_DESCRIPTIONS.json.")
 
 
-def export_notices(out: Path, version: str, recordings: Path | None, min_cos: float, max_distance: float,
-                   descriptions: Path | None = None) -> dict:
+def export_notices(out: Path, version: str, recordings, min_cos: float, max_distance: float,
+                   descriptions: Path | None = None, samples: bool = False) -> dict:
     """LICENSE, NOTICE.md and the credits: each imitated recording, and the authors of CC BY descriptions."""
     note, described = "", ""
     if descriptions is not None:
@@ -105,15 +114,16 @@ def export_notices(out: Path, version: str, recordings: Path | None, min_cos: fl
         (out / "ATTRIBUTION_DESCRIPTIONS.json").write_text(json.dumps(credits, ensure_ascii=False, indent=0) + "\n",
                                                            encoding="utf-8")
         described = DESCRIPTIONS_NOTE.format(count=len(rows))
-    if recordings is not None:
-        rows = [json.loads(line) for line in open(recordings, encoding="utf-8")]
-        rows = [r for r in rows if r["cos"] >= min_cos and r["distance"] <= max_distance]
+    if recordings:
+        from scripts.v3.match_recordings import read_imitations
+
+        rows = read_imitations([recordings] if isinstance(recordings, Path) else recordings, min_cos, max_distance)
         credits = [{"freesound_id": r["fname"], "title": r["title"], "author": r["uploader"], "license": r["license"]}
                    for r in sorted(rows, key=lambda r: int(r["fname"]))]
         (out / "ATTRIBUTION.json").write_text(json.dumps(credits, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
         note = RECORDINGS_NOTE.format(count=len(credits))
-    (out / "NOTICE.md").write_text(NOTICE.format(version=version, recordings=note, descriptions=described),
-                                   encoding="utf-8")
+    (out / "NOTICE.md").write_text(NOTICE.format(version=version, recordings=note, descriptions=described,
+                                                 samples=SAMPLES_NOTE if samples else ""), encoding="utf-8")
     shutil.copy2(BASE_DIR.parent / "LICENSE", out / "LICENSE")
     return {name: {"sha256": sha256(out / name), "bytes": (out / name).stat().st_size}
             for name in ("LICENSE", "NOTICE.md", "ATTRIBUTION.json", "ATTRIBUTION_DESCRIPTIONS.json")
@@ -130,7 +140,7 @@ def main() -> int:
     parser.add_argument("--no-listener", action="store_true", help="leave CLAP's audio tower out (read from the hub)")
     parser.add_argument("--runtime-only", action="store_true",
                         help="only what the server loads: no v3.1 synth space and generators (research scripts)")
-    parser.add_argument("--recordings", type=Path, default=None,
+    parser.add_argument("--recordings", type=Path, nargs="+", default=None,
                         help="the imitations the analog generator was trained with (match_recordings.py): credits them")
     parser.add_argument("--text-student", type=Path, default=DATA / "text_student", help="text encoder folder")
     parser.add_argument("--descriptions", type=Path, default=None,
@@ -149,17 +159,25 @@ def main() -> int:
         dest.parent.mkdir(parents=True, exist_ok=True)
         if source.startswith("generator/"):
             origin = args.generator / Path(source).name
+            if source == "generator/descriptors.json" and not origin.exists():
+                continue  # a charter 3.0 generator: no sample source
         elif source.startswith("text_student/"):
             origin = args.text_student / Path(source).relative_to("text_student")
         else:
             origin = DATA / source
         shutil.copy2(origin, dest)
         files[target] = {"sha256": sha256(dest), "bytes": dest.stat().st_size}
-    manifest = {"model_version": args.version, "display_name": args.display_name, "engine": "src/synth/engine_v3.py (46 parameters) + DX7 mode (msfa)",
+    samples = "generator/descriptors.json" in files
+    engine = ("src/synth/engine_v3.py (50 parameters, sample source) + DX7 mode (msfa)" if samples else
+              "src/synth/engine_v3.py (46 parameters) + DX7 mode (msfa)")
+    manifest = {"model_version": args.version, "display_name": args.display_name, "engine": engine,
                 "text_encoder": json.loads((args.text_student / "meta.json").read_text())["base_model"],
                 "files": files}
+    if samples:  # the server must have the listen pack to hear what the generator writes (samples/README.md)
+        manifest["samples"] = {"pack": "listen", "release": json.loads(
+            (BASE_DIR / "samples" / "release.json").read_text(encoding="utf-8"))["tag"]}
     files.update(export_notices(args.out, args.version, args.recordings, args.min_cos, args.max_distance,
-                                args.descriptions))
+                                args.descriptions, samples))
     if not args.no_listener:
         listener = export_listener(args.out)
         files.update(listener.pop("files"))
