@@ -96,11 +96,12 @@ def test_start_and_batch(bank):
     assert batch.shape == (2, 2, 4 * 48000) and np.abs(batch[1]).max() > 0
 
 
-# Charter 3.0 vectors (what the v3 / v4 generators make) encode and decode without the sample source.
+# Charter 3.0 vectors (what the v3 / v4 generators make) encode and decode without the sample source; the full
+# codec is tested in test_samples_descriptors.py.
 def test_codecs_old_and_new_sizes():
     physical = sample_preset(sample_tune=-5)
     full = codecs.analog_encode(physical)
-    assert full.shape == (P.N_PARAMS,)
+    assert full.shape == (codecs.ANALOG_DIM,)
     old = codecs.analog_encode(physical, dim=codecs.ANALOG_DIM_V3)
     assert old.shape == (46,)
     back = codecs.analog_decode(old)
