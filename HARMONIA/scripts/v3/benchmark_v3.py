@@ -12,9 +12,14 @@ Prompts:
 One system per run (a name and its settings); scripts/v3/benchmark_judge_v3.py then scores the folders with
 an independent judge.
 
+Presets that play a recorded instrument (#43) are generated with the "listen" pack, like on the server, and
+written with --play-samples: the full pack the plugin plays (default: the listen pack too).
+
     python scripts/v3/benchmark_v3.py --name v3.0 --polish-rounds 0
     python scripts/v3/benchmark_v3.py --name polish2 --polish-rounds 2
     python scripts/v3/benchmark_v3.py --name polish2+refine3 --refine-from polish2 --clicks 3   # Refine, same prompt
+    python scripts/v3/benchmark_v3.py --name s1 --model-dir data/samples/models/s1 --sets malo,fsd,desc,desc_fr \
+        --play-samples ~/Datasets/harmonia-samples/packs/full --play-catalog ~/Datasets/harmonia-samples/packs/catalog-full.json
 """
 
 from __future__ import annotations
@@ -42,6 +47,7 @@ NOTE, HOLD_SECONDS, TOTAL_SECONDS, SR = 57, 1.5, 4.0, 48000  # A3: not one of th
 
 
 DESCRIPTIONS = 100
+PLAY_BANK = None  # the sample pack the written sounds play (main: --play-samples); None: the installed one
 
 
 def description_prompts(fsd50k: Path):
@@ -83,7 +89,8 @@ def play(preset: dict) -> np.ndarray:
                                  total_seconds=TOTAL_SECONDS, sample_rate=SR)
     from src.synth.engine_v3 import render
 
-    return render(P.physical_from_dict(values), NOTE, 100 / 127, HOLD_SECONDS, TOTAL_SECONDS, SR).mean(axis=0)
+    return render(P.physical_from_dict(values), NOTE, 100 / 127, HOLD_SECONDS, TOTAL_SECONDS, SR,
+                  bank=PLAY_BANK).mean(axis=0)
 
 
 def main() -> int:
@@ -102,7 +109,15 @@ def main() -> int:
     parser.add_argument("--only-set", choices=("malo", "fsd", "desc", "desc_fr"), default=None,
                         help="one set of prompts only")
     parser.add_argument("--sets", default="malo,fsd", help="prompt sets, comma-separated (malo,fsd,desc,desc_fr)")
+    parser.add_argument("--play-samples", type=Path, default=None, help="sample pack folder the written sounds play")
+    parser.add_argument("--play-catalog", type=Path, default=None, help="its catalogue, if not catalog.json in it")
     args = parser.parse_args()
+
+    if args.play_samples:
+        from src.samples.player import SampleBank
+
+        global PLAY_BANK
+        PLAY_BANK = SampleBank(args.play_samples, args.play_catalog)
 
     from src.v3.inference import HarmoniaV3, Settings
 
