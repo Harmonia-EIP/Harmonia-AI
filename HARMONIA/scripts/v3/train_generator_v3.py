@@ -45,6 +45,7 @@ from scripts.v2.build_text_corpus import clean_title, label_phrase  # noqa: E402
 from src.presets import dx7_render  # noqa: E402
 from src.presets.labels import preset_text  # noqa: E402
 from src.samples import descriptors as timbres  # noqa: E402
+from src.synth import v3_params as P  # noqa: E402
 from src.v2.clap_audio import best_device  # noqa: E402
 from src.v3 import codecs  # noqa: E402
 from src.v3.diffusion import Diffusion  # noqa: E402
@@ -139,7 +140,8 @@ def load_recordings(paths, min_cos: float, max_distance: float):
     from src.v2.clap_audio import ClapEmbedder
 
     rows = read_imitations(paths, min_cos, max_distance)
-    physical = np.array([r["physical"] for r in rows], dtype=np.float64)
+    # charter 3.0 imitations (46 values) and sample-source ones (50) together: the shorter ones play no sample
+    physical = np.stack([P.complete(r["physical"]) for r in rows])
     audio = np.nan_to_num(render_batch(physical, np.array(NOTES), 100 / 127, 1.5, 4.0, 48000, 7))
     audible = np.abs(audio).reshape(len(rows), -1).max(axis=1) > 1e-3
     emb = ClapEmbedder(half=True).embed_audio(list(audio.reshape(-1, audio.shape[-1])), batch_size=64)
