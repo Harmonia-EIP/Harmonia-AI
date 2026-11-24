@@ -72,12 +72,26 @@ donc un peu moins fort qu'une dent de scie pleine, sans jamais saturer.
 le mélange aux oscillateurs avant le filtre, `sample_tune` le transpose, `sample_start` saute son attaque. Les paquets ne sont pas encore publiés : ils le seront quand le plugin saura
 les lire (#58).
 
+## Timbres ([descriptors.json](descriptors.json), #46)
+
+Pour l'IA, un instrument n'est pas un numéro : le générateur écrit des nombres continus, et le n° 12 n'est pas
+« entre » le 11 et le 13. Chaque instrument reçoit donc 16 coordonnées qui disent comment il sonne : il est joué
+seul dans le moteur (paquet `listen`, notes 45 et 69), CLAP l'écoute, et les axes principaux des 125 sons donnent
+ses coordonnées. Le générateur écrit des coordonnées, le preset reçoit l'instrument le plus proche
+(`src/v3/codecs.py`). Ces 16 coordonnées gardent 85 % de ce que CLAP entend ; pour 96 % des instruments, le plus
+proche par les coordonnées est l'un des 3 plus proches selon CLAP. Le marimba de VSCO 2 et celui de VCSL sont les
+mêmes enregistrements : mêmes coordonnées.
+
+Un générateur ne décode bien qu'avec la table qui a servi à l'entraîner : elle est copiée à côté de lui à
+l'export. Quand la charte reçoit de nouveaux instruments, on recalcule la table (et on réentraîne).
+
 ## Commandes
 
 ```bash
 python scripts/samples/fetch_samples.py      # ~/Datasets/harmonia-samples/<bibliothèque>/ (7 Go à télécharger)
 python scripts/samples/build_catalog.py      # catalog.json + samples/instruments.json
 python scripts/samples/build_packs.py --tag samples-1.0.0   # dist/samples/*.tar + samples/release.json
+python scripts/samples/instrument_descriptors.py            # samples/descriptors.json (paquet listen dans models/samples)
 ```
 
 La CI ne télécharge jamais d'échantillons : les tests fabriquent leurs propres petits sons.
