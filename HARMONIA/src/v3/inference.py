@@ -63,6 +63,7 @@ _ANALOG_FIXED = ("unison_voices",)  # changing the voice count changes the level
 _ANALOG_SAMPLE_STRUCTURE = ("sample_instrument", "sample_tune")
 INSTRUMENT_SWAP = 0.06  # share of a search's small moves that try one of the instrument's nearest neighbours
 INSTRUMENT_NEIGHBOURS = 4
+RECORDED_LEVEL = 0.5  # sample level from which a preset counts as playing its recorded instrument
 # DX7 fields a local search may nudge. Ratios, algorithm, transpose and keyboard scaling change the voice
 # itself: only the generator's variations touch them.
 _DX7_NUDGE = ("rates", "levels", "output_level", "key_vel_sens", "detune", "feedback", "lfo_speed", "lfo_delay",
@@ -145,6 +146,10 @@ class Settings:
     # Seconds a request should take on this machine (0: no limit). Every sound costs a render and a listen;
     # the run time measures that cost and draws fewer candidates / searches fewer rounds on a slow machine.
     time_budget: float = 0.0
+    # Generate: a recorded instrument wins over the DX7 mode unless the DX7 draw is closer to the prompt for
+    # CLAP by more than this. CLAP hears the category, not realism, and often prefers the FM version of an
+    # instrument; Malo's blind ratings went the other way (round p6, #43). 0: CLAP alone decides.
+    recorded_margin: float = 0.10
 
 
 @dataclass
@@ -518,12 +523,29 @@ class HarmoniaV3:
                                              np.zeros(len(vector), dtype=bool), strength=0.5)
             heard += more
             best[POLISHED] = (float(emb @ target), vector, emb)
-        engine = max(best, key=lambda name: best[name][0])
+        engine, recorded = self._pick_engine(best)
         similarity, vector, emb = best[engine]
         return Result(self._preset(engine, vector, prompt), engine, similarity,
                       {"engine": engine, "similarity": round(similarity, 4), "drawn_similarity": drawn[engine],
-                       "drawn": drawn, "variation": variation, "heard": heard,
+                       "drawn": drawn, "engines": {name: round(sim, 4) for name, (sim, _, _) in best.items()},
+                       "recorded_preferred": recorded, "variation": variation, "heard": heard,
                        "seconds": round(time.perf_counter() - started, 2)})
+
+    def plays_recorded(self, vector: np.ndarray) -> bool:
+        """An analog codec vector whose sample source plays a recorded instrument at a level that carries it."""
+        if len(vector) <= P.N_PARAMS:
+            return False
+        physical = self._physical(vector)
+        return physical[codecs.INSTRUMENT] > 0 and physical[codecs.LEVEL] >= RECORDED_LEVEL
+
+    def _pick_engine(self, best: Mapping[str, Tuple[float, np.ndarray, np.ndarray]]) -> Tuple[str, bool]:
+        """(engine of the answer, whether a recorded instrument was preferred to a closer DX7 draw)."""
+        engine = max(best, key=lambda name: best[name][0])
+        margin = self.settings.recorded_margin
+        if engine != "analog" and "analog" in best and margin > 0 and self.plays_recorded(best["analog"][1]) \
+                and best["analog"][0] >= best[engine][0] - margin:
+            return "analog", True
+        return engine, False
 
     def _refined_preset(self, engine: str, vector: np.ndarray, name: str, parameters: Mapping[str, float],
                         locked: Sequence[str]) -> Dict[str, object]:

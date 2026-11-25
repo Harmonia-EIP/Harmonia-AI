@@ -352,3 +352,25 @@ def test_refine_holds_an_instrument_the_model_does_not_know(tmp_path):
     refined = engine.refine("soft pad", current, strength=1.0).preset["parameters"]
     assert refined["sample_instrument"] == pytest.approx(current["sample_instrument"], abs=1e-9)
     assert heard and set(heard) == {3}
+
+
+# A recorded instrument wins over a DX7 draw that CLAP finds only a little closer (Malo's blind ratings, p6);
+# a much closer DX7 draw, an analog draw without a recorded instrument, or a margin of 0 leave CLAP's choice.
+def test_recorded_instrument_preferred_over_a_close_dx7_draw(engine):
+    recorded = codecs.analog_encode(P.physical_from_dict({"sample_instrument": 1, "sample_level": 0.9}))
+    synth = codecs.analog_encode(P.physical_from_dict({"osc_1_waveform": 2}))
+    emb = np.zeros(4)
+    assert engine.plays_recorded(recorded) and not engine.plays_recorded(synth)
+    assert engine._pick_engine({"analog": (0.75, recorded, emb), "dx7": (0.80, None, emb)}) == ("analog", True)
+    assert engine._pick_engine({"analog": (0.60, recorded, emb), "dx7": (0.80, None, emb)}) == ("dx7", False)
+    assert engine._pick_engine({"analog": (0.75, synth, emb), "dx7": (0.80, None, emb)}) == ("dx7", False)
+    assert engine._pick_engine({"analog": (0.85, synth, emb), "dx7": (0.80, None, emb)}) == ("analog", False)
+    quiet = codecs.analog_encode(P.physical_from_dict({"sample_instrument": 1, "sample_level": 0.2}))
+    assert not engine.plays_recorded(quiet)
+    margin = engine.settings.recorded_margin
+    try:
+        engine.settings.recorded_margin = 0.0
+        assert engine._pick_engine({"analog": (0.75, recorded, emb), "dx7": (0.80, None, emb)}) == ("dx7", False)
+    finally:
+        engine.settings.recorded_margin = margin
+    assert not engine.plays_recorded(recorded[:46])  # a charter 3.0 generator never plays one

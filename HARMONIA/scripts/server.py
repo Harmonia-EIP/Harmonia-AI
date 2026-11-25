@@ -292,6 +292,7 @@ def _build_v3_runtime(model_key: str = V3_MODEL_KEY) -> InferenceRuntime:
                 refine_rounds=max(1, _env_int("HARMONIA_V3_REFINE_ROUNDS", defaults.refine_rounds)),
                 population=max(2, _env_int("HARMONIA_V3_POPULATION", defaults.population)),
                 time_budget=_env_float("HARMONIA_V3_TIME_BUDGET", defaults.time_budget),
+                recorded_margin=_env_float("HARMONIA_V3_RECORDED_MARGIN", defaults.recorded_margin),
             ),
         )
     except Exception as exc:  # missing runtime dependency or corrupt files
