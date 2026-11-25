@@ -21,6 +21,12 @@ the "listen" pack (models/samples or $HARMONIA_SAMPLES_DIR), like the server hea
 files can be given (--recordings a.jsonl b.jsonl): a recording imitated twice keeps the last file's imitation.
 The timbre table the generator learnt is copied next to it (descriptors.json): it decodes only with that table.
 
+With --recording-cond all (#47), each imitation is also learnt with the aim the run time's text side (text
+encoder, then the prior) gives for each human text of its recording: the uploader's title, its class, the
+uploader's description (data/v4/descriptions.jsonl, English and French). The prior's aims are smoother than
+real sounds; a generator that only learnt real sounds follows them badly (scripts/samples/instrument_accuracy.py).
+--prior chooses the prior shipped with the generator (and used for these aims).
+
     python scripts/v3/train_generator_v3.py --only analog --base data/v4/generator --recording-cond both \
         --recordings data/v3/matched_fsd/fsd.jsonl data/samples/matched_fsd/fsd.jsonl --out data/samples/generator
 """
@@ -158,6 +164,30 @@ def recording_conditions(rows) -> np.ndarray:
     return np.repeat(emb[:, None, :], len(NOTES), axis=1)
 
 
+def text_conditions(rows, prior_path: Path, student_dir: Path, descriptions: Path | None, device):
+    """(owner row of each text, the prior's aim for it): every human text of every imitated recording."""
+    from src.v2.text_student import encode_texts, load_trained_student
+
+    described: dict = {}
+    if descriptions is not None and descriptions.exists():
+        for line in open(descriptions, encoding="utf-8"):
+            row = json.loads(line)
+            described.setdefault(row["fname"], []).extend(t for t in (row.get("en"), row.get("fr")) if t)
+    texts, owners = [], []
+    for k, row in enumerate(rows):
+        title = clean_title(row["title"])
+        own = ([title] if len(title.split()) >= 2 else []) + [label_phrase(row["labels"].split(",")[0])]
+        for text in dict.fromkeys(own + described.get(row["fname"], [])):
+            texts.append(text), owners.append(k)
+    student, tokenizer = load_trained_student(student_dir, device)
+    with torch.no_grad():
+        encoded = encode_texts(student, tokenizer, texts, device)
+        prior = Prior()
+        prior.load_state_dict(torch.load(prior_path, map_location="cpu", weights_only=True))
+        aims = prior.eval()(torch.from_numpy(encoded).float()).numpy()
+    return np.array(owners), aims.astype(np.float32)
+
+
 def train_diffusion(name: str, x: np.ndarray, conditions, steps: int, batch: int, device, seed: int,
                     weights: np.ndarray | None = None):
     torch.manual_seed(seed)
@@ -256,8 +286,14 @@ def main() -> int:
                         help="presets imitating real recordings (match_recordings.py), added to the analog presets")
     parser.add_argument("--min-cos", type=float, default=0.45, help="recordings: lowest CLAP similarity kept")
     parser.add_argument("--max-distance", type=float, default=30.0, help="recordings: highest perceptual distance kept")
-    parser.add_argument("--recording-cond", choices=("own", "recording", "both"), default="own",
-                        help="recordings: condition on the preset's own sound (v3.3), the recording's, or both (v4)")
+    parser.add_argument("--recording-cond", choices=("own", "recording", "both", "all"), default="own",
+                        help="recordings: condition on the preset's own sound (v3.3), the recording's, both (v4), "
+                             "or both and the prior's aim for the recording's texts (#47)")
+    parser.add_argument("--prior", type=Path, default=None, help="with --only: the prior to ship instead of --base's")
+    parser.add_argument("--text-student", type=Path, default=BASE_DIR / "data" / "v4" / "text_student",
+                        help="with --recording-cond all: the run time's text encoder")
+    parser.add_argument("--descriptions", type=Path, default=BASE_DIR / "data" / "v4" / "descriptions.jsonl",
+                        help="with --recording-cond all: uploaders' descriptions (scripts/v4/build_corpus_v4.py)")
     args = parser.parse_args()
 
     from src.v2.clap_audio import TEACHER_ID, TEACHER_REVISION, ClapEmbedder
@@ -297,10 +333,17 @@ def main() -> int:
     if args.recordings:
         x_rec, emb_rec, rows = load_recordings(args.recordings, args.min_cos, args.max_distance)
         recordings = len(rows)
-        if args.recording_cond in ("recording", "both"):
+        if args.recording_cond in ("recording", "both", "all"):
             heard = recording_conditions(rows)
+            x_one = x_rec
             x_rec, emb_rec = ((np.concatenate([x_rec, x_rec]), np.concatenate([emb_rec, heard]))
-                              if args.recording_cond == "both" else (x_rec, heard))
+                              if args.recording_cond != "recording" else (x_rec, heard))
+            if args.recording_cond == "all":
+                prior_path = args.prior or args.base / "prior.pt"
+                owners, aims = text_conditions(rows, prior_path, args.text_student, args.descriptions, device)
+                x_rec = np.concatenate([x_rec, x_one[owners]])
+                emb_rec = np.concatenate([emb_rec, np.repeat(aims[:, None, :], len(NOTES), axis=1)])
+                print(f"texts: {len(owners)} aims of the prior for the imitated recordings' texts", flush=True)
         x_analog = np.concatenate([x_analog, x_rec])
         cond_analog = np.concatenate([cond_analog, emb_rec])
         print(f"recordings: {recordings} imitations added to the analog presets", flush=True)
@@ -309,6 +352,8 @@ def main() -> int:
         for name in ("prior.pt", "dx7.pt"):
             if args.base.resolve() != out.resolve():
                 shutil.copy2(args.base / name, out / name)
+        if args.prior:
+            shutil.copy2(args.prior, out / "prior.pt")
         analog = train_diffusion("analog", x_analog, SoundConditions(cond_analog, device), args.analog_steps, 256,
                                  device, args.seed)
         torch.save(analog.model.state_dict(), out / "analog.pt")
@@ -318,6 +363,7 @@ def main() -> int:
                     analog_args={"steps": args.analog_steps, "seed": args.seed, "min_cos": args.min_cos,
                                  "max_distance": args.max_distance, "base": str(args.base),
                                  "recording_cond": args.recording_cond,
+                                 "prior": str(args.prior or args.base / "prior.pt"),
                                  "recordings": [str(r) for r in args.recordings or ()]})
         (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
         print(json.dumps(meta, indent=2))
