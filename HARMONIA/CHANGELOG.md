@@ -2,6 +2,73 @@
 
 All notable changes to the **Harmonia** project will be documented in this file.
 
+## [Unreleased] - Recorded instruments in the generated presets (branch `feature/sample-engine`, #43)
+The analog engine's sample source (charter 3.1, #42) plays real recordings (Salamander, VSCO 2, VCSL); these
+generators write presets that use it. Still a preset, never audio. Not released: blind listening first.
+
+### Added
+- **Instrument by its timbre** (#46): 16 coordinates per instrument from CLAP's hearing of it played alone
+  (`samples/descriptors.json`); the analog codec writes a switch and these coordinates (66 values), the preset
+  gets the nearest instrument. v3 / v4 generators (46 values) unchanged; locks and refine handle it.
+- **Imitations with the sample source** (`match_recordings.py --samples --classes instruments`): 831 FSD50K
+  recordings of instruments (CC0 / CC BY), 745 use a recorded instrument, 724 kept (87 %). On the 24
+  recordings v4 had also imitated: CLAP 0.63 -> 0.75, perceptual distance 20.2 -> 18.5.
+- **s1**: v4 + these imitations. **s2** (#47): the prior also learns the libraries' own instrument names
+  ("Solo Violin, Arco Vib"), and the generator also learns the prior's aim for each imitated recording's texts
+  (title, class, uploader's description; `--recording-cond all`). Right instrument family for 229 held-out
+  FSD50K titles of instruments (`scripts/samples/instrument_accuracy.py`): s1 45 %, s2 52 % (with the
+  recording's own sound as the aim: 75 %).
+- **Result, independent judge, 383 prompts** (v4 / s1 / s2): no significant regression; descriptions real
+  0.228 / 0.248 / 0.257 (s2 vs v4: CI above 0); 16 instrument classes real 0.408 / 0.469 / 0.494, text
+  0.155 / 0.225 / 0.202; 2.3 s per prompt for all three.
+- **Server**: `scripts/samples/fetch_pack.py --pack listen`; a model whose manifest says `samples` is not served
+  without the listen pack. `benchmark_v3.py` and `listening_prompts.py` play recorded instruments from the full
+  pack (`--play-samples`).
+
+- **Blind round p6** (Malo, 111 sounds): on his 18 prompts and 12 FSD50K instrument classes, v4 2.40, s1 3.13,
+  s2 3.27 out of 5 (s2 - v4 +0.87, 95 % CI +0.37 .. +1.40). Recorded instruments rated high (Soft Piano 1 -> 5);
+  prompts where the DX7 mode won the engine choice rated low (Piano 1, trumpet, harp, flute, brass).
+- **Recorded instrument first** (`Settings.recorded_margin`, `HARMONIA_V3_RECORDED_MARGIN`, default 0.10): the
+  analog draw wins over a DX7 draw when it plays a recorded instrument (level >= 0.5) and CLAP finds the DX7 draw
+  closer by at most the margin. Judge (s2r vs s2, 383 prompts): 16 prompts change engine, all text +0.003
+  (CI above 0), FSD classes real +0.007; vs v4: all text +0.013 (CI above 0). Mini blind round p6b on the 8
+  prompts of p6 that change.
+
+### Known limits
+- CLAP picks the analog draw and judges the engines; it hears the category, not realism.
+- Some words still aim wrong: "violin" draws harmonicas, "harp" pianos, "flute" brass.
+
+## [0.4.0] - Harmonia v4: better-chosen data, same run time (branch `research/ai-v4`)
+`harmonia_v4` keeps the charter v3, the engines and the run time of `harmonia_v3`: the plugin plays it
+unchanged and a request costs the same time. Only the weights change (#35, #37, #38). Details: [V4.md](V4.md).
+
+### Added
+- **Where v3.3 lost, measured first**: on held-out human descriptions its text target found the real sound
+  in the top 10 of 2,000 only 44 % of the time (CLAP's own text encoder: 53 %); with a perfect target, the
+  generation barely moved (judge, classes real 0.352 -> 0.370), so the generator was the main limit.
+- **Uploaders' descriptions as training text** (`src/v4/descriptions.py`, `scripts/v4/build_corpus_v4.py`):
+  13,465 CC0 / CC BY FSD50K development recordings keep the sentences of their description that are about
+  the sound (gear, software, links, licences, thanks, other languages and pack boilerplate dropped), word for
+  word, translated to French locally. Malo's benchmark prompts are never trained on.
+- **Text encoder and prior v4** (`scripts/v4/train_prior_v4.py`): held-out descriptions, top 10 44.4 ->
+  51.2 % (English), 65.0 -> 72.8 % (French), class names unchanged. The prior learns from CC0 / CC BY
+  recordings only (v3 also used CC BY-NC and Sampling+).
+- **Analog generator v4**: the 1,295 chosen FSD50K recordings all imitated, 879 kept (v3.3: 388), each
+  learnt from the preset's own sound and from the recording's (`train_generator_v3.py --recording-cond both`).
+- **Result, independent judge, 383 prompts**: all prompts text +0.013 (95 % CI +0.002 .. +0.024), FSD50K
+  classes real 0.353 -> 0.380, French descriptions real 0.204 -> 0.232, no significant regression; same
+  3.49 s per prompt on 2 threads. Blind listening round p5 (v3.3 vs v4) published for Malo.
+- **Server**: `harmonia_v4` (aliases `v4`, `model-5`, `5`, `HARMONIA_V4_MODEL_DIR`) next to `harmonia_v3`, one
+  shared CLAP listener in memory, warm-up of the newest installed model.
+- **Tools**: `scripts/v4/text_gap.py` (text side without playing anything), `benchmark_v3.py --sets
+  ...,desc,desc_fr` (everyday sentences, scored against the recording described), `scripts/v4/time_models.py`;
+  `export_model.py --text-student --descriptions` (`ATTRIBUTION_DESCRIPTIONS.json`: authors of the 6,914 CC BY
+  descriptions).
+
+### Not used
+- Clotho (captions mainly non-commercial, 15-30 s scenes), generated captions (human text only), unclear
+  SFX bundles; NSynth left for a separate trial validated by ear; the Freesound API for later.
+
 ## [0.3.3] - harmonia_v3 on the VPS (release `ai-v3.3.0`)
 `harmonia_v3` becomes one more model of the server, next to the v1 models (which stay the default): the
 plugin with the v3 engine selects it in its model menu.

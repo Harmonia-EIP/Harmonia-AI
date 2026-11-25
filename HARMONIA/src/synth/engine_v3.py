@@ -3,6 +3,8 @@
 One note per call, stereo out. Signal flow per voice:
   2 oscillators (sine/triangle/band-limited saw and pulse, coarse tuning, OB-X style cross-modulation of
   osc2's pitch by osc1, osc2 hard-synced to osc1, ring modulation, slight analog drift) x unison (1..16 detuned voices) spread in stereo + noise
+  crossfaded with the sample source (charter 3.1: a recorded instrument, src/samples/player.py, transposed
+  and bent by the pitch envelope and LFO like the oscillators)
   -> state-variable filter (12 or 24 dB, envelope/LFO/velocity/keyboard tracking) -> distortion
   -> amp ADSR (velocity, tremolo), all at twice the sample rate against aliasing (sync, cross-mod and
   distortion would otherwise fold back as grit); then chorus -> delay -> reverb (feedback delay network).
@@ -28,6 +30,8 @@ OVERSAMPLE = 2  # the voice runs at twice the sample rate, then a half-band filt
 OSC_SPLIT = 0.5  # at full width, osc1 sits this far left of its voice and osc2 this far right
 CHORUS_RATE, CHORUS_CENTER_MS, CHORUS_DEPTH_MS = 0.5, 3.5, 1.75
 DELAY_DAMP_HZ = 6000.0
+S_INSTRUMENT, S_LEVEL, S_TUNE, S_START = (P.INDEX[name] for name in P.SAMPLE_PARAMS)
+NO_SAMPLE = np.zeros((2, 0), dtype=np.float32)
 
 
 @numba.njit(cache=True)
@@ -128,7 +132,9 @@ def _lfo_value(wave, phase, held):
 
 
 @numba.njit(cache=True)
-def _render_voice(p, note, velocity, hold, total, sr, seed):
+def _render_voice(p, note, velocity, hold, total, sr, seed, smp, smp_step, smp_start):
+    """smp: (2, frames) recording of the sample source (empty: none); smp_step: frames advanced per output
+    sample at the note's pitch (rate and transposition included); smp_start: first frame played."""
     out = np.zeros((2, total))
     np.random.seed(seed)
 
@@ -150,7 +156,9 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
     lfo_wave, lfo_delay = int(p[36]), p[37] * 1e-3
     lfo_amp, lfo_pw = p[38], p[39]
     width = min(1.0, max(0.0, p[45]))
-
+    smp_len = smp.shape[1]
+    level = min(1.0, max(0.0, p[S_LEVEL])) if smp_len > 1 else 0.0
+    smp_pos = smp_start
     vel = min(1.0, max(0.0, velocity))
     q = 0.707 * 17.0 ** (min(0.95, max(0.0, resonance)) / 0.95)  # Harmonia-App#40 mapping
     r2 = 1.0 / q
@@ -223,7 +231,7 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
 
         left = 0.0
         right = 0.0
-        for u in range(n_uni):
+        for u in range(n_uni if level < 1.0 else 0):
             st = semis + uni_off[u]
             dt1 = base_freq * 2.0 ** ((coarse1 + st + drift[u, 0]) / 12.0) / sr
             o1 = _osc(w1, ph1[u], dt1, pw)
@@ -258,6 +266,17 @@ def _render_voice(p, note, velocity, hold, total, sr, seed):
             n = np.random.uniform(-1.0, 1.0)
             left = left * (1.0 - noise) + n * noise
             right = right * (1.0 - noise) + n * noise
+        if level > 0.0:
+            s_left = 0.0
+            s_right = 0.0
+            if smp_pos < smp_len - 1:
+                j = int(smp_pos)
+                frac = smp_pos - j
+                s_left = smp[0, j] * (1.0 - frac) + smp[0, j + 1] * frac
+                s_right = smp[1, j] * (1.0 - frac) + smp[1, j + 1] * frac
+                smp_pos += smp_step * 2.0 ** (semis / 12.0)
+            left = left * (1.0 - level) + s_left * level
+            right = right * (1.0 - level) + s_right * level
 
         f_state, f_val = _adsr_step(f_state, f_val, fa_rate, fd_coef, fenv_sustain, f_rel)
         octaves = fenv_amount * f_val + lfo * lfo_cutoff_oct + key_oct
@@ -429,10 +448,14 @@ def _reverb_fdn(stereo, wet, size, sr):
 
 
 @numba.njit(cache=True)
-def _render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed, decimator):
+def _render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed, decimator, smp, smp_rate, smp_key,
+                     smp_gain):
     total = int(total_seconds * sr)
     fast = sr * OVERSAMPLE
-    voice = _render_voice(p, note, velocity, int(hold_seconds * fast), total * OVERSAMPLE, fast, seed)
+    step = smp_rate / fast * 2.0 ** ((note - smp_key + p[S_TUNE]) / 12.0)
+    start = p[S_START] * 1e-3 * smp_rate
+    voice = _render_voice(p, note, velocity, int(hold_seconds * fast), total * OVERSAMPLE, fast, seed,
+                          smp * smp_gain, step, start)
     stereo = _decimate(voice, decimator)
     if p[40] > 0.0:
         stereo = _chorus(stereo, p[40], sr)
@@ -441,35 +464,80 @@ def _render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed, d
     return _reverb_fdn(stereo, p[19], p[44], sr)
 
 
-def render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed):
-    """One note from a physical v3 vector (v3_params order); returns a (2, samples) float64 array."""
-    return _render_physical(np.asarray(p, dtype=np.float64), note, velocity, hold_seconds, total_seconds, sr,
-                            seed, DECIMATOR)
+def sample_for(p, note, velocity, seed, bank=None):
+    """(recording (2, frames) float32, its rate, root key, gain) played by the sample source for this note, or
+    an empty recording when the preset plays no sample or the instrument's pack is not installed."""
+    choice = int(round(p[S_INSTRUMENT]))
+    if p[S_LEVEL] <= 0.0 or choice <= 0:
+        return NO_SAMPLE, 1.0, 60.0, 0.0
+    if bank is None:
+        from src.samples.player import default_bank
+
+        bank = default_bank()
+    region = None if bank is None else bank.region(choice, int(note), int(round(velocity * 127)), seed)
+    if region is None:
+        return NO_SAMPLE, 1.0, 60.0, 0.0
+    audio, rate = bank.audio(region)
+    stereo = audio if audio.shape[0] == 2 else np.repeat(audio[:1], 2, axis=0)
+    gain = bank.gain(choice) * 10.0 ** (region.get("volume_db", 0.0) / 20.0)
+    key = region["key"] - region.get("tune_cents", 0.0) / 100.0
+    return np.ascontiguousarray(stereo, dtype=np.float32), float(rate), float(key), float(gain)
+
+
+def render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed, bank=None):
+    """One note from a physical v3 vector (v3_params order; a charter 3.0 vector of 46 values is completed);
+    returns a (2, samples) float64 array."""
+    p = P.complete(p)
+    smp, rate, key, gain = sample_for(p, note, velocity, seed, bank)
+    return _render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed, DECIMATOR, smp, rate, key,
+                            gain)
 
 
 def render(physical, note: int = 60, velocity: float = 100 / 127, hold_seconds: float = 1.5,
-           total_seconds: float = 4.0, sr: int = SAMPLE_RATE, seed: int = 0x4321) -> np.ndarray:
+           total_seconds: float = 4.0, sr: int = SAMPLE_RATE, seed: int = 0x4321, bank=None) -> np.ndarray:
     """(2, samples) float32 audio of one note for a physical v3 vector."""
     p = np.asarray(physical, dtype=np.float64)
-    if p.shape != (P.N_PARAMS,):
-        raise ValueError(f"expected {P.N_PARAMS} physical values, got {p.shape}")
-    return render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed).astype(np.float32)
+    if p.ndim != 1 or not P.CORE_PARAMS <= p.shape[0] <= P.N_PARAMS:
+        raise ValueError(f"expected {P.CORE_PARAMS} to {P.N_PARAMS} physical values, got {p.shape}")
+    return render_physical(p, note, velocity, hold_seconds, total_seconds, sr, seed, bank).astype(np.float32)
 
 
-def render_batch(params, notes, velocity, hold_seconds, total_seconds, sr, seed):
-    """Mono float32 (n_presets, n_notes, samples) for many physical vectors."""
-    return _render_batch(np.asarray(params, dtype=np.float64), np.asarray(notes), velocity, hold_seconds,
-                         total_seconds, sr, seed, DECIMATOR)
+def render_batch(params, notes, velocity, hold_seconds, total_seconds, sr, seed, bank=None):
+    """Mono float32 (n_presets, n_notes, samples) for many physical vectors. The recordings of the presets that
+    play a sample are gathered first (each cut to what the note can reach), then everything renders in
+    parallel."""
+    params = P.complete(np.asarray(params, dtype=np.float64))
+    notes = np.asarray(notes)
+    n, m = params.shape[0], notes.shape[0]
+    picks = [sample_for(params[k // m], notes[k % m], velocity, seed + k, bank) for k in range(n * m)]
+    need = [0] * (n * m)
+    for k, (smp, rate, key, _) in enumerate(picks):
+        if smp.shape[1]:
+            p = params[k // m]
+            reach = rate * (total_seconds * 2.0 ** ((notes[k % m] - key + p[S_TUNE] + 24.0) / 12.0) + p[S_START] * 1e-3)
+            need[k] = min(smp.shape[1], int(reach) + 2)
+    width = max([1] + need)
+    smps = np.zeros((n * m, 2, width), dtype=np.float32)
+    lens = np.zeros(n * m, dtype=np.int64)
+    rates, keys, gains = np.ones(n * m), np.full(n * m, 60.0), np.zeros(n * m)
+    for k, (smp, rate, key, gain) in enumerate(picks):
+        if need[k]:
+            smps[k, :, :need[k]] = smp[:, :need[k]]
+            lens[k], rates[k], keys[k], gains[k] = need[k], rate, key, gain
+    return _render_batch(params, notes, velocity, hold_seconds, total_seconds, sr, seed, DECIMATOR, smps, lens,
+                         rates, keys, gains)
 
 
 @numba.njit(cache=True, parallel=True)
-def _render_batch(params, notes, velocity, hold_seconds, total_seconds, sr, seed, decimator):
+def _render_batch(params, notes, velocity, hold_seconds, total_seconds, sr, seed, decimator, smps, lens, rates,
+                  keys, gains):
     n, m = params.shape[0], notes.shape[0]
     total = int(total_seconds * sr)
     out = np.zeros((n, m, total), dtype=np.float32)
     for k in numba.prange(n * m):
         i, j = k // m, k % m
-        stereo = _render_physical(params[i], notes[j], velocity, hold_seconds, total_seconds, sr, seed + k, decimator)
+        stereo = _render_physical(params[i], notes[j], velocity, hold_seconds, total_seconds, sr, seed + k, decimator,
+                                  smps[k, :, :lens[k]], rates[k], keys[k], gains[k])
         for t in range(total):
             out[i, j, t] = 0.5 * (stereo[0, t] + stereo[1, t])
     return out

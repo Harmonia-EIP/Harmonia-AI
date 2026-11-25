@@ -1,0 +1,110 @@
+"""Sample packs (scripts/samples/build_packs.py): the listening copy and the archives."""
+
+import tarfile
+
+import numpy as np
+import pytest
+
+sf = pytest.importorskip("soundfile")
+pytest.importorskip("soxr")
+
+from scripts.samples import build_packs as B  # noqa: E402
+
+
+def region(key, lovel, hivel, rr=1, trigger="attack"):
+    return {"file": f"x_{key}_{lovel}_{rr}.wav", "key": key, "lokey": 0, "hikey": 127, "lovel": lovel, "hivel": hivel,
+            "round_robin": rr, "trigger": trigger, "sample_rate": 44100, "channels": 2, "frames": 44100}
+
+
+# The server's copy keeps one take per recorded note: the middle layer, first round robin, any velocity.
+def test_listen_regions():
+    instrument = {"regions": [region(60, 1, 42), region(60, 43, 85), region(60, 43, 85, rr=2), region(60, 86, 127),
+                              region(64, 1, 63), region(64, 64, 127), region(60, 1, 127, trigger="release")]}
+    chosen = B.listen_regions(instrument)
+    assert [(r["key"], r["file"]) for r in chosen] == [(60, "x_60_43_1.wav"), (64, "x_64_64_1.wav")]
+    assert all((r["lovel"], r["hivel"], r["round_robin"]) == (1, 127, 1) for r in chosen)
+
+
+# Full copies keep rate, channels and frames; listening copies are mono, shorter, at LISTEN_RATE.
+def test_conversions(tmp_path):
+    source = tmp_path / "a.wav"
+    stereo = np.random.default_rng(0).uniform(-0.5, 0.5, (44100 * 6, 2)).astype(np.float32)
+    sf.write(source, stereo, 44100, subtype="PCM_24")
+    full, listen = tmp_path / "full" / "a.flac", tmp_path / "listen" / "a.flac"
+    B._convert((str(source), str(full), False))
+    B._convert((str(source), str(listen), True))
+    a, rate = sf.read(full, always_2d=True)
+    assert (rate, a.shape, sf.info(str(full)).subtype) == (44100, (44100 * 6, 2), "PCM_24")
+    np.testing.assert_allclose(a, sf.read(source, always_2d=True)[0], atol=1e-6)  # lossless
+    b, rate = sf.read(listen, always_2d=True)
+    assert rate == B.LISTEN_RATE and b.shape == (int(B.LISTEN_SECONDS * B.LISTEN_RATE), 1)
+    assert abs(b[-1, 0]) < 1e-3  # faded out
+
+
+def test_archives_are_split(tmp_path):
+    folder = tmp_path / "packs"
+    (folder / "lib").mkdir(parents=True)
+    for i in range(5):
+        (folder / "lib" / f"{i}.flac").write_bytes(bytes(1000))
+    meta = tmp_path / "catalog.json"
+    meta.write_text("{}", encoding="utf-8")
+    old = B.MAX_ARCHIVE
+    B.MAX_ARCHIVE = 2500
+    try:
+        written = B.archives("full-lib", "samples-0", folder, [f"lib/{i}.flac" for i in range(5)], tmp_path,
+                             {"catalog.json": meta})
+    finally:
+        B.MAX_ARCHIVE = old
+    assert [w["files"] for w in written] == [2, 2, 1]
+    assert written[0]["asset"] == "harmonia-samples-full-lib-samples-0-part1.tar"
+    with tarfile.open(tmp_path / written[2]["asset"]) as tar:
+        assert tar.getnames() == ["catalog.json", "lib/4.flac"]
+
+
+# Loudness: the middle layer is brought to TARGET_RMS unless the loudest take would pass PEAK_LIMIT or the gain
+# GAIN_LIMIT (a very quiet recording would bring its hiss up).
+def test_gains(tmp_path):
+    rate = 8000
+    t = np.arange(rate * 2) / rate
+
+    def write(name, level):
+        sf.write(tmp_path / "lib" / name, (level * np.sin(2 * np.pi * 220 * t)).astype(np.float32), rate)
+
+    (tmp_path / "lib").mkdir()
+    write("soft.flac", 0.1)
+    write("loud.flac", 0.9)
+    write("tiny.flac", 0.001)
+    quiet = {"id": "a", "library": "lib", "regions": [region(60, 1, 63) | {"file": "soft.wav"},
+                                                      region(60, 64, 127) | {"file": "loud.wav"}]}
+    hiss = {"id": "b", "library": "lib", "regions": [region(60, 1, 127) | {"file": "tiny.wav"}]}
+    gains = B.gains([quiet, hiss], tmp_path, workers=1)
+    # middle layer of note 60 = the loud take (RMS 0.64): 0.4 / 0.64, under PEAK_LIMIT / 0.9
+    assert gains["a"] == pytest.approx(B.TARGET_RMS / (0.9 / np.sqrt(2)), rel=0.02)
+    assert gains["b"] == B.GAIN_LIMIT
+
+
+# A pack installs from the release: checked, unpacked, and skipped once installed.
+def test_fetch_pack_installs_once(tmp_path):
+    import hashlib
+    import json
+
+    from scripts.samples import fetch_pack
+
+    source = tmp_path / "src"
+    (source / "lib").mkdir(parents=True)
+    (source / "catalog.json").write_text(json.dumps({"version": 1, "instruments": []}))
+    (source / "lib" / "a.flac").write_bytes(b"flac")
+    archive = tmp_path / "release" / "pack.tar"
+    archive.parent.mkdir()
+    with tarfile.open(archive, "w") as tar:
+        tar.add(source / "catalog.json", arcname="catalog.json")
+        tar.add(source / "lib" / "a.flac", arcname="lib/a.flac")
+    release = {"tag": "samples-test", "packs": {"listen": [
+        {"asset": "pack.tar", "sha256": hashlib.sha256(archive.read_bytes()).hexdigest()}]}}
+    out = tmp_path / "out"
+    assert fetch_pack.install("listen", out, archive.parent.as_uri(), release) == 1
+    assert (out / "catalog.json").exists() and (out / "lib" / "a.flac").read_bytes() == b"flac"
+    assert fetch_pack.install("listen", out, archive.parent.as_uri(), release) == 0
+    release["packs"]["listen"][0]["sha256"] = "0" * 64
+    with pytest.raises(SystemExit):
+        fetch_pack.install("listen", tmp_path / "other", archive.parent.as_uri(), release)

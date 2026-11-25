@@ -1,4 +1,4 @@
-"""Harmonia v3 analog engine: the 46 parameters, their physical ranges and the 0..1 mapping.
+"""Harmonia v3 analog engine: the parameters, their physical ranges and the 0..1 mapping.
 
 The parameters come from the charter (charter/harmonia_v3.json via src/charter_v3.py), the single source shared
 with the plugin; this module keeps the array-oriented API the engine and the AI use. The first 20 keep their v2
@@ -6,6 +6,10 @@ names. New parameters were chosen from what real presets use (scripts/v3/analyze
 Surge XT banks). Every new parameter has a neutral default, so a v2 preset (see from_v2_physical) keeps its
 sound apart from engine quality fixes: band-limited oscillators and exponential decay/release (v2 ramps
 linearly, like juce::ADSR).
+
+Charter 3.1 appends the sample source (sample_instrument, sample_level, sample_tune, sample_start) after the
+46 parameters of charter 3.0 (CORE_PARAMS). Their defaults play no sample, so a 46-value vector (a v3.0
+preset, or what the v3 / v4 generators produce) completes to the same sound (`complete`).
 """
 
 from __future__ import annotations
@@ -47,6 +51,8 @@ INDEX: Dict[str, int] = {name: i for i, name in enumerate(NAMES)}
 BY_NAME: Dict[str, V3Param] = {spec.name: spec for spec in SPECS}
 DEFAULTS = np.array([spec.default for spec in SPECS], dtype=np.float64)
 N_PARAMS = len(SPECS)
+SAMPLE_PARAMS = tuple(p.id for p in charter_v3.load().engine_params("analog") if p.module == "sample")
+CORE_PARAMS = N_PARAMS - len(SAMPLE_PARAMS)  # the 46 parameters of charter 3.0, first in every vector
 
 
 _CHARTER = {p.id: p for p in charter_v3.load().engine_params("analog")}
@@ -84,3 +90,14 @@ def from_v2_physical(v2: Sequence[float]) -> np.ndarray:
     """A v2 preset (20 physical values, src/synth/params.py order) in the v3 engine (the charter's v2 rules)."""
     values = charter_v3.upgrade_v2(dict(zip(NAMES[:20], list(v2))))
     return physical_from_dict(values)
+
+
+def complete(physical: Sequence[float]) -> np.ndarray:
+    """A physical vector with every parameter: missing trailing ones (a charter 3.0 vector) take their default."""
+    p = np.asarray(physical, dtype=np.float64)
+    if p.shape[-1] > N_PARAMS:
+        raise ValueError(f"expected at most {N_PARAMS} physical values, got {p.shape[-1]}")
+    if p.shape[-1] == N_PARAMS:
+        return p
+    pad = np.broadcast_to(DEFAULTS[p.shape[-1]:], p.shape[:-1] + (N_PARAMS - p.shape[-1],))
+    return np.concatenate([p, pad], axis=-1)

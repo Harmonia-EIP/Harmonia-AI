@@ -4,14 +4,22 @@
 Prompts:
 - Malo's (benchmarks/v3_prompts_p1.json and v3_prompts_p2.json, never used for training);
 - the class names of FSD50K's eval split, as their annotators wrote them ("Slam", "Walk and footsteps"...),
-  human voice classes left out: each has real recordings to compare the generated sound with.
+  human voice classes left out: each has real recordings to compare the generated sound with;
+- with --sets ...,desc,desc_fr (v4, #35): sentences in everyday language, the uploaders' own descriptions of
+  100 eval recordings (scripts/v4/text_gap.py cleans and picks them), in English and in French; the judge
+  compares the sound with the description and with the recording it describes.
 
 One system per run (a name and its settings); scripts/v3/benchmark_judge_v3.py then scores the folders with
 an independent judge.
 
+Presets that play a recorded instrument (#43) are generated with the "listen" pack, like on the server, and
+written with --play-samples: the full pack the plugin plays (default: the listen pack too).
+
     python scripts/v3/benchmark_v3.py --name v3.0 --polish-rounds 0
     python scripts/v3/benchmark_v3.py --name polish2 --polish-rounds 2
     python scripts/v3/benchmark_v3.py --name polish2+refine3 --refine-from polish2 --clicks 3   # Refine, same prompt
+    python scripts/v3/benchmark_v3.py --name s1 --model-dir data/samples/models/s1 --sets malo,fsd,desc,desc_fr \
+        --play-samples ~/Datasets/harmonia-samples/packs/full --play-catalog ~/Datasets/harmonia-samples/packs/catalog-full.json
 """
 
 from __future__ import annotations
@@ -38,19 +46,42 @@ OUT_DIR = BASE_DIR / "data" / "v3" / "bench"
 NOTE, HOLD_SECONDS, TOTAL_SECONDS, SR = 57, 1.5, 4.0, 48000  # A3: not one of the notes the run time listens to
 
 
-def prompts(fsd50k: Path, limit_classes: int = 0):
+DESCRIPTIONS = 100
+PLAY_BANK = None  # the sample pack the written sounds play (main: --play-samples); None: the installed one
+
+
+def description_prompts(fsd50k: Path):
+    """The first DESCRIPTIONS held-out descriptions of scripts/v4/text_gap.py, English then French."""
+    from scripts.v4.text_gap import eval_set, french
+
+    texts, _, _, _, fnames = eval_set(fsd50k, with_fnames=True)
+    texts, fnames = texts[:DESCRIPTIONS], fnames[:DESCRIPTIONS]
+    rows = [{"set": "desc", "prompt": t, "judge": t, "fsd_fname": f} for t, f in zip(texts, fnames)]
+    rows += [{"set": "desc_fr", "prompt": fr, "judge": t, "fsd_fname": f}
+             for t, fr, f in zip(texts, french(texts), fnames)]
+    return rows
+
+
+def prompts(fsd50k: Path, limit_classes: int = 0, sets=("malo", "fsd"), extra: Path | None = None,
+            fsd_classes: tuple = ()):
     rows = [{"set": "malo", "prompt": p, "judge": p} for p in
             json.loads((BASE_DIR / "benchmarks" / "v3_prompts_p1.json").read_text(encoding="utf-8"))]
     rows += [{"set": "malo", **p} for p in
              json.loads((BASE_DIR / "benchmarks" / "v3_prompts_p2.json").read_text(encoding="utf-8"))]
     with open(fsd50k / "FSD50K.ground_truth" / "eval.csv", newline="", encoding="utf-8") as f:
         classes = sorted({r["labels"].split(",")[0] for r in csv.DictReader(f)} - VOICE)
+    if fsd_classes:
+        classes = [c for c in classes if c in fsd_classes]
     if limit_classes:
         classes = classes[::max(1, len(classes) // limit_classes)][:limit_classes]
     for name in classes:
         text = name.replace("_", " ").lower()
         rows.append({"set": "fsd", "prompt": text, "judge": text, "fsd_class": name})
-    return rows
+    if "desc" in sets or "desc_fr" in sets:
+        rows += description_prompts(fsd50k)
+    if extra is not None:  # a listening round's own prompts (never trained on)
+        rows += [{"set": "extra", "prompt": p, "judge": p} for p in json.loads(extra.read_text(encoding="utf-8"))]
+    return [row for row in rows if row["set"] in sets]
 
 
 def play(preset: dict) -> np.ndarray:
@@ -63,7 +94,8 @@ def play(preset: dict) -> np.ndarray:
                                  total_seconds=TOTAL_SECONDS, sample_rate=SR)
     from src.synth.engine_v3 import render
 
-    return render(P.physical_from_dict(values), NOTE, 100 / 127, HOLD_SECONDS, TOTAL_SECONDS, SR).mean(axis=0)
+    return render(P.physical_from_dict(values), NOTE, 100 / 127, HOLD_SECONDS, TOTAL_SECONDS, SR,
+                  bank=PLAY_BANK).mean(axis=0)
 
 
 def main() -> int:
@@ -79,8 +111,20 @@ def main() -> int:
     parser.add_argument("--refine-from", default=None,
                         help="instead of generating: refine each preset of that system with its own prompt")
     parser.add_argument("--clicks", type=int, default=3, help="with --refine-from: refine requests in a row")
-    parser.add_argument("--only-set", choices=("malo", "fsd"), default=None, help="one set of prompts only")
+    parser.add_argument("--only-set", choices=("malo", "fsd", "desc", "desc_fr"), default=None,
+                        help="one set of prompts only")
+    parser.add_argument("--sets", default="malo,fsd", help="prompt sets, comma-separated (malo,fsd,desc,desc_fr,extra)")
+    parser.add_argument("--extra", type=Path, default=None, help="set 'extra': a JSON list of prompts")
+    parser.add_argument("--fsd-classes", default="", help="set 'fsd': only these classes (comma-separated)")
+    parser.add_argument("--play-samples", type=Path, default=None, help="sample pack folder the written sounds play")
+    parser.add_argument("--play-catalog", type=Path, default=None, help="its catalogue, if not catalog.json in it")
     args = parser.parse_args()
+
+    if args.play_samples:
+        from src.samples.player import SampleBank
+
+        global PLAY_BANK
+        PLAY_BANK = SampleBank(args.play_samples, args.play_catalog)
 
     from src.v3.inference import HarmoniaV3, Settings
 
@@ -89,7 +133,8 @@ def main() -> int:
     out = args.out / args.name
     out.mkdir(parents=True, exist_ok=True)
     rows, t0 = [], time.time()
-    todo = prompts(args.fsd50k, args.classes)
+    todo = prompts(args.fsd50k, args.classes, tuple(args.sets.split(",")), args.extra,
+                   tuple(c for c in args.fsd_classes.split(",") if c))
     if args.refine_from:
         todo = json.loads((args.out / args.refine_from / "generations.json").read_text(encoding="utf-8"))
     if args.only_set:
@@ -101,7 +146,7 @@ def main() -> int:
             for _ in range(args.clicks):
                 result = model.refine(row["prompt"], parameters)
                 parameters = result.preset["parameters"]
-            row = {k: row[k] for k in ("set", "prompt", "judge", "fsd_class") if k in row}
+            row = {k: row[k] for k in ("set", "prompt", "judge", "fsd_class", "fsd_fname") if k in row}
         else:
             result = model.generate(row["prompt"])
         audio = np.nan_to_num(play(result.preset)).astype(np.float32)

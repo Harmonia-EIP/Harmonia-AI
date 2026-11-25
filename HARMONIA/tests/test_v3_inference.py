@@ -135,7 +135,14 @@ def test_dx7_lock_mask_matches_the_codec():
 
 def test_masks_cover_the_right_analog_parameters():
     assert [P.NAMES[i] for i in np.nonzero(lock_mask("analog", ["reverb_mix", "dx7_feedback", "nope"]))[0]] == ["reverb_mix"]
-    assert {P.NAMES[i] for i in np.nonzero(structure_mask("analog"))[0]} == {"osc_1_coarse", "osc_2_coarse", "unison_voices"}
+    assert {P.NAMES[i] for i in np.nonzero(structure_mask("analog"))[0]} == {
+        "osc_1_coarse", "osc_2_coarse", "unison_voices", "sample_instrument", "sample_tune"}
+    # on a codec vector, the instrument's timbre coordinates follow the instrument
+    timbre = np.arange(codecs.ANALOG_DIM) >= P.N_PARAMS
+    assert lock_mask("analog", ["sample_instrument"], codecs.ANALOG_DIM)[timbre].all()
+    assert not lock_mask("analog", ["sample_level"], codecs.ANALOG_DIM)[timbre].any()
+    assert structure_mask("analog", codecs.ANALOG_DIM)[timbre].all()
+    assert len(structure_mask("analog", codecs.ANALOG_DIM_V3)) == 46
 
 
 # Kept values of a variation come out exactly as they went in; the others are drawn again.
@@ -265,3 +272,105 @@ def test_no_time_budget_means_no_limit(tmp_path):
     engine = build_engine(tmp_path / "m", candidates=3, polish_rounds=1, population=4)
     engine.cost = 1000.0
     assert engine.generate("door slam").info["heard"] >= 3 * len(engine.engines)
+
+
+# A generator of charter 3.0 (46 analog values, like the deployed v3 and v4) keeps working with charter 3.1:
+# it makes presets without the sample source, and a refine keeps (and plays) the sample of the preset it starts from.
+def test_charter_30_generator_with_charter_31(tmp_path):
+    from src.v3 import codecs
+
+    engine = build_engine(tmp_path / "m", analog_dim=codecs.ANALOG_DIM_V3)
+    assert engine.dims["analog"] == 46
+    result = engine.generate("soft pad")
+    assert charter_v3.validate_preset(result.preset) == []
+    params = result.preset["parameters"]
+    if result.engine == "analog":
+        assert params["sample_level"] == 0.0 and params["sample_instrument"] == 0.0
+    spec = {p.id: p for p in charter_v3.load().params}
+    current = {p.id: p.to_normalized(p.default) for p in charter_v3.load().params}
+    current.update(engine=0.0, sample_instrument=spec["sample_instrument"].to_normalized(3),
+                   sample_level=spec["sample_level"].to_normalized(0.7), sample_tune=spec["sample_tune"].to_normalized(5))
+    heard = []
+    original = engine._physical
+
+    def spy(vector):
+        physical = original(vector)
+        heard.append(physical[P.INDEX["sample_level"]])
+        return physical
+
+    engine._physical = spy
+    refined = engine.refine("plus brillant", current).preset["parameters"]
+    for name in ("sample_instrument", "sample_level", "sample_tune"):
+        assert refined[name] == pytest.approx(current[name], abs=1e-6), name
+    assert heard and all(level == pytest.approx(0.7) for level in heard)  # the sample was played while searching
+    assert engine._context is None
+
+
+def sample_current(choice: int = 3, level: float = 0.7, tune: int = 5) -> dict:
+    spec = {p.id: p for p in charter_v3.load().params}
+    return full_preset({"engine": 0.0, "sample_instrument": spec["sample_instrument"].to_normalized(choice),
+                        "sample_level": spec["sample_level"].to_normalized(level),
+                        "sample_tune": spec["sample_tune"].to_normalized(tune)})
+
+
+# A generator with the sample source: a light refine keeps the recorded instrument (structure), a locked one
+# comes back exactly as sent, and what it plays while searching is that instrument.
+def test_refine_keeps_the_recorded_instrument(engine):
+    current = sample_current()
+    for locked in ((), ("sample_instrument", "sample_level")):
+        refined = engine.refine("plus brillant", current, locked=list(locked), strength=0.3).preset["parameters"]
+        assert refined["sample_instrument"] == pytest.approx(current["sample_instrument"], abs=1e-9)
+        assert refined["sample_tune"] == pytest.approx(current["sample_tune"], abs=1e-9)
+    assert engine._context is None
+
+
+# An instrument the model's timbre table does not describe (added to the charter after the model was trained)
+# cannot be written by coordinates: a refine keeps it, and plays it while searching.
+def test_refine_holds_an_instrument_the_model_does_not_know(tmp_path):
+    import json
+
+    from src.samples import descriptors
+
+    model = tmp_path / "m"
+    engine = build_engine(model)
+    raw = json.loads(descriptors.PATH.read_text(encoding="utf-8"))
+    unknown = charter_v3.load().raw["sample_instruments"]["ids"][2]  # choice 3
+    del raw["instruments"][unknown]
+    (model / "generator" / "descriptors.json").write_text(json.dumps(raw), encoding="utf-8")
+    engine = HarmoniaV3(model, settings=engine.settings, listener=engine.listener, text_encoder=engine.text_encoder)
+    assert np.isnan(engine.timbres.table[3, 0])
+    heard = []
+    original = engine._physical
+
+    def spy(vector):
+        physical = original(vector)
+        heard.append(int(physical[P.INDEX["sample_instrument"]]))
+        return physical
+
+    engine._physical = spy
+    current = sample_current(choice=3)
+    refined = engine.refine("soft pad", current, strength=1.0).preset["parameters"]
+    assert refined["sample_instrument"] == pytest.approx(current["sample_instrument"], abs=1e-9)
+    assert heard and set(heard) == {3}
+
+
+# A recorded instrument wins over a DX7 draw that CLAP finds only a little closer (Malo's blind ratings, p6);
+# a much closer DX7 draw, an analog draw without a recorded instrument, or a margin of 0 leave CLAP's choice.
+def test_recorded_instrument_preferred_over_a_close_dx7_draw(engine):
+    recorded = codecs.analog_encode(P.physical_from_dict({"sample_instrument": 1, "sample_level": 0.9}))
+    synth = codecs.analog_encode(P.physical_from_dict({"osc_1_waveform": 2}))
+    emb = np.zeros(4)
+    assert engine.plays_recorded(recorded) and not engine.plays_recorded(synth)
+    assert engine._pick_engine({"analog": (0.75, recorded, emb), "dx7": (0.80, None, emb)}) == ("analog", True)
+    assert engine._pick_engine({"analog": (0.60, recorded, emb), "dx7": (0.80, None, emb)}) == ("dx7", False)
+    assert engine._pick_engine({"analog": (0.75, synth, emb), "dx7": (0.80, None, emb)}) == ("dx7", False)
+    assert engine._pick_engine({"analog": (0.85, synth, emb), "dx7": (0.80, None, emb)}) == ("analog", False)
+    quiet = codecs.analog_encode(P.physical_from_dict({"sample_instrument": 1, "sample_level": 0.2}))
+    assert not engine.plays_recorded(quiet)
+    margin = engine.settings.recorded_margin
+    try:
+        engine.settings.recorded_margin = 0.0
+        assert engine._pick_engine({"analog": (0.75, recorded, emb), "dx7": (0.80, None, emb)}) == ("dx7", False)
+    finally:
+        engine.settings.recorded_margin = margin
+    assert not engine.plays_recorded(recorded[:46])  # a charter 3.0 generator never plays one

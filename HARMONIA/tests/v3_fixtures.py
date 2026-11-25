@@ -20,11 +20,12 @@ from src.v3.prior import Prior
 DIM = 512
 
 
-def build_model_dir(path):
+def build_model_dir(path, analog_dim: int = codecs.ANALOG_DIM):
+    """analog_dim: codecs.ANALOG_DIM_V3 (46) builds a generator like the v3 / v4 ones, without the sample source."""
     torch.manual_seed(0)
     (path / "generator").mkdir(parents=True)
     torch.save(Prior().state_dict(), path / "generator" / "prior.pt")
-    for engine, dim in (("analog", codecs.ANALOG_DIM), ("dx7", codecs.DX7_DIM)):
+    for engine, dim in (("analog", analog_dim), ("dx7", codecs.DX7_DIM)):
         torch.save(Diffusion.create(dim, width=32, depth=1).model.state_dict(), path / "generator" / f"{engine}.pt")
     (path / "manifest.json").write_text(json.dumps({"model_version": "harmonia_v3", "files": {}}), encoding="utf-8")
     return path
@@ -55,10 +56,10 @@ class Listener:
         return np.stack(out).astype(np.float32) if out else np.zeros((0, DIM), dtype=np.float32)
 
 
-def build_engine(path, **settings) -> HarmoniaV3:
+def build_engine(path, analog_dim: int = codecs.ANALOG_DIM, **settings) -> HarmoniaV3:
     defaults = dict(candidates=3, polish_rounds=1, refine_rounds=2, population=4)
     defaults.update(settings)
-    return HarmoniaV3(build_model_dir(path), settings=Settings(**defaults), listener=Listener(),
+    return HarmoniaV3(build_model_dir(path, analog_dim), settings=Settings(**defaults), listener=Listener(),
                       text_encoder=text_encoder)
 
 

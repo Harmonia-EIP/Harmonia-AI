@@ -10,6 +10,8 @@ The page only carries opaque ids; which sound is which stays in <out>/key_<round
     python scripts/v3/generate_v31.py --prompts prompts.json --out data/v3/generations_v31
     python scripts/v3/listening_prompts.py --generations data/v3/generations_v31 --round p2
     python scripts/v3/listening_prompts.py --bench v3.0 v3.3 v3.3+refine3 --round p4   # systems of benchmark_v3.py
+
+Recorded instruments (#43) play from --play-samples, the full pack the plugin plays (default: the installed one).
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ BENCH = BASE_DIR / "data" / "v3" / "bench"
 BENCH_NOTE = ("Écoute à l'aveugle : pour chaque description, {count} sons joués sur trois notes (do2, do3, do4), créés par "
               "des versions différentes de l'IA, dans un ordre caché. Note chacun de 1 à 5 selon qu'il correspond à la "
               "description.")
+PLAY_BANK = None  # main: --play-samples
 WHAT = {2: "l'un créé par l'IA (génération), l'autre un vrai preset choisi dans la banque (sélection)",
         "v32": "de vrais presets choisis par l'IA et une légère variation créée par l'IA",
         3: "un créé par l'IA de zéro (génération), un créé par l'IA à partir de vrais presets (variation) et un vrai "
@@ -55,13 +58,15 @@ def notes_audio(kind: str, preset) -> list:
         return [dx7_render.render(preset, note=n, velocity=M.VELOCITY, hold_seconds=M.HOLD_SECONDS,
                                   total_seconds=M.TOTAL_SECONDS) for n in M.NOTES]
     return [render_physical(np.asarray(preset, dtype=np.float64), n, M.VELOCITY / 127, M.HOLD_SECONDS,
-                            M.TOTAL_SECONDS, M.SR, 7) for n in M.NOTES]
+                            M.TOTAL_SECONDS, M.SR, 7, PLAY_BANK) for n in M.NOTES]
 
 
 def bench_page(args) -> int:
-    """One sound per benchmark system (scripts/v3/benchmark_v3.py) for each of Malo's prompts."""
+    """One sound per benchmark system (scripts/v3/benchmark_v3.py) for each prompt of the chosen sets (Malo's by
+    default)."""
+    sets = set(args.sets.split(","))
     runs = {name: [r for r in json.loads((BENCH / name / "generations.json").read_text(encoding="utf-8"))
-                   if r["set"] == "malo"] for name in args.bench}
+                   if r["set"] in sets] for name in args.bench}
     audio_dir = args.out / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
     rng = random.Random(f"harmonia-{args.round}")  # nosec B311 - shuffles the order, not security-sensitive
@@ -76,23 +81,27 @@ def bench_page(args) -> int:
             engine, values = charter_v3.read_preset({"parameters": other["parameters"]})
             preset = charter_v3.dx7_voice(values) if engine == "dx7" else P.physical_from_dict(values)
             systems.append((name, engine, preset))
+        if args.skip_identical and all(runs[name][n]["parameters"] == row["parameters"] for name in args.bench):
+            continue  # the same preset from every system: nothing to compare
         rng.shuffle(systems)
         for letter, (system, kind, preset) in zip("ABCDEF", systems):
             opaque = hashlib.sha1(f"{args.round}-{n}-{letter}".encode(), usedforsecurity=False).hexdigest()[:12]
             path = f"audio/{opaque}.mp3"
             write_mp3(args.out / path, clip(notes_audio(kind, preset)))
             item_id = f"prompt-{args.round}-{n:03d}-{letter}"
-            key[item_id] = {"system": system, "kind": kind, "prompt": row["prompt"]}
+            key[item_id] = {"system": system, "kind": kind, "prompt": row["prompt"], "set": row["set"]}
             items.append({"id": item_id, "source": "Prompts", "name": f"{letter} · {row['prompt']}", "category": "",
                           "author": "", "license": "", "clips": {"dx7": path}})
-    write_page(args, items, key, BENCH_NOTE.format(count=len(args.bench)), len(first))
+    write_page(args, items, key, BENCH_NOTE.format(count=len(args.bench)), len(items) // len(args.bench))
     return 0
 
 
 def write_page(args, items, key, note: str, prompts: int) -> None:
     page = TEMPLATE.read_text(encoding="utf-8").replace("/*ITEMS*/[]", json.dumps(items, ensure_ascii=False))
-    page = page.replace("<title>Banc d'écoute Harmonia v3</title>", "<title>Prompts Harmonia v3</title>")
-    page = page.replace("<h1>Banc d'écoute Harmonia v3</h1>", "<h1>Harmonia v3 · du texte au preset</h1>")
+    title = getattr(args, "title", None) or "Prompts Harmonia v3"
+    heading = getattr(args, "heading", None) or "Harmonia v3 · du texte au preset"
+    page = page.replace("<title>Banc d'écoute Harmonia v3</title>", f"<title>{html.escape(title)}</title>")
+    page = page.replace("<h1>Banc d'écoute Harmonia v3</h1>", f"<h1>{html.escape(heading)}</h1>")
     page = re.sub(r'<p class="lede">.*?</p>', f'<p class="lede">{html.escape(note)}</p>', page, count=1, flags=re.S)
     page = re.sub(r'\s*<div class="legend">.*?(?=\s*<div class="bar">)', "", page, count=1, flags=re.S)
     page = re.sub(r'\s*<button data-f="(OB-Xf|Surge XT|DX7)"[^\n]*', "", page)
@@ -109,7 +118,19 @@ def main() -> int:
     parser.add_argument("--round", default="p1")
     parser.add_argument("--bench", nargs="+", default=None,
                         help="systems of scripts/v3/benchmark_v3.py to compare on Malo's prompts")
+    parser.add_argument("--sets", default="malo", help="with --bench: the prompt sets on the page (comma-separated)")
+    parser.add_argument("--title", default=None, help="the page's name (default: Prompts Harmonia v3)")
+    parser.add_argument("--skip-identical", action="store_true", help="with --bench: leave out prompts where every "
+                        "system made the same preset")
+    parser.add_argument("--heading", default=None, help="the page's heading")
+    parser.add_argument("--play-samples", type=Path, default=None, help="sample pack folder the sounds play")
+    parser.add_argument("--play-catalog", type=Path, default=None, help="its catalogue, if not catalog.json in it")
     args = parser.parse_args()
+    if args.play_samples:
+        from src.samples.player import SampleBank
+
+        global PLAY_BANK
+        PLAY_BANK = SampleBank(args.play_samples, args.play_catalog)
     if args.bench:
         return bench_page(args)
 

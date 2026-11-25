@@ -197,9 +197,10 @@ Response:
 }
 ```
 
-#### `harmonia_v3` (branch `research/ai-v3-presets`)
+#### `harmonia_v3` and `harmonia_v4`
 
-With `"model_name": "harmonia_v3"` (aliases `v3`, `model-4`, `4`) both routes answer a **charter-v3** preset:
+With `"model_name": "harmonia_v3"` (aliases `v3`, `model-4`, `4`) or `"harmonia_v4"` (aliases `v4`, `model-5`, `5`)
+both routes answer a **charter-v3** preset:
 `metadata.charter_version` `3.x`, `metadata.engine` (`analog` or `dx7`) and, in `parameters`, `engine` plus the
 normalized parameters of that engine (46 analog or 145 DX7, `charter/harmonia_v3.json`, also served by
 `GET /charter/v3`). The plugin of the same branch loads it as is. `generation` tells which engine was kept
@@ -234,6 +235,12 @@ it the model behind `latest`, and `HARMONIA_V3_CANDIDATES` (8 per engine), `HARM
 played and listened to, about 45 ms each on a laptop core. `HARMONIA_V3_TIME_BUDGET` (seconds, 0 = no limit)
 shrinks that work automatically on a slow machine, `HARMONIA_V3_WARMUP=1` prepares the model when the server
 starts. Install the model with `python scripts/v2/fetch_model.py --model harmonia_v3`. Details: [V3.md](V3.md).
+
+`harmonia_v4` is the same run time with weights trained on more human text and imitations ([V4.md](V4.md)): same
+request, same answer format, same time per request. Its folder is `HARMONIA_V4_MODEL_DIR` (default
+`models/harmonia_v4`); the `HARMONIA_V3_*` settings apply to both. When both are installed, `GET /models` lists
+both, they share one copy of CLAP's audio tower in memory, and the warm-up prepares `harmonia_v4` (`harmonia_v3`
+loads on its first request).
 
 ### E. Auto-training
 

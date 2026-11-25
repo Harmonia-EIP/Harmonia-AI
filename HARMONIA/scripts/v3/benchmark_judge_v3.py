@@ -4,7 +4,7 @@
 The judge took no part in training or in the run time's search (both listen with LAION CLAP). Scores:
 - text: cosine between the sound and the prompt (English wording of the prompt for the judge);
 - real: for FSD50K class prompts, cosine between the sound and the centroid of real eval recordings of
-  that class.
+  that class; for description prompts (v4), cosine between the sound and the recording described.
 The same scores for the real recordings themselves give the ceiling.
 
 Runs in its own environment (msclap needs transformers<5):
@@ -92,6 +92,24 @@ def class_centroids(judge, fsd50k: Path, classes, per_class: int, cache: Path):
     return centroids, spread
 
 
+def recording_embeddings(judge, fsd50k: Path, fnames) -> dict:
+    """Judge embeddings of single eval recordings (their first JUDGE_SECONDS)."""
+    fnames = sorted(set(fnames))
+    if not fnames:
+        return {}
+    with tempfile.TemporaryDirectory() as tmp:
+        paths = []
+        for fname in fnames:
+            audio, sr = sf.read(str(fsd50k / "FSD50K.eval_audio" / f"{fname}.wav"), dtype="float32", always_2d=True)
+            path = Path(tmp) / f"{fname}.wav"
+            sf.write(path, audio.mean(axis=1)[: sr * JUDGE_SECONDS], sr)
+            paths.append(str(path))
+        return dict(zip(fnames, embed_audio(judge, paths)))
+
+
+SETS = ("malo", "fsd", "desc", "desc_fr")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("systems", nargs="+")
@@ -106,36 +124,49 @@ def main() -> int:
     text_emb = dict(zip(texts, normalize(judge.get_text_embeddings(texts).detach().cpu().numpy())))
     classes = sorted({r["fsd_class"] for rows in runs.values() for r in rows if r.get("fsd_class")})
     centroids, spread = class_centroids(judge, args.fsd50k, classes, args.per_class, args.dir / "judge_classes.npz")
+    recordings = recording_embeddings(judge, args.fsd50k, [r["fsd_fname"] for rows in runs.values() for r in rows
+                                                           if r.get("fsd_fname")])
     table = {}
     for name, rows in runs.items():
         emb = embed_audio(judge, [str(args.dir / name / r["wav"]) for r in rows])
         for r, e in zip(rows, emb):
             r["text_score"] = float(e @ text_emb[r["judge"]])
-            r["real_score"] = float(e @ centroids[r["fsd_class"]]) if r.get("fsd_class") else None
+            if r.get("fsd_class"):
+                r["real_score"] = float(e @ centroids[r["fsd_class"]])
+            elif r.get("fsd_fname"):
+                r["real_score"] = float(e @ recordings[r["fsd_fname"]])
+            else:
+                r["real_score"] = None
         (args.dir / name / "scores.json").write_text(
             json.dumps([{k: v for k, v in r.items() if k != "parameters"} for r in rows], ensure_ascii=False, indent=1),
             encoding="utf-8")
-        malo = [r for r in rows if r["set"] == "malo"]
-        fsd = [r for r in rows if r["set"] == "fsd"]
-        table[name] = {"malo_text": np.mean([r["text_score"] for r in malo]) if malo else float("nan"),
-                       "fsd_text": np.mean([r["text_score"] for r in fsd]) if fsd else float("nan"),
-                       "fsd_real": np.mean([r["real_score"] for r in fsd]) if fsd else float("nan"),
-                       "similarity": np.mean([r["similarity"] for r in rows]),
-                       "seconds": np.mean([r["seconds"] for r in rows])}
+        table[name] = {}
+        for part in SETS:
+            subset = [r for r in rows if r["set"] == part]
+            table[name][f"{part}_text"] = np.mean([r["text_score"] for r in subset]) if subset else float("nan")
+            if part != "malo":
+                table[name][f"{part}_real"] = np.mean([r["real_score"] for r in subset]) if subset else float("nan")
+        table[name].update(similarity=np.mean([r["similarity"] for r in rows]),
+                           seconds=np.mean([r["seconds"] for r in rows]))
     ceiling = float(np.mean([spread[c] for c in classes])) if classes else float("nan")
-    print(f"{'system':16s}{'malo text':>11s}{'fsd text':>10s}{'fsd real':>10s}{'own sim.':>10s}{'s/prompt':>10s}")
+    columns = [c for c in next(iter(table.values())) if not all(np.isnan(t[c]) for t in table.values())]
+    print(f"{'system':16s}" + "".join(f"{c.replace('_', ' '):>13s}" for c in columns))
     for name, m in table.items():
-        print(f"{name:16s}{m['malo_text']:11.3f}{m['fsd_text']:10.3f}{m['fsd_real']:10.3f}{m['similarity']:10.3f}{m['seconds']:10.1f}")
-    print(f"{'real recordings':16s}{'':11s}{'':10s}{ceiling:10.3f}")
+        print(f"{name:16s}" + "".join(f"{m[c]:13.3f}" for c in columns))
+    print(f"{'real recordings':16s} fsd real (class centroid, leave-one-out) {ceiling:.3f}")
     if len(runs) >= 2:
         first, *others = list(runs)
         for other in others:
-            for key, subset in (("text_score", None), ("real_score", "fsd")):
+            if [r["prompt"] for r in runs[first]] != [r["prompt"] for r in runs[other]]:
+                raise SystemExit(f"{other} was run on other prompts than {first}: run both with the same --sets")
+            for key, subset in [("text_score", None)] + [(k, part) for part in SETS for k in ("text_score", "real_score")]:
                 pairs = [(a[key], b[key]) for a, b in zip(runs[first], runs[other])
                          if a[key] is not None and (subset is None or a["set"] == subset)]
+                if not pairs:
+                    continue
                 d = np.array([b - a for a, b in pairs])
                 boot = np.random.default_rng(0).choice(d, size=(2000, len(d))).mean(axis=1)
-                print(f"{other} - {first} on {key}: {d.mean():+.3f} (95% CI {np.percentile(boot, 2.5):+.3f} .. "
+                print(f"{other} - {first} on {subset or 'all'} {key}: {d.mean():+.3f} (95% CI {np.percentile(boot, 2.5):+.3f} .. "
                       f"{np.percentile(boot, 97.5):+.3f}), better on {np.mean(d > 0) * 100:.0f}% of {len(d)} prompts")
     (args.dir / "summary.json").write_text(json.dumps({k: {m: float(v) for m, v in t.items()} for k, t in table.items()},
                                                       indent=1), encoding="utf-8")

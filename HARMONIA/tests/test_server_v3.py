@@ -12,10 +12,11 @@ def v3_client(tmp_path, monkeypatch):
     engine = build_engine(tmp_path / "harmonia_v3")
     monkeypatch.setenv("HARMONIA_PUSH_METRICS", "0")
     monkeypatch.setattr(server_module, "V3_MODEL_DIR", tmp_path / "harmonia_v3")
+    monkeypatch.setattr(server_module, "V4_MODEL_DIR", tmp_path / "no_v4")  # a locally installed v4 is not part of these tests
 
-    def runtime():
+    def runtime(model_key=server_module.V3_MODEL_KEY):
         return server_module.InferenceRuntime(
-            model=None, tokenizer=None, ready=True, model_version="harmonia_v3", model_hash="abc",
+            model=None, tokenizer=None, ready=True, model_version=model_key, model_hash="abc",
             param_keys=tuple(p.id for p in charter_v3.load().params), v3=engine,
         )
 
@@ -86,6 +87,7 @@ def test_v3_rejects_invalid_options(v3_client, extra):
 # Without downloaded model files, v3 answers 503 instead of crashing.
 def test_v3_missing_files_returns_503(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "V3_MODEL_DIR", tmp_path / "missing")
+    monkeypatch.setattr(server_module, "V4_MODEL_DIR", tmp_path / "missing_v4")
     server_module._get_runtime_cached.cache_clear()
     try:
         client = server_module.app.test_client()
@@ -119,6 +121,7 @@ def test_models_lists_v3_and_default_override(v3_client, tmp_path, monkeypatch):
 # The override is ignored while the model's files are missing: the default stays the latest .pth.
 def test_default_override_needs_installed_files(tmp_path, monkeypatch):
     monkeypatch.setattr(server_module, "V3_MODEL_DIR", tmp_path / "missing")
+    monkeypatch.setattr(server_module, "V4_MODEL_DIR", tmp_path / "missing_v4")
     monkeypatch.setattr(server_module, "DEFAULT_MODEL_OVERRIDE", "harmonia_v3")
     assert server_module._resolve_model_key({}) == server_module.DEFAULT_MODEL_KEY
 
@@ -156,3 +159,64 @@ def test_env_numbers_fall_back_on_bad_values(monkeypatch):
     assert server_module._env_float("HARMONIA_V3_TIME_BUDGET", 3.0) == 3.0
     monkeypatch.setenv("HARMONIA_V3_CANDIDATES", "x")
     assert server_module._env_int("HARMONIA_V3_CANDIDATES", 8) == 8
+
+
+# harmonia_v4: the same run time with other weights, offered next to harmonia_v3 when its files are there.
+@pytest.mark.parametrize("payload", [{"model_name": "harmonia_v4"}, {"model_name": "model-5"}, {"model_id": 5}, {"model": "v4"}])
+def test_v4_aliases(payload):
+    assert server_module._resolve_model_key(payload) == server_module.V4_MODEL_KEY
+
+
+def test_v4_is_listed_served_and_warmed_up(v3_client, tmp_path, monkeypatch):
+    from tests.v3_fixtures import build_model_dir
+
+    monkeypatch.setattr(server_module, "SAVED_MODELS_DIR", tmp_path / "saved_models")
+    monkeypatch.setattr(server_module, "V2_MODEL_DIR", tmp_path / "no_v2")
+    assert server_module._warm_up_key() == server_module.V3_MODEL_KEY
+    build_model_dir(tmp_path / "harmonia_v4")
+    monkeypatch.setattr(server_module, "V4_MODEL_DIR", tmp_path / "harmonia_v4")
+    by_id = {m["id"]: m for m in v3_client.get("/models").get_json()["models"]}
+    assert set(by_id) == {"harmonia_v3", "harmonia_v4"}
+    assert by_id["harmonia_v4"]["name"] == "Harmonia V4" and by_id["harmonia_v4"]["is_latest"] is False
+    body = v3_client.post("/generate", json={"prompt": "porte qui claque", "model_name": "harmonia_v4"}).get_json()
+    assert body["metadata"]["model_version"] == "harmonia_v4"
+    assert charter_v3.validate_preset(body) == []
+    v3 = v3_client.post("/generate", json={"prompt": "porte qui claque", "model_name": "harmonia_v3"}).get_json()
+    assert v3["metadata"]["model_version"] == "harmonia_v3"
+    assert server_module._warm_up_key() == server_module.V4_MODEL_KEY  # the newest model is prepared at start-up
+
+
+# Models shipping the same CLAP audio tower share one copy in memory.
+def test_listener_is_shared(tmp_path, monkeypatch):
+    loaded = []
+
+    class FakeListener:
+        def __init__(self, model_dir):
+            loaded.append(model_dir)
+
+    import src.v3.listener as listener_module
+
+    monkeypatch.setattr(listener_module, "ClapListener", FakeListener)
+    monkeypatch.setattr(server_module, "_LISTENERS", {})
+    same = {"files": {"clap_audio/model.safetensors": {"sha256": "aa"}}}
+    first = server_module._shared_listener(tmp_path / "v3", same)
+    assert server_module._shared_listener(tmp_path / "v4", same) is first
+    other = server_module._shared_listener(tmp_path / "v5", {"files": {"clap_audio/model.safetensors": {"sha256": "bb"}}})
+    assert other is not first and len(loaded) == 2
+
+
+# A model whose generator plays recorded instruments is not served without the listen pack: it would hear
+# them as silence.
+def test_model_with_samples_needs_the_listen_pack(tmp_path, monkeypatch):
+    import json
+
+    from src.samples import player
+
+    folder = tmp_path / "harmonia_v3"
+    folder.mkdir()
+    (folder / "manifest.json").write_text(json.dumps({"model_version": "harmonia_v3.9", "files": {},
+                                                      "samples": {"pack": "listen", "release": "samples-1.0.0"}}))
+    monkeypatch.setattr(server_module, "V3_MODEL_DIR", folder)
+    monkeypatch.setattr(player, "default_bank", lambda: None)
+    runtime = server_module._build_v3_runtime(server_module.V3_MODEL_KEY)
+    assert not runtime.ready and "fetch_pack.py --pack listen" in runtime.error

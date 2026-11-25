@@ -25,8 +25,10 @@ def _voice(tmp_path):
 def test_parameters_are_unique_and_in_the_ai_vector_order():
     charter = C.load()
     ids = [p.id for p in charter.params]
-    assert len(ids) == len(set(ids)) == 1 + 46 + 6 * 21 + 19
+    # engine, the 46 analog parameters of charter 3.0, the 4 of the sample source (3.1), the DX7 mode
+    assert len(ids) == len(set(ids)) == 1 + 46 + 4 + 6 * 21 + 19
     assert C.ids("analog") == P.NAMES
+    assert P.CORE_PARAMS == 46 and P.NAMES[46:] == P.SAMPLE_PARAMS  # appended, never inserted
     assert P.NAMES[:20] == tuple(v2_params.PARAM_NAMES)  # the v2 order the upgrade rules index
 
 
@@ -78,7 +80,7 @@ def test_normalization_matches_juce_normalisable_range():
 def test_presets_round_trip_and_invalid_ones_are_reported(tmp_path):
     doc = C.make_preset("analog", {"filter_cutoff": 1200.0, "unison_voices": 7, "osc_1_waveform": 2}, "Test",
                         brief={"family": "bass", "attack": "instant", "references": ["Minimoog"]}, generated_by="test")
-    assert C.validate_preset(doc) == [] and doc["metadata"]["charter_version"] == "3.0.0"
+    assert C.validate_preset(doc) == [] and doc["metadata"]["charter_version"] == C.load().version
     engine, values = C.read_preset(doc)
     assert engine == "analog" and values["unison_voices"] == 7 and values["filter_cutoff"] == pytest.approx(1200.0)
     assert values["reverb_size"] == C.load().by_id["reverb_size"].default
@@ -169,4 +171,4 @@ int main()
             # compared at Python's own value: a skew < 1 magnifies float rounding just above the minimum
             assert float(normalized) == pytest.approx(p.to_normalized(physical), abs=1e-5), (pid, t)
         checked += 1
-    assert checked == len(by_id) * 6 + 46
+    assert checked == len(by_id) * 6 + len(C.ids("analog"))

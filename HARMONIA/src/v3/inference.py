@@ -32,6 +32,7 @@ import torch
 
 from src import charter_v3
 from src.synth import v3_params as P
+from src.samples import descriptors as timbres
 from src.v3 import codecs
 from src.v3 import directives as D
 from src.v3.diffusion import Diffusion
@@ -58,6 +59,11 @@ _ANALOG_DISCRETE = {name: tuple(range(int(P.BY_NAME[name].start), int(P.BY_NAME[
                                  "lfo_waveform")}
 _ANALOG_OCTAVES = ("osc_1_coarse", "osc_2_coarse")
 _ANALOG_FIXED = ("unison_voices",)  # changing the voice count changes the level and the cost of a note
+# The recorded instrument and its transposition are what the sound is: a refine holds them like the tunings.
+_ANALOG_SAMPLE_STRUCTURE = ("sample_instrument", "sample_tune")
+INSTRUMENT_SWAP = 0.06  # share of a search's small moves that try one of the instrument's nearest neighbours
+INSTRUMENT_NEIGHBOURS = 4
+RECORDED_LEVEL = 0.5  # sample level from which a preset counts as playing its recorded instrument
 # DX7 fields a local search may nudge. Ratios, algorithm, transpose and keyboard scaling change the voice
 # itself: only the generator's variations touch them.
 _DX7_NUDGE = ("rates", "levels", "output_level", "key_vel_sens", "detune", "feedback", "lfo_speed", "lfo_delay",
@@ -86,12 +92,15 @@ def _dx7_layout() -> Dict[Tuple[Optional[int], str], Tuple[int, int, str]]:
 DX7_LAYOUT = _dx7_layout()
 
 
-def structure_mask(engine: str) -> np.ndarray:
-    """Positions that set the pitch or the architecture of a sound rather than its colour: tunings and voice
-    count (analog); algorithm, ratios, fixed-frequency mode and transpose (DX7). A refine holds them unless
-    it is asked to go far (strength above STRUCTURE_FREE)."""
+def structure_mask(engine: str, dim: Optional[int] = None) -> np.ndarray:
+    """Positions that set the pitch or the architecture of a sound rather than its colour: tunings, voice
+    count and recorded instrument (analog); algorithm, ratios, fixed-frequency mode and transpose (DX7). A
+    refine holds them unless it is asked to go far (strength above STRUCTURE_FREE). Analog: one value per
+    parameter, or with `dim` the positions of a codec vector of that size."""
     if engine == "analog":
-        return np.array([name in _ANALOG_OCTAVES + _ANALOG_FIXED for name in P.NAMES], dtype=bool)
+        names = _ANALOG_OCTAVES + _ANALOG_FIXED + _ANALOG_SAMPLE_STRUCTURE
+        mask = np.array([name in names for name in P.NAMES], dtype=bool)
+        return mask if dim is None else codecs.analog_positions(mask, dim)
     mask = np.zeros(codecs.DX7_DIM, dtype=bool)
     for (_, name), (start, width, _) in DX7_LAYOUT.items():
         if name in ("algorithm", "freq_coarse", "freq_fine", "osc_mode", "transpose"):
@@ -107,11 +116,14 @@ def _dx7_nudge_mask() -> np.ndarray:
     return mask
 
 
-def lock_mask(engine: str, locked: Sequence[str]) -> np.ndarray:
-    """Positions of the engine's codec vector held by the locked parameter ids (others are ignored)."""
+def lock_mask(engine: str, locked: Sequence[str], dim: Optional[int] = None) -> np.ndarray:
+    """Positions of the engine's codec vector held by the locked parameter ids (others are ignored). Analog:
+    one value per parameter, or with `dim` the positions of a codec vector of that size (locking the
+    instrument also holds its timbre coordinates)."""
     charter = charter_v3.load()
     if engine == "analog":
-        return np.array([name in locked for name in P.NAMES], dtype=bool)
+        mask = np.array([name in locked for name in P.NAMES], dtype=bool)
+        return mask if dim is None else codecs.analog_positions(mask, dim)
     mask = np.zeros(codecs.DX7_DIM, dtype=bool)
     for p in charter.engine_params("dx7"):
         if p.id in locked:
@@ -134,6 +146,10 @@ class Settings:
     # Seconds a request should take on this machine (0: no limit). Every sound costs a render and a listen;
     # the run time measures that cost and draws fewer candidates / searches fewer rounds on a slow machine.
     time_budget: float = 0.0
+    # Generate: a recorded instrument wins over the DX7 mode unless the DX7 draw is closer to the prompt for
+    # CLAP by more than this. CLAP hears the category, not realism, and often prefers the FM version of an
+    # instrument; Malo's blind ratings went the other way (round p6, #43). 0: CLAP alone decides.
+    recorded_margin: float = 0.10
 
 
 @dataclass
@@ -169,15 +185,27 @@ class HarmoniaV3:
                                               weights_only=True))
         self.prior.eval()
         self.models: Dict[str, Diffusion] = {}
-        for engine, dim in (("analog", codecs.ANALOG_DIM), ("dx7", codecs.DX7_DIM)):
+        self.dims: Dict[str, int] = {}
+        for engine in ("analog", "dx7"):
             if engine == "dx7" and not self._dx7_available():
                 continue  # without the compiled DX7 renderer the server answers with the analog engine only
             weights = torch.load(self.model_dir / "generator" / f"{engine}.pt", map_location="cpu", weights_only=True)
-            diffusion = Diffusion.create(dim, width=weights["inp.weight"].shape[0],
-                                         depth=len({k.split(".")[1] for k in weights if k.startswith("blocks.")}))
-            diffusion.model.load_state_dict(weights)
-            diffusion.model.eval()
-            self.models[engine] = diffusion
+            self.models[engine] = Diffusion.from_weights(weights)
+            # the v3 / v4 analog generators make the 46 parameters of charter 3.0, newer ones the sample source too
+            self.dims[engine] = int(weights["inp.weight"].shape[1])
+        # the instruments' timbre coordinates the analog generator was trained with (exported next to it)
+        own = self.model_dir / "generator" / "descriptors.json"
+        self.timbres = timbres.load(own) if own.exists() else timbres.load()
+        described = self.timbres.table[1:]
+        gaps = np.linalg.norm(described[:, None, :] - described[None, :, :], axis=-1)
+        np.fill_diagonal(gaps, np.inf)
+        self._neighbours = np.argsort(np.nan_to_num(gaps, nan=np.inf), axis=1)[:, :INSTRUMENT_NEIGHBOURS] + 1
+        # an instrument the table does not describe (added to the charter after this model) cannot be written
+        # by coordinates: a refine then keeps it as it is
+        self._held_instrument = False
+        # during a refine: physical values of the analog parameters the generator does not make (the sample
+        # source for a charter 3.0 generator), taken from the preset being refined; None: their defaults
+        self._context: Optional[np.ndarray] = None
         if listener is None:
             from src.v3.listener import ClapListener
 
@@ -215,8 +243,17 @@ class HarmoniaV3:
                                                          sample_rate=SR) for n in NOTES]) for v in vectors])
         from src.synth.engine_v3 import render_batch
 
-        physical = np.stack([codecs.analog_decode(v) for v in vectors])
+        physical = np.stack([self._physical(v) for v in vectors])
         return render_batch(physical, np.array(NOTES), VELOCITY / 127, HOLD_SECONDS, TOTAL_SECONDS, SR, 7)
+
+    def _physical(self, vector: np.ndarray) -> np.ndarray:
+        """Every analog parameter of a generator's vector; those it does not make come from the context."""
+        physical = codecs.analog_decode(vector, self.timbres)
+        if self._context is not None and len(vector) < P.N_PARAMS:
+            physical[len(vector):] = self._context[len(vector):]
+        elif self._context is not None and self._held_instrument and physical[codecs.INSTRUMENT] > 0:
+            physical[codecs.INSTRUMENT] = self._context[codecs.INSTRUMENT]
+        return physical
 
     def hear(self, engine: str, vectors: np.ndarray, measures: Optional[List[Dict[str, float]]] = None
              ) -> Tuple[np.ndarray, np.ndarray]:
@@ -237,12 +274,10 @@ class HarmoniaV3:
         """Play and hear two sounds per engine: compiles the engine, loads every weight and measures what a
         sound costs here, so the first request is not the one that pays for it. Returns that cost (seconds)."""
         for engine in self.engines:
-            dim = codecs.ANALOG_DIM if engine == "analog" else codecs.DX7_DIM
-            self.hear(engine, np.zeros((2, dim), dtype=np.float32))
+            self.hear(engine, np.zeros((2, self.dims[engine]), dtype=np.float32))
         self.cost = 0.0  # the first calls include compilation: measure again
         for engine in self.engines:
-            dim = codecs.ANALOG_DIM if engine == "analog" else codecs.DX7_DIM
-            self.hear(engine, np.zeros((2, dim), dtype=np.float32))
+            self.hear(engine, np.zeros((2, self.dims[engine]), dtype=np.float32))
         self.target("warm up")
         return self.cost
 
@@ -269,7 +304,7 @@ class HarmoniaV3:
         """n copies of `start` with small random moves of the settings a search may touch."""
         out = np.repeat(start[None, :], n, axis=0).astype(np.float32)
         if engine == "analog":
-            movable = np.array([spec.interval == 0.0 for spec in P.SPECS]) & ~keep
+            movable = codecs.analog_continuous(len(start)) & ~keep
             moves = sigma * 2.0 * rng.standard_normal(out.shape) * (rng.random(out.shape) < 0.5)
             out = np.where(movable[None, :], np.clip(out + moves, -1.0, 1.0), out)
             for index, values in self._discrete.items():
@@ -288,6 +323,12 @@ class HarmoniaV3:
                     semis = P.from_normalized(spec, (out[k, index] + 1.0) / 2.0) + rng.choice((-12.0, 12.0))
                     if spec.start <= semis <= spec.end:
                         out[k, index] = 2.0 * P.to_normalized(spec, semis) - 1.0
+            if len(start) > P.N_PARAMS and start[codecs.INSTRUMENT] > 0.0 and not keep[codecs.INSTRUMENT] \
+                    and not self._held_instrument:
+                # another instrument among those that sound most like this one (viola for a violin...)
+                current = self.timbres.nearest(start[P.N_PARAMS:])
+                for k in np.nonzero(rng.random(n) < INSTRUMENT_SWAP)[0]:
+                    out[k, P.N_PARAMS:] = self.timbres.table[rng.choice(self._neighbours[current - 1])]
             return out
         movable = self._dx7_nudge & ~keep
         moves = sigma * 2.0 * rng.standard_normal(out.shape) * (rng.random(out.shape) < 0.35)
@@ -407,7 +448,7 @@ class HarmoniaV3:
         if engine == "dx7":
             values = charter_v3.dx7_values(codecs.dx7_decode(vector))
         else:
-            values = dict(zip(P.NAMES, (float(v) for v in codecs.analog_decode(vector))))
+            values = dict(zip(P.NAMES, (float(v) for v in self._physical(vector))))
         return charter_v3.make_preset(engine, values, name)
 
     @staticmethod
@@ -418,21 +459,28 @@ class HarmoniaV3:
         return any(k in v3_only for k in parameters)
 
     @classmethod
-    def read_current(cls, parameters: Mapping[str, float]) -> Tuple[str, np.ndarray]:
-        """(engine, codec vector) of the preset a refine starts from: {id: normalized value}, charter v3, or
-        a v1/v2 preset, which plays on the analog engine after the charter's upgrade rules."""
+    def current_values(cls, parameters: Mapping[str, float]) -> Tuple[str, Dict[str, float]]:
+        """(engine, {id: physical value}) of a preset sent as {id: normalized value}: charter v3, or a v1/v2
+        preset, which plays on the analog engine after the charter's upgrade rules."""
         charter = charter_v3.load()
         known = {k: float(v) for k, v in parameters.items() if k in charter.by_id}
         if not cls.is_v3(known):
-            values = charter_v3.upgrade_v2_normalized(known)
-            return "analog", codecs.analog_encode(P.physical_from_dict(values)).astype(np.float32)
+            return "analog", charter_v3.upgrade_v2_normalized(known)
         engine_param = charter.by_id["engine"]
         engine = ENGINES[int(engine_param.from_normalized(known.get("engine", 0.0)))]
-        values = {p.id: p.from_normalized(known[p.id]) if p.id in known else p.default
-                  for p in charter.engine_params(engine)}
+        return engine, {p.id: p.from_normalized(known[p.id]) if p.id in known else p.default
+                        for p in charter.engine_params(engine)}
+
+    @classmethod
+    def read_current(cls, parameters: Mapping[str, float], table: Optional[timbres.Descriptors] = None
+                     ) -> Tuple[str, np.ndarray]:
+        """(engine, codec vector) of the preset a refine starts from. Analog: the full codec vector (a charter
+        3.0 generator uses its first values), with `table`'s timbre coordinates."""
+        engine, values = cls.current_values(parameters)
         if engine == "dx7":
             return engine, codecs.dx7_encode(charter_v3.dx7_voice(values)).astype(np.float32)
-        return engine, codecs.analog_encode(P.physical_from_dict(values)).astype(np.float32)
+        dim = codecs.ANALOG_DIM if table is None else P.N_PARAMS + table.dims
+        return engine, codecs.analog_encode(P.physical_from_dict(values), dim, table).astype(np.float32)
 
     @staticmethod
     def seed_of(*parts: object) -> int:
@@ -475,12 +523,29 @@ class HarmoniaV3:
                                              np.zeros(len(vector), dtype=bool), strength=0.5)
             heard += more
             best[POLISHED] = (float(emb @ target), vector, emb)
-        engine = max(best, key=lambda name: best[name][0])
+        engine, recorded = self._pick_engine(best)
         similarity, vector, emb = best[engine]
         return Result(self._preset(engine, vector, prompt), engine, similarity,
                       {"engine": engine, "similarity": round(similarity, 4), "drawn_similarity": drawn[engine],
-                       "drawn": drawn, "variation": variation, "heard": heard,
+                       "drawn": drawn, "engines": {name: round(sim, 4) for name, (sim, _, _) in best.items()},
+                       "recorded_preferred": recorded, "variation": variation, "heard": heard,
                        "seconds": round(time.perf_counter() - started, 2)})
+
+    def plays_recorded(self, vector: np.ndarray) -> bool:
+        """An analog codec vector whose sample source plays a recorded instrument at a level that carries it."""
+        if len(vector) <= P.N_PARAMS:
+            return False
+        physical = self._physical(vector)
+        return physical[codecs.INSTRUMENT] > 0 and physical[codecs.LEVEL] >= RECORDED_LEVEL
+
+    def _pick_engine(self, best: Mapping[str, Tuple[float, np.ndarray, np.ndarray]]) -> Tuple[str, bool]:
+        """(engine of the answer, whether a recorded instrument was preferred to a closer DX7 draw)."""
+        engine = max(best, key=lambda name: best[name][0])
+        margin = self.settings.recorded_margin
+        if engine != "analog" and "analog" in best and margin > 0 and self.plays_recorded(best["analog"][1]) \
+                and best["analog"][0] >= best[engine][0] - margin:
+            return "analog", True
+        return engine, False
 
     def _refined_preset(self, engine: str, vector: np.ndarray, name: str, parameters: Mapping[str, float],
                         locked: Sequence[str]) -> Dict[str, object]:
@@ -497,11 +562,27 @@ class HarmoniaV3:
         """The current preset moved towards the prompt; locked parameters keep their value exactly."""
         started = time.perf_counter()
         strength = self.settings.strength if strength is None else min(1.0, max(0.0, float(strength)))
-        engine, start = self.read_current(parameters)
+        engine, start = self.read_current(parameters, self.timbres)
         if engine not in self.models:
             raise RuntimeError(f"the {engine} engine is not available on this server")
-        locks = lock_mask(engine, locked)
-        keep = locks if strength > STRUCTURE_FREE else locks | structure_mask(engine)
+        dim = self.dims[engine]
+        if engine == "analog":  # what this generator does not make stays as in the preset, and is played
+            self._context = P.physical_from_dict(self.current_values(parameters)[1])
+            choice = int(round(self._context[codecs.INSTRUMENT]))
+            self._held_instrument = dim > P.N_PARAMS and choice > 0 and np.isnan(self.timbres.table[choice, 0])
+        try:
+            return self._refine(prompt, parameters, locked, strength, engine, start[:dim], started)
+        finally:
+            self._context = None
+            self._held_instrument = False
+
+    def _refine(self, prompt: str, parameters: Mapping[str, float], locked: Sequence[str], strength: float,
+                engine: str, start: np.ndarray, started: float) -> Result:
+        dim = len(start) if engine == "analog" else None
+        if self._held_instrument:
+            locked = list(locked) + [name for name in P.SAMPLE_PARAMS if name not in locked]
+        locks = lock_mask(engine, locked, dim)
+        keep = locks if strength > STRUCTURE_FREE else locks | structure_mask(engine, dim)
         target = self.target(prompt)
         seed = self.seed_of(prompt, sorted(parameters.items()), sorted(locked))
         asked = D.read(prompt)
