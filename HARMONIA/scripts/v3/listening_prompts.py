@@ -81,6 +81,8 @@ def bench_page(args) -> int:
             engine, values = charter_v3.read_preset({"parameters": other["parameters"]})
             preset = charter_v3.dx7_voice(values) if engine == "dx7" else P.physical_from_dict(values)
             systems.append((name, engine, preset))
+        if args.skip_identical and all(runs[name][n]["parameters"] == row["parameters"] for name in args.bench):
+            continue  # the same preset from every system: nothing to compare
         rng.shuffle(systems)
         for letter, (system, kind, preset) in zip("ABCDEF", systems):
             opaque = hashlib.sha1(f"{args.round}-{n}-{letter}".encode(), usedforsecurity=False).hexdigest()[:12]
@@ -90,7 +92,7 @@ def bench_page(args) -> int:
             key[item_id] = {"system": system, "kind": kind, "prompt": row["prompt"], "set": row["set"]}
             items.append({"id": item_id, "source": "Prompts", "name": f"{letter} · {row['prompt']}", "category": "",
                           "author": "", "license": "", "clips": {"dx7": path}})
-    write_page(args, items, key, BENCH_NOTE.format(count=len(args.bench)), len(first))
+    write_page(args, items, key, BENCH_NOTE.format(count=len(args.bench)), len(items) // len(args.bench))
     return 0
 
 
@@ -118,6 +120,8 @@ def main() -> int:
                         help="systems of scripts/v3/benchmark_v3.py to compare on Malo's prompts")
     parser.add_argument("--sets", default="malo", help="with --bench: the prompt sets on the page (comma-separated)")
     parser.add_argument("--title", default=None, help="the page's name (default: Prompts Harmonia v3)")
+    parser.add_argument("--skip-identical", action="store_true", help="with --bench: leave out prompts where every "
+                        "system made the same preset")
     parser.add_argument("--heading", default=None, help="the page's heading")
     parser.add_argument("--play-samples", type=Path, default=None, help="sample pack folder the sounds play")
     parser.add_argument("--play-catalog", type=Path, default=None, help="its catalogue, if not catalog.json in it")
