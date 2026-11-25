@@ -25,8 +25,17 @@ generators write presets that use it. Still a preset, never audio. Not released:
   without the listen pack. `benchmark_v3.py` and `listening_prompts.py` play recorded instruments from the full
   pack (`--play-samples`).
 
+- **Blind round p6** (Malo, 111 sounds): on his 18 prompts and 12 FSD50K instrument classes, v4 2.40, s1 3.13,
+  s2 3.27 out of 5 (s2 - v4 +0.87, 95 % CI +0.37 .. +1.40). Recorded instruments rated high (Soft Piano 1 -> 5);
+  prompts where the DX7 mode won the engine choice rated low (Piano 1, trumpet, harp, flute, brass).
+- **Recorded instrument first** (`Settings.recorded_margin`, `HARMONIA_V3_RECORDED_MARGIN`, default 0.10): the
+  analog draw wins over a DX7 draw when it plays a recorded instrument (level >= 0.5) and CLAP finds the DX7 draw
+  closer by at most the margin. Judge (s2r vs s2, 383 prompts): 16 prompts change engine, all text +0.003
+  (CI above 0), FSD classes real +0.007; vs v4: all text +0.013 (CI above 0). Mini blind round p6b on the 8
+  prompts of p6 that change.
+
 ### Known limits
-- CLAP picks the engine: for "Piano" the DX7 mode still wins (0.86 vs 0.81 for the real piano draws).
+- CLAP picks the analog draw and judges the engines; it hears the category, not realism.
 - Some words still aim wrong: "violin" draws harmonicas, "harp" pianos, "flute" brass.
 
 ## [0.4.0] - Harmonia v4: better-chosen data, same run time (branch `research/ai-v4`)
