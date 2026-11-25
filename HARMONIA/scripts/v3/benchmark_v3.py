@@ -62,13 +62,16 @@ def description_prompts(fsd50k: Path):
     return rows
 
 
-def prompts(fsd50k: Path, limit_classes: int = 0, sets=("malo", "fsd")):
+def prompts(fsd50k: Path, limit_classes: int = 0, sets=("malo", "fsd"), extra: Path | None = None,
+            fsd_classes: tuple = ()):
     rows = [{"set": "malo", "prompt": p, "judge": p} for p in
             json.loads((BASE_DIR / "benchmarks" / "v3_prompts_p1.json").read_text(encoding="utf-8"))]
     rows += [{"set": "malo", **p} for p in
              json.loads((BASE_DIR / "benchmarks" / "v3_prompts_p2.json").read_text(encoding="utf-8"))]
     with open(fsd50k / "FSD50K.ground_truth" / "eval.csv", newline="", encoding="utf-8") as f:
         classes = sorted({r["labels"].split(",")[0] for r in csv.DictReader(f)} - VOICE)
+    if fsd_classes:
+        classes = [c for c in classes if c in fsd_classes]
     if limit_classes:
         classes = classes[::max(1, len(classes) // limit_classes)][:limit_classes]
     for name in classes:
@@ -76,6 +79,8 @@ def prompts(fsd50k: Path, limit_classes: int = 0, sets=("malo", "fsd")):
         rows.append({"set": "fsd", "prompt": text, "judge": text, "fsd_class": name})
     if "desc" in sets or "desc_fr" in sets:
         rows += description_prompts(fsd50k)
+    if extra is not None:  # a listening round's own prompts (never trained on)
+        rows += [{"set": "extra", "prompt": p, "judge": p} for p in json.loads(extra.read_text(encoding="utf-8"))]
     return [row for row in rows if row["set"] in sets]
 
 
@@ -108,7 +113,9 @@ def main() -> int:
     parser.add_argument("--clicks", type=int, default=3, help="with --refine-from: refine requests in a row")
     parser.add_argument("--only-set", choices=("malo", "fsd", "desc", "desc_fr"), default=None,
                         help="one set of prompts only")
-    parser.add_argument("--sets", default="malo,fsd", help="prompt sets, comma-separated (malo,fsd,desc,desc_fr)")
+    parser.add_argument("--sets", default="malo,fsd", help="prompt sets, comma-separated (malo,fsd,desc,desc_fr,extra)")
+    parser.add_argument("--extra", type=Path, default=None, help="set 'extra': a JSON list of prompts")
+    parser.add_argument("--fsd-classes", default="", help="set 'fsd': only these classes (comma-separated)")
     parser.add_argument("--play-samples", type=Path, default=None, help="sample pack folder the written sounds play")
     parser.add_argument("--play-catalog", type=Path, default=None, help="its catalogue, if not catalog.json in it")
     args = parser.parse_args()
@@ -126,7 +133,8 @@ def main() -> int:
     out = args.out / args.name
     out.mkdir(parents=True, exist_ok=True)
     rows, t0 = [], time.time()
-    todo = prompts(args.fsd50k, args.classes, tuple(args.sets.split(",")))
+    todo = prompts(args.fsd50k, args.classes, tuple(args.sets.split(",")), args.extra,
+                   tuple(c for c in args.fsd_classes.split(",") if c))
     if args.refine_from:
         todo = json.loads((args.out / args.refine_from / "generations.json").read_text(encoding="utf-8"))
     if args.only_set:

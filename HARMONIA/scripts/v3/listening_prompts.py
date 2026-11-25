@@ -62,9 +62,11 @@ def notes_audio(kind: str, preset) -> list:
 
 
 def bench_page(args) -> int:
-    """One sound per benchmark system (scripts/v3/benchmark_v3.py) for each of Malo's prompts."""
+    """One sound per benchmark system (scripts/v3/benchmark_v3.py) for each prompt of the chosen sets (Malo's by
+    default)."""
+    sets = set(args.sets.split(","))
     runs = {name: [r for r in json.loads((BENCH / name / "generations.json").read_text(encoding="utf-8"))
-                   if r["set"] == "malo"] for name in args.bench}
+                   if r["set"] in sets] for name in args.bench}
     audio_dir = args.out / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
     rng = random.Random(f"harmonia-{args.round}")  # nosec B311 - shuffles the order, not security-sensitive
@@ -85,7 +87,7 @@ def bench_page(args) -> int:
             path = f"audio/{opaque}.mp3"
             write_mp3(args.out / path, clip(notes_audio(kind, preset)))
             item_id = f"prompt-{args.round}-{n:03d}-{letter}"
-            key[item_id] = {"system": system, "kind": kind, "prompt": row["prompt"]}
+            key[item_id] = {"system": system, "kind": kind, "prompt": row["prompt"], "set": row["set"]}
             items.append({"id": item_id, "source": "Prompts", "name": f"{letter} · {row['prompt']}", "category": "",
                           "author": "", "license": "", "clips": {"dx7": path}})
     write_page(args, items, key, BENCH_NOTE.format(count=len(args.bench)), len(first))
@@ -94,8 +96,10 @@ def bench_page(args) -> int:
 
 def write_page(args, items, key, note: str, prompts: int) -> None:
     page = TEMPLATE.read_text(encoding="utf-8").replace("/*ITEMS*/[]", json.dumps(items, ensure_ascii=False))
-    page = page.replace("<title>Banc d'écoute Harmonia v3</title>", "<title>Prompts Harmonia v3</title>")
-    page = page.replace("<h1>Banc d'écoute Harmonia v3</h1>", "<h1>Harmonia v3 · du texte au preset</h1>")
+    title = getattr(args, "title", None) or "Prompts Harmonia v3"
+    heading = getattr(args, "heading", None) or "Harmonia v3 · du texte au preset"
+    page = page.replace("<title>Banc d'écoute Harmonia v3</title>", f"<title>{html.escape(title)}</title>")
+    page = page.replace("<h1>Banc d'écoute Harmonia v3</h1>", f"<h1>{html.escape(heading)}</h1>")
     page = re.sub(r'<p class="lede">.*?</p>', f'<p class="lede">{html.escape(note)}</p>', page, count=1, flags=re.S)
     page = re.sub(r'\s*<div class="legend">.*?(?=\s*<div class="bar">)', "", page, count=1, flags=re.S)
     page = re.sub(r'\s*<button data-f="(OB-Xf|Surge XT|DX7)"[^\n]*', "", page)
@@ -112,6 +116,9 @@ def main() -> int:
     parser.add_argument("--round", default="p1")
     parser.add_argument("--bench", nargs="+", default=None,
                         help="systems of scripts/v3/benchmark_v3.py to compare on Malo's prompts")
+    parser.add_argument("--sets", default="malo", help="with --bench: the prompt sets on the page (comma-separated)")
+    parser.add_argument("--title", default=None, help="the page's name (default: Prompts Harmonia v3)")
+    parser.add_argument("--heading", default=None, help="the page's heading")
     parser.add_argument("--play-samples", type=Path, default=None, help="sample pack folder the sounds play")
     parser.add_argument("--play-catalog", type=Path, default=None, help="its catalogue, if not catalog.json in it")
     args = parser.parse_args()
